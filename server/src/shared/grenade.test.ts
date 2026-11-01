@@ -43,6 +43,16 @@ describe('simulateGrenade', () => {
     expect(reversed).toBe(true);
   });
 
+  it('zero-g grenades float: no fall, drift to a stop where thrown', () => {
+    const g: GrenadeState = { x: 20 * TILE, y: 12 * TILE, vx: 300, vy: 0 };
+    const y0 = g.y;
+    for (let i = 0; i < 300; i++) stepGrenade(RIG7, g, true);
+    expect(Math.abs(g.y - y0)).toBeLessThan(1);
+    expect(g.x).toBeGreaterThan(20 * TILE + 200);
+    expect(Math.abs(g.vx)).toBeLessThan(30);
+    expect(simulateGrenade(RIG7, 640, 384, 500, -200, 300, fresh(), true)).toEqual(simulateGrenade(RIG7, 640, 384, 500, -200, 300, fresh(), true));
+  });
+
   it('never ends inside a solid tile from many throws', () => {
     for (const s of RIG7.spawns) {
       for (let a = 0; a < 16; a++) {
@@ -51,9 +61,12 @@ describe('simulateGrenade', () => {
         const y = (s.ty + 1) * TILE - 24;
         const g = fresh();
         g.x = x; g.y = y; g.vx = Math.cos(ang) * 820; g.vy = Math.sin(ang) * 820;
-        for (let i = 0; i < 300; i++) {
-          stepGrenade(RIG7, g);
-          expect(insideSolid(RIG7, g)).toBe(false);
+        for (const zeroG of [false, true]) {
+          const h = { ...g };
+          for (let i = 0; i < 300; i++) {
+            stepGrenade(RIG7, h, zeroG);
+            expect(insideSolid(RIG7, h)).toBe(false);
+          }
         }
       }
     }

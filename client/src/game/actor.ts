@@ -27,7 +27,7 @@ export interface ActorInput extends MoveInput {
 }
 
 export function emptyInput(): ActorInput {
-  return { moveX: 0, thrust: false, down: false, aim: 0, fire: false, firePressed: false, melee: false, grenade: false, swap: false, reload: false };
+  return { moveX: 0, thrust: false, thrustAmount: 1, down: false, aim: 0, fire: false, firePressed: false, melee: false, grenade: false, swap: false, reload: false };
 }
 
 /** A hittable player as seen by this client (feet position). */
@@ -36,6 +36,10 @@ export interface Target {
   key: string;
   x: number;
   y: number;
+  /** 0 = no team (free-for-all), 1 red, 2 blue. */
+  team: number;
+  /** Time (server clock, ms) of the position this client is showing, for lag compensation. */
+  viewMs: number;
 }
 
 /** Visual/audio side effects of local actions. Bots use a silent sink. */
@@ -54,6 +58,9 @@ export interface SimRules {
   infiniteAmmo: boolean;
   acid: boolean;
   botSkill: number;
+  /** Team match on, and whether teammates can be hurt. */
+  teams: boolean;
+  friendlyFire: boolean;
 }
 
 export interface WorldView {
@@ -76,6 +83,7 @@ export class Actor {
   lifeId = 0;
   correction = 0;
   colorIdx = 0;
+  team = 0;
 
   // Weapon state (predicted locally, overwritten by every server row update).
   weapon = W_PISTOL;
@@ -119,6 +127,7 @@ export class Actor {
   applyServer(row: Player, ps: Pstate | undefined): 'respawn' | 'correct' | null {
     let snapped: 'respawn' | 'correct' | null = null;
     this.colorIdx = row.colorIdx;
+    this.team = row.team;
     if (row.lifeId !== this.lifeId) {
       this.lifeId = row.lifeId;
       if (row.alive) {
@@ -259,6 +268,8 @@ export class Actor {
     const ends: number[] = [];
     const wallHits: boolean[] = [];
     const hitCount = new Map<string, { t: Target; pellets: number; angleSum: number }>();
+    // Friendly fire off: bullets pass straight through teammates.
+    const skipTeam = world.rules.teams && !world.rules.friendlyFire && this.team !== 0 ? this.team : -1;
 
     for (let p = 0; p < def.pellets; p++) {
       // Shotgun pellets spread evenly across the cone with a little jitter; others are random.
@@ -273,6 +284,7 @@ export class Actor {
       let hitT: Target | null = null;
       for (let i = 0; i < nTargets; i++) {
         const t = tmpTargets[i];
+        if (t.team === skipTeam) continue;
         const d = rayVsBox(startX, startY, dx, dy, t.x - C.PLAYER_W / 2, t.y - C.PLAYER_H, t.x + C.PLAYER_W / 2, t.y, best);
         if (d >= 0 && d < best) {
           best = d;
@@ -290,7 +302,7 @@ export class Actor {
       }
     }
 
-    const hits = [...hitCount.values()].map((e) => ({ target: e.t.id, pellets: e.pellets, angle: e.angleSum / e.pellets }));
+    const hits = [...hitCount.values()].map((e) => ({ target: e.t.id, pellets: e.pellets, angle: e.angleSum / e.pellets, viewMs: e.t.viewMs }));
     this.shots.push({ weapon: wid, ox: startX, oy: startY, angle: this.aim, ends, hits });
     if (def.recoil > 0) applyImpulse(this.body, -Math.cos(this.aim) * def.recoil, -Math.sin(this.aim) * def.recoil);
     this.fx?.shot(wid, startX, startY, ends, wallHits, this.colorIdx);
@@ -344,7 +356,7 @@ export class Actor {
    * Build the next sync payload if it's due: every 50 ms while moving or acting, every
    * 200 ms when idle. Returns null when nothing should be sent yet.
    */
-  takeSync(nowMs: number, input: ActorInput): SyncArgs | null {
+  takeSync(nowMs: number, input: ActorInput, serverNow: number): SyncArgs | null {
     if (!this.alive) return null;
     const b = this.body;
     const moving =
@@ -369,6 +381,7 @@ export class Actor {
       seq: ++this.seq >>> 0,
       life: this.lifeId,
       corr: this.correction,
+      t: serverNow,
       x: b.x,
       y: b.y,
       vx: b.vx,

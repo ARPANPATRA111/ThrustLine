@@ -129,7 +129,7 @@ test('every weapon works in Arms; Blades and Boom restrict loadouts', async ({ b
   await waitRoundEnd(pages);
 
   // ---- Round 3: Blades ----
-  await reducer(a, 'updateRoomSettings', { mode: 1, roundSec: 30, rules: await rules(a) });
+  await reducer(a, 'updateRoomSettings', { mode: 1, roundSec: 30, teams: false, rules: await rules(a) });
   await playRound(a, pages);
   await waitAlive(a);
   expect((await st(a)).mode).toBe(1);
@@ -146,7 +146,7 @@ test('every weapon works in Arms; Blades and Boom restrict loadouts', async ({ b
   await waitRoundEnd(pages);
 
   // ---- Round 4: Boom ----
-  await reducer(a, 'updateRoomSettings', { mode: 2, roundSec: 30, rules: await rules(a) });
+  await reducer(a, 'updateRoomSettings', { mode: 2, roundSec: 30, teams: false, rules: await rules(a) });
   await playRound(a, pages);
   await waitAlive(a);
   expect((await st(a)).mode).toBe(2);

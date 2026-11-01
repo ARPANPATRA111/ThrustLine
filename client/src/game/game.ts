@@ -9,12 +9,13 @@ import { W_FRAG, W_KNIFE, W_PISTOL, W_SNIPER, canThrow, isGun, pickupActive } fr
 import type { BoomEv, Grenade, HitEv, KillEv, MeleeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
 import type { Net } from '../net/connection';
 import type { TimeSync } from '../net/timesync';
-import { SnapshotBuffer, type Sample } from '../net/interp';
+import { LagEstimator, SnapshotBuffer, type Sample } from '../net/interp';
+import { Radar, type RadarEntry } from '../render/radar';
 import type { Atlas } from '../render/atlas';
 import { bakeMap, acidRect, makeAcid, makeParallaxTextures } from '../render/mapbake';
 import { Particles } from '../render/particles';
 import { Effects } from '../render/effects';
-import { PLAYER_COLORS, SoldierView } from '../render/soldier';
+import { SoldierView, playerColor, playerCss } from '../render/soldier';
 import type { Audio } from '../audio/audio';
 import { type Hud, rankPlayers } from '../ui/hud';
 import { Actor, type ActorInput, type FxSink, type SimRules, type Target, type WorldView, emptyInput } from './actor';
@@ -31,6 +32,9 @@ interface Remote {
   key: string;
   row: Player;
   buf: SnapshotBuffer;
+  lag: LagEstimator;
+  /** Time (server clock) of the position currently drawn: what a shot at it should claim. */
+  viewMs: number;
   view: SoldierView;
   s: Sample;
   hasSample: boolean;
@@ -65,7 +69,9 @@ export class Game implements WorldView {
   map = RIG7;
   mode = C.MODE_ARMS;
   /** House rules of the current room (defaults until the room row arrives). */
-  rules: SimRules = { ...C.DEFAULT_RULES };
+  rules: SimRules = { ...C.DEFAULT_RULES, teams: false };
+  teams = false;
+  floating = false;
   maxHp = C.MAX_HP;
   pickupsOn = true;
   frenzyOn = true;
@@ -94,6 +100,10 @@ export class Game implements WorldView {
   private particles: Particles;
   private effects: Effects;
   private localView: SoldierView | null = null;
+  private radar!: Radar;
+  /** When each player last fired (server ms): reveals them on the radar. */
+  private firedAt = new Map<string, number>();
+  private radarEntries: RadarEntry[] = [];
   /** Faint aim line shown on touch screens (no mouse crosshair there). */
   private aimLine: Sprite;
   private remotes = new Map<string, Remote>();
@@ -144,7 +154,8 @@ export class Game implements WorldView {
       bakeMap(RIG7), this.acid, this.acidGlow, this.pickupLayer, this.grenadeLayer, this.playerLayer,
       this.particles.normal, this.aimLine, this.effects.layer, this.particles.additive, this.effects.textLayer,
     );
-    app.stage.addChild(this.bg, this.world);
+    this.radar = new Radar(this.tex, RIG7);
+    app.stage.addChild(this.bg, this.world, this.radar.root);
     app.stage.visible = false;
     app.ticker.add(() => this.frame());
     app.ticker.stop();
@@ -224,7 +235,10 @@ export class Game implements WorldView {
     this.room = r;
     if (!r) return;
     this.mode = r.mode;
-    this.rules = { infiniteFuel: r.rules.infiniteFuel, infiniteAmmo: r.rules.infiniteAmmo, acid: r.rules.acid, botSkill: r.rules.botSkill };
+    this.teams = r.teams;
+    this.rules = { infiniteFuel: r.rules.infiniteFuel, infiniteAmmo: r.rules.infiniteAmmo, acid: r.rules.acid, botSkill: r.rules.botSkill, teams: r.teams, friendlyFire: r.rules.friendlyFire };
+    this.floating = r.rules.floatingGrenades;
+    this.refreshColors();
     this.maxHp = r.rules.maxHp;
     this.pickupsOn = r.rules.pickups;
     this.frenzyOn = r.rules.frenzy;
@@ -255,15 +269,15 @@ export class Game implements WorldView {
       const snap = this.local.applyServer(p, ps);
       if (snap === 'respawn') {
         this.camera.follow(this.local.body.x, this.local.centerY, this.local.aim, false, 0, true);
-        this.effects.ring(this.local.body.x, this.local.centerY, 60, PLAYER_COLORS[p.colorIdx], 0.5, true);
+        this.effects.ring(this.local.body.x, this.local.centerY, 60, playerColor(p.colorIdx, this.teams ? p.team : 0), 0.5, true);
       }
-      this.localView.setColor(p.colorIdx);
+      this.refreshColors();
       return;
     }
     let r = this.remotes.get(key);
     if (!r) {
       r = {
-        id: p.identity, key, row: p, buf: new SnapshotBuffer(), view: new SoldierView(this.tex, p.name, p.colorIdx),
+        id: p.identity, key, row: p, buf: new SnapshotBuffer(), lag: new LagEstimator(), viewMs: 0, view: new SoldierView(this.tex, p.name, p.colorIdx),
         s: { x: 0, y: 0, vx: 0, vy: 0, aim: 0, flags: 0, weapon: 0 }, hasSample: false, lastLife: p.lifeId, bounty: false,
       };
       this.remotes.set(key, r);
@@ -280,7 +294,7 @@ export class Game implements WorldView {
     }
     r.row = p;
     r.view.setName(p.isBot ? `${p.name}` : p.name);
-    r.view.setColor(p.colorIdx);
+    this.refreshColors();
   }
 
   playerDelete(p: Player): void {
@@ -296,7 +310,9 @@ export class Game implements WorldView {
     const key = s.identity.toHexString();
     const r = this.remotes.get(key);
     if (!r) return;
-    r.buf.push(Number(s.serverMicros) / 1000, s);
+    // Stamp snapshots on the sender's timeline and learn how late they arrive.
+    r.buf.push(s.sentMs, s);
+    r.lag.sample(this.serverNow() - s.sentMs);
   }
 
   pickupUpsert(p: Pickup): void {
@@ -319,12 +335,13 @@ export class Game implements WorldView {
   }
 
   grenadeInsert(g: Grenade): void {
+    this.firedAt.set(g.owner.toHexString(), this.serverNow());
     // Pre-compute the whole deterministic flight once; drawing is then a lookup per frame.
     const ticks = fuseTicks(g.fuseMs);
     const sprite = new Sprite(this.tex.w5);
     sprite.anchor.set(0.5);
     this.grenadeLayer.addChild(sprite);
-    this.grenades.set(g.id, { row: g, path: grenadePath(RIG7, g.x0, g.y0, g.vx0, g.vy0, ticks), ticks, thrownMs: Number(g.thrownMicros) / 1000, sprite });
+    this.grenades.set(g.id, { row: g, path: grenadePath(RIG7, g.x0, g.y0, g.vx0, g.vy0, ticks, g.zeroG), ticks, thrownMs: Number(g.thrownMicros) / 1000, sprite });
   }
 
   grenadeDelete(g: Grenade): void {
@@ -336,6 +353,7 @@ export class Game implements WorldView {
 
   onShot(e: ShotEv): void {
     const key = e.shooter.toHexString();
+    this.firedAt.set(key, this.serverNow());
     if (key === this.net.myKey) return; // our own tracers were drawn instantly
     const tracerColor = e.weapon === W_SNIPER ? 0xffffff : 0xfff2b0;
     for (let i = 0; i + 1 < e.ends.length; i += 2) {
@@ -377,9 +395,10 @@ export class Game implements WorldView {
     const victim = this.rowOf(vKey);
     const killer = this.rowOf(kKey);
     const self = vKey === kKey || e.cause === C.CAUSE_ACID;
-    this.hud.killFeed(self ? '' : killer?.name ?? '?', killer?.colorIdx ?? 0, e.cause, victim?.name ?? '?', victim?.colorIdx ?? 0);
+    const css = (p?: Player) => playerCss(p?.colorIdx ?? 0, this.teams ? p?.team ?? 0 : 0);
+    this.hud.killFeed(self ? '' : killer?.name ?? '?', css(killer), e.cause, victim?.name ?? '?', css(victim), e.teamkill);
     const pos = this.positionOf(vKey);
-    if (pos) this.deathBurst(pos.x, pos.y, victim?.colorIdx ?? 0);
+    if (pos) this.deathBurst(pos.x, pos.y, this.colorOf(vKey));
     if (vKey === this.net.myKey) {
       this.killedBy = self ? (e.cause === C.CAUSE_ACID ? 'Dissolved in acid' : 'Blown up by your own grenade') : `Eliminated by ${killer?.name ?? '?'}`;
     }
@@ -389,6 +408,7 @@ export class Game implements WorldView {
   }
 
   onMelee(e: MeleeEv): void {
+    this.firedAt.set(e.attacker.toHexString(), this.serverNow());
     if (e.attacker.toHexString() === this.net.myKey) return;
     this.effects.slash(e.x, e.y, e.dir, this.colorOf(e.attacker.toHexString()));
     this.audio.play('knife', 0.8, e.x, e.y);
@@ -414,9 +434,19 @@ export class Game implements WorldView {
     return this.remotes.get(key)?.row;
   }
 
+  /** Re-tint every soldier: team colours in team matches (plus an ally chevron), else own colour. */
+  refreshColors(): void {
+    const myTeam = this.teams ? this.localRow?.team ?? 0 : 0;
+    if (this.localRow && this.localView) this.localView.setColor(this.localRow.colorIdx, myTeam, false);
+    for (const r of this.remotes.values()) {
+      const team = this.teams ? r.row.team : 0;
+      r.view.setColor(r.row.colorIdx, team, team !== 0 && team === myTeam);
+    }
+  }
+
   private colorOf(key: string): number {
     const row = this.rowOf(key);
-    return PLAYER_COLORS[(row?.colorIdx ?? 0) % PLAYER_COLORS.length];
+    return playerColor(row?.colorIdx ?? 0, this.teams ? row?.team ?? 0 : 0);
   }
 
   /** Where a player is drawn right now (centre). */
@@ -435,8 +465,7 @@ export class Game implements WorldView {
     }
   }
 
-  private deathBurst(x: number, y: number, colorIdx: number): void {
-    const color = PLAYER_COLORS[colorIdx % PLAYER_COLORS.length];
+  private deathBurst(x: number, y: number, color: number): void {
     for (let i = 0; i < 18; i++) {
       const a = Math.random() * Math.PI * 2;
       const sp = 100 + Math.random() * 300;
@@ -484,7 +513,7 @@ export class Game implements WorldView {
         this.audio.play(WEAPON_SOUND[w] ?? 'pistol', 0.85, undefined, undefined, w === 1 ? 0.95 + Math.random() * 0.1 : 1);
       },
       melee: (x, y, angle) => {
-        this.effects.slash(x, y, angle, this.local ? PLAYER_COLORS[this.local.colorIdx] : 0xffffff);
+        this.effects.slash(x, y, angle, this.localRow ? this.colorOf(this.net.myKey) : 0xffffff);
         this.audio.play('knife', 0.8);
       },
       throwG: () => this.audio.play('knife', 0.5, undefined, undefined, 0.6),
@@ -500,21 +529,21 @@ export class Game implements WorldView {
   targets(selfKey: string, out: Target[]): number {
     const now = this.serverNow();
     let n = 0;
-    const push = (id: Identity, key: string, x: number, y: number) => {
+    const push = (id: Identity, key: string, x: number, y: number, team: number, viewMs: number) => {
       let t = this.targetPool[n];
-      if (!t) { t = { id, key, x, y }; this.targetPool[n] = t; }
-      t.id = id; t.key = key; t.x = x; t.y = y;
+      if (!t) { t = { id, key, x, y, team, viewMs }; this.targetPool[n] = t; }
+      t.id = id; t.key = key; t.x = x; t.y = y; t.team = this.teams ? team : 0; t.viewMs = viewMs;
       out[n++] = t;
     };
     if (this.local && this.localRow && this.local.alive && this.net.myKey !== selfKey && Number(this.localRow.spawnProtectUntilMicros) / 1000 <= now) {
-      push(this.local.identity, this.net.myKey, this.local.body.x, this.local.body.y);
+      push(this.local.identity, this.net.myKey, this.local.body.x, this.local.body.y, this.localRow.team, now);
     }
     for (const r of this.remotes.values()) {
       if (r.key === selfKey || !r.row.alive || !r.hasSample || Number(r.row.spawnProtectUntilMicros) / 1000 > now) continue;
       // Bots hosted in this tab: use their exact simulated position.
       const bot = this.bots.get(r.key);
-      if (bot) push(r.id, r.key, bot.actor.body.x, bot.actor.body.y);
-      else push(r.id, r.key, r.s.x, r.s.y);
+      if (bot) push(r.id, r.key, bot.actor.body.x, bot.actor.body.y, r.row.team, now);
+      else push(r.id, r.key, r.s.x, r.s.y, r.row.team, r.viewMs);
     }
     out.length = n;
     return n;
@@ -558,7 +587,7 @@ export class Game implements WorldView {
 
     // --- Send our sync if due ---
     if (local && playing) {
-      const args = local.takeSync(performance.now(), this.input);
+      const args = local.takeSync(performance.now(), this.input, now);
       if (args) this.net.conn?.reducers.sync(args).catch(() => {});
     }
 
@@ -583,9 +612,10 @@ export class Game implements WorldView {
       this.audio.setJet(show && local.body.jetting);
     }
 
-    // --- Remote players at serverNow - 100 ms ---
-    const renderT = now - C.INTERP_DELAY_MS;
+    // --- Remote players, each drawn a little in the past (adaptive to its measured lag) ---
     for (const r of this.remotes.values()) {
+      const renderT = now - r.lag.update(dt);
+      r.viewMs = renderT;
       const bot = this.bots.get(r.key);
       if (bot && bot.actor.alive) {
         const b = bot.actor.body;
@@ -683,6 +713,8 @@ export class Game implements WorldView {
     this.updateHud(now, frenzy);
     this.hud.update(dt);
     if (!this.controls.usingTouch) this.hud.setCrosshair(this.controls.mouseX, this.controls.mouseY);
+    if (playing) this.updateRadar(now);
+    this.radar.root.visible = playing && !!this.localRow;
     this.governQuality(dt);
   }
 
@@ -716,8 +748,9 @@ export class Game implements WorldView {
     if (this.hudTimer <= 0) {
       this.hudTimer = 0.25;
       this.hud.setNet(this.time.synced ? this.time.rtt : null, this.fps);
+      this.hud.setTeamScore(this.teams ? this.teamScores() : null, this.teams ? this.localRow?.team ?? 0 : 0);
       const players = this.allPlayers();
-      this.hud.setMiniBoard(rankPlayers(players), this.net.myKey);
+      this.hud.setMiniBoard(rankPlayers(players), this.net.myKey, this.teams);
       if (this.debug) {
         this.hud.setDebug(
           `FPS ${this.fps.toFixed(0)}\nRTT ${this.time.rtt.toFixed(0)} ms\nRenderer ${this.app.renderer.name}\nPlayers ${players.length}\nQuality ${this.quality} (step ${this.qualityStep})\nParticles cap ${this.particles.cap}`,
@@ -746,6 +779,32 @@ export class Game implements WorldView {
       grenade: canThrow(m),
       melee: m !== C.MODE_BLADES, // in Blades the fire stick already swings the knife
     };
+  }
+
+  private updateRadar(now: number): void {
+    const out = this.radarEntries;
+    out.length = 0;
+    const myTeam = this.teams ? this.localRow?.team ?? 0 : 0;
+    if (this.local?.alive) out.push({ x: this.local.body.x, y: this.local.centerY, color: 0xffffff, kind: 'me', firedAgo: Infinity });
+    for (const r of this.remotes.values()) {
+      if (!r.row.alive || !r.hasSample) continue;
+      const ally = myTeam !== 0 && r.row.team === myTeam;
+      const fired = this.firedAt.get(r.key);
+      out.push({ x: r.s.x, y: r.s.y - C.PLAYER_H / 2, color: this.colorOf(r.key), kind: ally ? 'ally' : 'enemy', firedAgo: fired === undefined ? Infinity : now - fired });
+    }
+    const cam = this.camera;
+    const z = cam.zoom;
+    this.radar.update(out, { l: cam.left, t: cam.top, r: cam.right, b: cam.bottom }, (x, y) => ({ sx: (x - cam.left) * z, sy: (y - cam.top) * z }), this.app.screen.width, this.app.screen.height);
+  }
+
+  /** Team totals (sum of member scores) for team matches. */
+  teamScores(): [number, number] {
+    let red = 0, blue = 0;
+    for (const p of this.allPlayers()) {
+      if (p.team === C.TEAM_RED) red += p.score;
+      else if (p.team === C.TEAM_BLUE) blue += p.score;
+    }
+    return [red, blue];
   }
 
   /** Snapshot of what this client sees, for automated tests (window.__tl.game.debugState()). */
@@ -806,6 +865,7 @@ export class Game implements WorldView {
     const h = window.innerHeight;
     this.app.renderer.resize(w, h);
     this.camera.resize(w, h);
+    this.radar?.layout(w, h);
     this.camera.clamp();
   }
 

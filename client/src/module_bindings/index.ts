@@ -34,13 +34,17 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import BackToLobbyReducer from "./back_to_lobby_reducer";
 import ChoosePrimaryReducer from "./choose_primary_reducer";
 import CreateRoomReducer from "./create_room_reducer";
 import DevTeleportReducer from "./dev_teleport_reducer";
 import JoinRoomReducer from "./join_room_reducer";
+import KickPlayerReducer from "./kick_player_reducer";
 import LeaveRoomReducer from "./leave_room_reducer";
+import MovePlayerTeamReducer from "./move_player_team_reducer";
 import PingReducer from "./ping_reducer";
 import StartRoundReducer from "./start_round_reducer";
+import SwitchTeamReducer from "./switch_team_reducer";
 import SyncReducer from "./sync_reducer";
 import UpdateRoomSettingsReducer from "./update_room_settings_reducer";
 
@@ -50,6 +54,7 @@ import UpdateRoomSettingsReducer from "./update_room_settings_reducer";
 import BoomEvRow from "./boom_ev_table";
 import GrenadeRow from "./grenade_table";
 import HitEvRow from "./hit_ev_table";
+import KickEvRow from "./kick_ev_table";
 import KillEvRow from "./kill_ev_table";
 import MeleeEvRow from "./melee_ev_table";
 import PickupRow from "./pickup_table";
@@ -97,6 +102,14 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, HitEvRow),
+  kickEv: __table({
+    name: 'kick_ev',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, KickEvRow),
   killEv: __table({
     name: 'kill_ev',
     indexes: [
@@ -198,13 +211,17 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("back_to_lobby", BackToLobbyReducer),
   __reducerSchema("choose_primary", ChoosePrimaryReducer),
   __reducerSchema("create_room", CreateRoomReducer),
   __reducerSchema("dev_teleport", DevTeleportReducer),
   __reducerSchema("join_room", JoinRoomReducer),
+  __reducerSchema("kick_player", KickPlayerReducer),
   __reducerSchema("leave_room", LeaveRoomReducer),
+  __reducerSchema("move_player_team", MovePlayerTeamReducer),
   __reducerSchema("ping", PingReducer),
   __reducerSchema("start_round", StartRoundReducer),
+  __reducerSchema("switch_team", SwitchTeamReducer),
   __reducerSchema("sync", SyncReducer),
   __reducerSchema("update_room_settings", UpdateRoomSettingsReducer),
 );

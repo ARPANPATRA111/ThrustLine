@@ -1,7 +1,7 @@
 // In-game HUD written as plain DOM over the canvas. Every setter compares with the last value
 // and touches the DOM only when something changed; animations use transform/opacity only.
 import { WEAPON_DRAW, WEAPON_SIZE } from '../render/atlas';
-import { PLAYER_CSS } from '../render/soldier';
+import { playerCss } from '../render/soldier';
 import type { Player } from '../module_bindings/types';
 
 const CAUSE_NAMES: Record<number, string> = { 0: 'pistol', 1: 'AR', 2: 'shotgun', 3: 'sniper', 4: 'knife', 5: 'frag', 10: 'acid' };
@@ -46,6 +46,7 @@ export class Hud {
   private tint = $('frenzy-tint');
   private banner = $('banner');
   private debugEl = $('debug');
+  private teamEl = $('team-score');
   private last: Record<string, string | number | boolean> = {};
   private hitTimer = 0;
   private vigTimer = 0;
@@ -122,6 +123,14 @@ export class Hud {
     if (this.changed('nades', text)) this.nades.textContent = text;
   }
 
+  /** Team match: RED score vs BLUE score, with your team highlighted. */
+  setTeamScore(scores: [number, number] | null, myTeam: number): void {
+    const key = scores ? `${scores[0]}:${scores[1]}:${myTeam}` : '';
+    if (!this.changed('teams', key)) return;
+    this.teamEl.classList.toggle('hidden', !scores);
+    if (scores) this.teamEl.innerHTML = `<span class="red${myTeam === 1 ? ' mine' : ''}">RED ${scores[0]}</span><span class="blue${myTeam === 2 ? ' mine' : ''}">${scores[1]} BLUE</span>`;
+  }
+
   setReloading(on: boolean): void {
     if (this.changed('reload', on)) this.reload.classList.toggle('hidden', !on);
   }
@@ -131,25 +140,26 @@ export class Hud {
   }
 
   /** Mini leaderboard: top 3 plus you, with everyone's ping. */
-  setMiniBoard(ranked: Player[], meKey: string): void {
+  setMiniBoard(ranked: Player[], meKey: string, teams = false): void {
     const rows: string[] = [];
     const myIdx = ranked.findIndex((p) => p.identity.toHexString() === meKey);
     ranked.forEach((p, i) => {
       if (i < 3 || i === myIdx) {
         const me = i === myIdx ? ' class="me"' : '';
         const ping = p.isBot ? 'CPU' : p.pingMs ? `${p.pingMs}ms` : '';
-        rows.push(`<li${me}><span>${i + 1}</span><span class="dot" style="background:${PLAYER_CSS[p.colorIdx]}"></span><span>${escapeHtml(p.name)}</span><span class="sc">${p.score}</span><span class="pg">${ping}</span></li>`);
+        rows.push(`<li${me}><span>${i + 1}</span><span class="dot" style="background:${playerCss(p.colorIdx, teams ? p.team : 0)}"></span><span>${escapeHtml(p.name)}</span><span class="sc">${p.score}</span><span class="pg">${ping}</span></li>`);
       }
     });
     const html = rows.join('');
     if (this.changed('mini', html)) this.mini.innerHTML = html;
   }
 
-  killFeed(killer: string, killerColor: number, cause: number, victim: string, victimColor: number): void {
+  killFeed(killer: string, killerCss: string, cause: number, victim: string, victimCss: string, teamkill = false): void {
     const li = document.createElement('li');
-    const k = killer ? `<span class="killer" style="color:${PLAYER_CSS[killerColor]}">${escapeHtml(killer)}</span>` : '';
+    const tk = teamkill ? '<span class="tk">TEAMKILL</span>' : '';
+    const k = killer ? `<span class="killer" style="color:${killerCss}">${escapeHtml(killer)}</span>${tk}` : '';
     const icon = this.causeIcons[cause] ? `<img src="${this.causeIcons[cause]}" alt="${CAUSE_NAMES[cause] ?? ''}" title="${CAUSE_NAMES[cause] ?? ''}">` : '';
-    li.innerHTML = `${k}${icon}<span class="victim" style="color:${PLAYER_CSS[victimColor]}">${escapeHtml(victim)}</span>`;
+    li.innerHTML = `${k}${icon}<span class="victim" style="color:${victimCss}">${escapeHtml(victim)}</span>`;
     this.feed.prepend(li);
     while (this.feed.children.length > 4) this.feed.lastElementChild!.remove();
     setTimeout(() => li.remove(), 6000);

@@ -18,6 +18,7 @@ export default {
   seq: __t.u32(),
   life: __t.u32(),
   corr: __t.u32(),
+  t: __t.f64(),
   x: __t.f32(),
   y: __t.f32(),
   vx: __t.f32(),

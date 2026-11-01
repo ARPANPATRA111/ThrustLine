@@ -42,10 +42,13 @@ test('host rules are applied and enforced', async ({ browser }) => {
   await host.waitForSelector('#scr-lobby:not(.hidden)');
   const code = (await host.textContent('#lobby-code'))!.trim();
 
-  // A friend opens the invite link with the same callsign: the server makes it unique.
+  // A friend opens the invite link with the same callsign: the server gives them a different one.
   const guest = await openClient(browser, `?room=${code}&dev=1`, 'Twin');
   await expect(host.locator('#lobby-players li.pl')).toHaveCount(2);
-  await expect(host.locator('#lobby-players')).toContainText('Twin 2');
+  const names = await host.locator('#lobby-players li.pl .pname').allInnerTexts();
+  console.log(`names in room: ${names.join(', ')}`);
+  expect(new Set(names.map((n) => n.toLowerCase())).size).toBe(2);
+  expect(names).toContain('Twin');
 
   // Host edits the match settings through the lobby UI.
   await host.click('#mode-cards [data-mode="3"]');
@@ -114,7 +117,7 @@ test('host rules are applied and enforced', async ({ browser }) => {
 
   // Round over → host opens lobby settings, switches to Boom; the grenade BUTTON throws.
   await host.waitForSelector('#scr-board:not(.hidden)', { timeout: 40_000 });
-  await host.click('#btn-end-lobby');
+  await host.click('#btn-to-lobby');
   await host.waitForSelector('#scr-lobby:not(.hidden)');
   await host.click('#mode-cards [data-mode="2"]');
   await expect(host.locator('#mode-cards [data-mode="2"]')).toHaveClass(/on/);

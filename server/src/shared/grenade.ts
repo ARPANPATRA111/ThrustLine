@@ -7,6 +7,7 @@ import {
   GRENADE_RADIUS,
   GRENADE_RESTITUTION,
   GRENADE_TICK_HZ,
+  GRENADE_ZEROG_DRAG,
   MAX_FALL,
   TILE,
 } from './config';
@@ -50,10 +51,19 @@ function landsOnOneWay(map: GameMap, x: number, oldBottom: number, newBottom: nu
   return a === T_ONEWAY || b === T_ONEWAY ? top : -1;
 }
 
-/** Advance one fixed 120 Hz step. Mutates `g`. */
-export function stepGrenade(map: GameMap, g: GrenadeState): void {
-  g.vy += GRAVITY * DT;
-  if (g.vy > MAX_FALL) g.vy = MAX_FALL;
+/**
+ * Advance one fixed 120 Hz step. Mutates `g`.
+ * zeroG (house rule "floating grenades"): no gravity, and a constant drag factor per tick, so the
+ * grenade drifts where it was thrown and slows to a stop in mid-air (still bouncing off surfaces).
+ */
+export function stepGrenade(map: GameMap, g: GrenadeState, zeroG = false): void {
+  if (zeroG) {
+    g.vx *= GRENADE_ZEROG_DRAG;
+    g.vy *= GRENADE_ZEROG_DRAG;
+  } else {
+    g.vy += GRAVITY * DT;
+    if (g.vy > MAX_FALL) g.vy = MAX_FALL;
+  }
 
   // X axis: move, and on hitting a wall reflect with restitution.
   const nx = g.x + g.vx * DT;
@@ -78,8 +88,8 @@ export function stepGrenade(map: GameMap, g: GrenadeState): void {
         if (boxSolid(map, g.x, g.y)) g.y = ny - g.vy * DT; // fallback: stay where we were
       }
       g.vx = g.vx * GRENADE_FRICTION;
-      g.vy = g.vy > REST_SPEED ? -g.vy * GRENADE_RESTITUTION : 0;
-      if (g.vy === 0) {
+      g.vy = g.vy > REST_SPEED || zeroG ? -g.vy * GRENADE_RESTITUTION : 0;
+      if (g.vy === 0 && !zeroG) {
         // Resting: roll to a stop.
         if (g.vx > 0) g.vx = Math.max(0, g.vx - ROLL_DECEL * DT);
         else g.vx = Math.min(0, g.vx + ROLL_DECEL * DT);
@@ -104,12 +114,13 @@ export function simulateGrenade(
   vy0: number,
   ticks: number,
   out: GrenadeState,
+  zeroG = false,
 ): GrenadeState {
   out.x = x0;
   out.y = y0;
   out.vx = vx0;
   out.vy = vy0;
-  for (let i = 0; i < ticks; i++) stepGrenade(map, out);
+  for (let i = 0; i < ticks; i++) stepGrenade(map, out, zeroG);
   return out;
 }
 
@@ -122,13 +133,13 @@ export function fuseTicks(fuseMs: number): number {
  * Pre-compute the whole flight as [x0,y0,x1,y1,...] so the client can draw each frame with a
  * lookup instead of re-simulating (no per-frame work or allocation).
  */
-export function grenadePath(map: GameMap, x0: number, y0: number, vx0: number, vy0: number, ticks: number): Float32Array {
+export function grenadePath(map: GameMap, x0: number, y0: number, vx0: number, vy0: number, ticks: number, zeroG = false): Float32Array {
   const path = new Float32Array((ticks + 1) * 2);
   const g: GrenadeState = { x: x0, y: y0, vx: vx0, vy: vy0 };
   path[0] = g.x;
   path[1] = g.y;
   for (let i = 1; i <= ticks; i++) {
-    stepGrenade(map, g);
+    stepGrenade(map, g, zeroG);
     path[i * 2] = g.x;
     path[i * 2 + 1] = g.y;
   }

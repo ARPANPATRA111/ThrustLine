@@ -16,4 +16,5 @@ export default __t.row({
   victim: __t.identity(),
   cause: __t.u8(),
   bounty: __t.bool(),
+  teamkill: __t.bool(),
 });

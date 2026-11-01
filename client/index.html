@@ -118,6 +118,7 @@
         <div class="card players-card">
           <div class="card-title"><svg class="ic"><use href="#i-users" /></svg>Players<span id="lobby-count" class="count">1/6</span></div>
           <ul id="lobby-players" class="plist"></ul>
+          <button id="btn-switch-team" class="btn secondary sm hidden"><svg class="ic"><use href="#i-swap" /></svg>Switch team</button>
           <div id="bot-row" class="bot-row">
             <button id="btn-addbot" class="btn ghost sm"><svg class="ic"><use href="#i-cpu" /></svg>Add CPU</button>
             <button id="btn-rmbot" class="btn ghost sm"><svg class="ic"><use href="#i-close" /></svg>Remove</button>
@@ -126,6 +127,7 @@
         <div class="card settings-card">
           <div class="card-title"><svg class="ic"><use href="#i-sliders" /></svg>Match settings<span id="host-note" class="count">Host only</span></div>
           <div class="set-scroll" id="room-settings">
+            <div class="set-row"><span class="lbl"><svg class="ic"><use href="#i-users" /></svg>Match</span><div id="seg-teams" class="seg"></div></div>
             <div id="mode-cards" class="mode-cards">
               <button data-mode="0" class="mode"><svg class="ic"><use href="#i-gun" /></svg><b>Arms</b><small>All weapons</small></button>
               <button data-mode="1" class="mode"><svg class="ic"><use href="#i-knife" /></svg><b>Blades</b><small>Melee only</small></button>
@@ -144,6 +146,8 @@
               <label class="tog"><input type="checkbox" data-rule="pickups" /><span class="sw"></span><svg class="ic"><use href="#i-box" /></svg>Pickups</label>
               <label class="tog"><input type="checkbox" data-rule="acid" /><span class="sw"></span><svg class="ic"><use href="#i-acid" /></svg>Acid hazard</label>
               <label class="tog"><input type="checkbox" data-rule="frenzy" /><span class="sw"></span><svg class="ic"><use href="#i-bolt" /></svg>Final-minute Frenzy</label>
+              <label class="tog" id="tog-ff"><input type="checkbox" data-rule="friendlyFire" /><span class="sw"></span><svg class="ic"><use href="#i-users" /></svg>Friendly fire</label>
+              <label class="tog"><input type="checkbox" data-rule="floatingGrenades" /><span class="sw"></span><svg class="ic"><use href="#i-grenade" /></svg>Floating grenades</label>
             </div>
           </div>
         </div>
@@ -163,7 +167,14 @@
         </div>
       </div>
       <div class="hud-tc">
-        <div id="timer" class="timer">5:00</div>
+        <div class="tc-row">
+          <div id="timer" class="timer">5:00</div>
+          <div class="hud-tools">
+            <button id="btn-menu" class="icon-btn" aria-label="Menu"><svg class="ic"><use href="#i-menu" /></svg></button>
+            <button id="btn-fullscreen" class="icon-btn hidden" aria-label="Fullscreen"><svg class="ic"><use href="#i-expand" /></svg></button>
+          </div>
+        </div>
+        <div id="team-score" class="team-score hidden"></div>
         <div class="netstat"><span id="net-ping" class="ping good"><svg class="ic"><use href="#i-wifi" /></svg><b>--</b><i>ms</i></span><span id="net-fps"><b>--</b><i>FPS</i></span></div>
       </div>
       <div class="hud-tr">
@@ -182,10 +193,6 @@
       <div id="frenzy-tint" class="frenzy-tint"></div>
       <div id="dmg-arc" class="dmg-arc"></div>
       <div id="banner" class="banner"></div>
-      <div class="hud-tools">
-        <button id="btn-menu" class="icon-btn" aria-label="Menu"><svg class="ic"><use href="#i-menu" /></svg></button>
-        <button id="btn-fullscreen" class="icon-btn hidden" aria-label="Fullscreen"><svg class="ic"><use href="#i-expand" /></svg></button>
-      </div>
       <div id="touch" class="touch hidden">
         <div id="stick-l" class="stick stick-l"><div class="ring"></div><div class="knob"><svg class="ic"><use href="#i-jet" /></svg></div></div>
         <div id="stick-r" class="stick stick-r"><div class="ring"></div><div class="knob"><svg class="ic"><use href="#i-scope" /></svg></div></div>
@@ -224,10 +231,10 @@
           <thead><tr><th>#</th><th>Player</th><th class="num">Score</th><th class="num">K</th><th class="num">D</th><th class="num">Ping</th></tr></thead>
           <tbody id="board-body"></tbody>
         </table>
+        <p id="lobby-countdown" class="muted small hidden">Back to the lobby in 12 s</p>
         <div id="end-actions" class="row hidden">
           <button id="btn-again" class="btn primary lg"><svg class="ic"><use href="#i-reload" /></svg>Play again</button>
-          <span id="wait-host" class="muted hidden">Waiting for the host…</span>
-          <button id="btn-end-lobby" class="btn secondary">Lobby settings</button>
+          <button id="btn-to-lobby" class="btn secondary">Lobby now</button>
           <button id="btn-end-leave" class="btn ghost"><svg class="ic"><use href="#i-back" /></svg>Leave</button>
         </div>
       </div>

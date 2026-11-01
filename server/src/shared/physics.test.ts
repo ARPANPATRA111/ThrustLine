@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FUEL_MAX, TILE } from './config';
+import { FUEL_MAX, JET_HOVER, TILE } from './config';
 import { MAP_H, MAP_W, RIG7, parseMap } from './map';
 import { MoveInput, makeBody, stepPlayer } from './physics';
 import { isValidPosition } from './validate';
@@ -68,6 +68,25 @@ describe('stepPlayer', () => {
     expect(b.fuel).toBeLessThan(FUEL_MAX - 30);
     run(RIG7, b, idle, 300);
     expect(b.fuel).toBe(FUEL_MAX);
+  });
+
+  it('hovers with ~60 % analog thrust, even while flying sideways', () => {
+    const b = makeBody(20 * TILE, 12 * TILE); // open air in RIG-7
+    b.vy = 0;
+    const hover: MoveInput = { moveX: 0, thrust: true, thrustAmount: JET_HOVER, down: false };
+    run(RIG7, b, hover, 30); // settle
+    const y0 = b.y;
+    run(RIG7, b, { ...hover, moveX: 1 }, 60); // one second drifting right
+    expect(Math.abs(b.y - y0)).toBeLessThan(6);
+    expect(b.vx).toBeGreaterThan(200);
+    // Less power sinks slowly, full power climbs.
+    const sink = b.y;
+    run(RIG7, b, { ...hover, thrustAmount: 0.45 }, 30);
+    expect(b.y).toBeGreaterThan(sink + 5);
+    expect(b.vy).toBeLessThan(400);
+    const climb = b.y;
+    run(RIG7, b, { ...hover, thrustAmount: 1 }, 30);
+    expect(b.y).toBeLessThan(climb - 60);
   });
 
   it('never leaves the map or enters a solid in a 10 s random-input run', () => {

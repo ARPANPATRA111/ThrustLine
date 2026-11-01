@@ -13,7 +13,7 @@ import { Net, errorText } from './net/connection';
 import { TimeSync } from './net/timesync';
 import { buildAtlas } from './render/atlas';
 import { installFont } from './render/font';
-import { PLAYER_CSS } from './render/soldier';
+import { TEAM_CSS, TEAM_NAMES, playerCss } from './render/soldier';
 import { Audio } from './audio/audio';
 import { Game } from './game/game';
 import { Input } from './game/input';
@@ -104,6 +104,11 @@ async function boot(): Promise<void> {
   game.debug = settings.showDebug;
   game.setAttract(true); // the live map drifts behind the loading screen and menus
   const touch = new TouchControls($('touch'), input);
+  if (isTouchDevice) {
+    // Phones and tablets get the touch layout from the start (not only after the first touch).
+    input.usingTouch = true;
+    document.body.classList.add('touch-mode');
+  }
   touch.setLefty(settings.lefty);
   setupHowTo(atlas);
   const crownURL = atlas.iconURL('crownIcon');
@@ -123,8 +128,6 @@ async function boot(): Promise<void> {
   let myRoomId: bigint | null = null;
   let boardHeld = false;
   let menuOpen = false;
-  /** Host chose "Lobby settings" on the round-over screen. */
-  let lobbyWhileEnded = false;
   let wakeLock: { release(): Promise<void> } | null = null;
   const myRow = (): Player | undefined => (net.identity ? net.conn?.db.player.identity.find(net.identity) ?? undefined : undefined);
   const myRoom = (): Room | undefined => (myRoomId !== null ? net.conn?.db.room.id.find(myRoomId) ?? undefined : undefined);
@@ -138,10 +141,16 @@ async function boot(): Promise<void> {
     try { await p; return true; } catch (e) { toast(errorText(e)); return false; }
   };
 
-  const lobby = new LobbyView(
-    (mode, roundSec, rules) => void call(net.conn?.reducers.updateRoomSettings({ mode, roundSec, rules })),
-    () => audio.play('click'),
-  );
+  const lobby = new LobbyView({
+    send: (mode, roundSec, teams, rules) => void call(net.conn?.reducers.updateRoomSettings({ mode, roundSec, teams, rules })),
+    kick: (target) => {
+      // Kicking one of our own CPU players: also close its connection.
+      const bot = game.bots.get(target.toHexString());
+      void call(net.conn?.reducers.kickPlayer({ target })).then((ok) => { if (ok && bot) game.bots.remove(bot); });
+    },
+    moveTeam: (target) => void call(net.conn?.reducers.movePlayerTeam({ target })),
+    click: () => audio.play('click'),
+  });
 
   // ---------------------------------------------------------------- net → game
   net.h = {
@@ -154,12 +163,13 @@ async function boot(): Promise<void> {
       if (s === 'connected') time.start();
     },
     reconnected: () => void rejoinSaved(),
+    kicked: (e) => {
+      toast(`The host removed you from room ${e.roomCode}`);
+      leaveLocal(false);
+    },
     pong: (e) => time.onPong(e.clientMs, e.serverMicros),
     roomChanged: (r) => {
-      if (r && r.id === myRoomId) {
-        if (r.state !== 2) lobbyWhileEnded = false;
-        game.setRoom(r);
-      }
+      if (r && r.id === myRoomId) game.setRoom(r);
       route();
     },
     playerUpsert: (p, old) => {
@@ -174,7 +184,12 @@ async function boot(): Promise<void> {
     playerDelete: (p) => {
       if (p.identity.toHexString() === net.myKey) {
         if (myRoomId !== null && p.roomId === myRoomId) leaveLocal(false);
-      } else if (p.roomId === myRoomId) game.playerDelete(p);
+      } else if (p.roomId === myRoomId) {
+        game.playerDelete(p);
+        // One of our CPU players was removed (kicked): close its connection too.
+        const bot = game.bots.get(p.identity.toHexString());
+        if (bot) game.bots.remove(bot);
+      }
       route();
     },
     pstateUpsert: (s) => { if (s.roomId === myRoomId) game.pstateUpsert(s); },
@@ -195,7 +210,6 @@ async function boot(): Promise<void> {
   function enterRoom(roomId: bigint): void {
     game.clear();
     myRoomId = roomId;
-    lobbyWhileEnded = false;
     net.subscribeRoom(roomId);
     const r = myRoom();
     if (r) Net.savedRoom = r.code;
@@ -208,7 +222,6 @@ async function boot(): Promise<void> {
     net.subscribeRoom(null);
     game.clear();
     menuOpen = false;
-    lobbyWhileEnded = false;
     showOverlay('scr-menu', false);
     void wakeLock?.release().catch(() => {});
     wakeLock = null;
@@ -242,7 +255,7 @@ async function boot(): Promise<void> {
       return;
     }
     if (Net.savedRoom !== room.code) Net.savedRoom = room.code;
-    if (room.state === 0 || (room.state === 2 && lobbyWhileEnded && isHost())) {
+    if (room.state === 0) {
       showScreen('scr-lobby');
       game.stop();
       game.setAttract(true);
@@ -279,7 +292,7 @@ async function boot(): Promise<void> {
     $('btn-rmbot').classList.toggle('hidden', game.bots.count === 0);
     $<HTMLButtonElement>('btn-addbot').disabled = players.length + (game.bots.count - game.bots.bots.length) >= C.MAX_PLAYERS;
     $('lobby-wait').classList.toggle('hidden', host);
-    $('btn-start').innerHTML = `<svg class="ic"><use href="#i-play" /></svg>${room.state === 2 ? 'Play again' : 'Start match'}`;
+    $('btn-switch-team').classList.toggle('hidden', !room.teams);
   }
 
   // ---------------------------------------------------------------- respawn overlay
@@ -305,20 +318,41 @@ async function boot(): Promise<void> {
 
   // ---------------------------------------------------------------- scoreboard / round end
   function renderBoard(ended: boolean): void {
-    const ranked = rankPlayers(roomPlayers());
+    const room = myRoom();
+    const teams = !!room?.teams;
+    let ranked = rankPlayers(roomPlayers());
     $('board-title').textContent = ended ? 'ROUND OVER' : 'SCOREBOARD';
     $('winner').classList.toggle('hidden', !ended || ranked.length === 0);
-    if (ended && ranked[0]) $('winner-name').textContent = ranked[0].identity.toHexString() === net.myKey ? 'YOU WIN!' : `${ranked[0].name} wins`;
+    if (teams) {
+      // Team match: group by team, team with the higher total wins.
+      const [red, blue] = game.teamScores();
+      ranked = [...ranked.filter((p) => p.team === C.TEAM_RED), ...ranked.filter((p) => p.team === C.TEAM_BLUE)];
+      const myTeam = myRow()?.team ?? 0;
+      const win = red === blue ? 0 : red > blue ? C.TEAM_RED : C.TEAM_BLUE;
+      $('winner-name').innerHTML = win === 0 ? `DRAW · ${red} – ${blue}` : `<span style="color:${TEAM_CSS[win]}">${TEAM_NAMES[win]} TEAM WINS</span> · ${Math.max(red, blue)} – ${Math.min(red, blue)}${win === myTeam ? ' · VICTORY' : ''}`;
+    } else if (ended && ranked[0]) {
+      $('winner-name').textContent = ranked[0].identity.toHexString() === net.myKey ? 'YOU WIN!' : `${ranked[0].name} wins`;
+    }
     $('board-body').innerHTML = ranked.map((p, i) => {
       const me = p.identity.toHexString() === net.myKey ? ' class="me"' : '';
       const ping = p.isBot ? '<span class="cpu-tag">CPU</span>' : p.pingMs ? `<span class="ping ${pingClass(p.pingMs)}">${p.pingMs}</span>` : '–';
-      return `<tr${me}><td><span class="rank r${i + 1}">${i + 1}</span></td><td><span class="pn"><span class="avatar" style="width:12px;height:12px;border-radius:4px;background:${PLAYER_CSS[p.colorIdx]};color:${PLAYER_CSS[p.colorIdx]}"></span>${escapeHtml(p.name)}</span></td><td class="num">${p.score}</td><td class="num">${p.kills}</td><td class="num">${p.deaths}</td><td class="num">${ping}</td></tr>`;
+      const rank = teams ? ranked.filter((q, j) => j <= i && q.team === p.team).length : i + 1;
+      return `<tr${me}><td><span class="rank r${rank}">${rank}</span></td><td><span class="pn"><span class="avatar" style="width:12px;height:12px;border-radius:4px;background:${playerCss(p.colorIdx, teams ? p.team : 0)};color:${playerCss(p.colorIdx, teams ? p.team : 0)}"></span>${escapeHtml(p.name)}</span></td><td class="num">${p.score}</td><td class="num">${p.kills}</td><td class="num">${p.deaths}</td><td class="num">${ping}</td></tr>`;
     }).join('');
     $('end-actions').classList.toggle('hidden', !ended);
     $('btn-again').classList.toggle('hidden', !isHost());
-    $('btn-end-lobby').classList.toggle('hidden', !isHost());
-    $('wait-host').classList.toggle('hidden', isHost());
+    $('btn-to-lobby').classList.toggle('hidden', !isHost());
+    $('lobby-countdown').classList.toggle('hidden', !ended);
+    updateCountdown();
   }
+  /** "Back to the lobby in N s": every player returns automatically when it reaches zero. */
+  function updateCountdown(): void {
+    const room = myRoom();
+    if (!room || room.state !== 2 || room.lobbyAtMicros === 0n) return;
+    const left = Math.max(0, Math.ceil((Number(room.lobbyAtMicros) / 1000 - time.serverNow()) / 1000));
+    $('lobby-countdown').textContent = `Everyone returns to the lobby in ${left} s`;
+  }
+  setInterval(updateCountdown, 250);
   input.onScoreboard = (show) => { boardHeld = show; route(); };
   $('mini-board').addEventListener('click', () => { boardHeld = !boardHeld; route(); });
   $('scr-board').addEventListener('click', (e) => {
@@ -417,10 +451,11 @@ async function boot(): Promise<void> {
       try { await navigator.clipboard.writeText(`${data.text} ${url}`); toast('Invite copied to clipboard', 'info'); } catch { toast(url, 'info'); }
     }
   });
-  const startMatch = () => { audio.play('click'); lobbyWhileEnded = false; void call(net.conn?.reducers.startRound({})); };
+  const startMatch = () => { audio.play('click'); void call(net.conn?.reducers.startRound({})); };
   $('btn-start').addEventListener('click', startMatch);
   $('btn-again').addEventListener('click', startMatch);
-  $('btn-end-lobby').addEventListener('click', () => { lobbyWhileEnded = true; route(); });
+  $('btn-to-lobby').addEventListener('click', () => { audio.play('click'); void call(net.conn?.reducers.backToLobby({})); });
+  $('btn-switch-team').addEventListener('click', () => { audio.play('click'); void call(net.conn?.reducers.switchTeam({})); });
   $('btn-leave').addEventListener('click', () => leaveLocal(true));
   $('btn-end-leave').addEventListener('click', () => leaveLocal(true));
   $('btn-addbot').addEventListener('click', async () => {

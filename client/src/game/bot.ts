@@ -77,7 +77,9 @@ export class BotBrain {
     const n = world.targets(a.key, this.tmp);
     let current: Target | null = null;
     for (let i = 0; i < n; i++) if (this.tmp[i].key === this.targetKey) current = this.tmp[i];
+    // Team match: teammates are never targets.
     const visible = (t: Target) => {
+      if (world.rules.teams && a.team !== 0 && t.team === a.team) return false;
       const d = Math.hypot(t.x - cx, t.y - C.PLAYER_H / 2 - cy);
       return d < sk.sight && lineOfSight(map, cx, cy, t.x, t.y - C.PLAYER_H / 2);
     };
@@ -293,6 +295,13 @@ export class BotManager {
     }
   }
 
+  /** Disconnect one specific bot (e.g. after the host kicked it). */
+  remove(bot: Bot): void {
+    const i = this.bots.indexOf(bot);
+    if (i >= 0) this.bots.splice(i, 1);
+    bot.conn.disconnect();
+  }
+
   removeOne(): void {
     const b = this.bots.pop();
     if (b) b.conn.disconnect(); // the server's disconnect handler removes the bot's rows
@@ -326,7 +335,7 @@ export class BotManager {
       if (!bot.actor.alive) continue;
       const input = bot.brain.think(bot.actor, world, this.claims);
       bot.actor.step(input, DT, world, runMul, fuelMul);
-      const args = bot.actor.takeSync(now, input);
+      const args = bot.actor.takeSync(now, input, world.serverNow());
       if (args) void bot.conn.reducers.sync(args).catch(() => {});
     }
   }

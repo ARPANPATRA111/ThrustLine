@@ -2,7 +2,10 @@
 // Every pstate update is stored in a ring buffer stamped with the server time it was accepted.
 // Each frame we draw the player at (serverNow - 100 ms), interpolating between the two
 // snapshots around that time. This hides network jitter and bursty mobile delivery.
-import { EXTRAPOLATE_MAX_MS, SNAPSHOT_BUFFER } from '@shared/config';
+import { EXTRAPOLATE_MAX_MS, INTERP_DELAY_MS, SNAPSHOT_BUFFER } from '@shared/config';
+
+const MIN_RENDER_DELAY_MS = 60;
+const MAX_RENDER_DELAY_MS = 700;
 
 export interface Sample {
   x: number;
@@ -92,6 +95,40 @@ export class SnapshotBuffer {
     out.aim = this.aim[i];
     out.flags = this.flags[i];
     out.weapon = this.weapon[i];
+  }
+}
+
+/**
+ * Adaptive render delay for one remote player.
+ * Each update carries the time it was simulated (the sender's estimate of server time). When it
+ * arrives we measure how late it is: lag = serverNow - sentMs (upstream + downstream latency).
+ * We draw the player `mean lag + 2 × jitter + margin` in the past, so there is (almost) always a
+ * newer snapshot to interpolate toward instead of guessing ahead and snapping back. A fixed
+ * 100 ms delay only works on a LAN: at 250 ms ping updates are already ~120 ms old on arrival.
+ */
+export class LagEstimator {
+  private mean = -1;
+  private dev = 20;
+  /** Current render delay in ms (moves smoothly toward the target). */
+  delay = INTERP_DELAY_MS;
+
+  sample(lagMs: number): void {
+    if (!Number.isFinite(lagMs) || lagMs < -500 || lagMs > 3000) return;
+    if (this.mean < 0) this.mean = lagMs;
+    const err = lagMs - this.mean;
+    this.mean += err * 0.1;
+    this.dev += (Math.abs(err) - this.dev) * 0.1;
+  }
+
+  /** Ease the delay toward its target (no sudden jumps in the drawn timeline). */
+  update(dt: number): number {
+    if (this.mean >= 0) {
+      const target = Math.min(MAX_RENDER_DELAY_MS, Math.max(MIN_RENDER_DELAY_MS, this.mean + 2 * this.dev + 35));
+      // Grow quickly (to stop extrapolating), shrink slowly (to stay smooth).
+      const rate = target > this.delay ? 3 : 0.6;
+      this.delay += (target - this.delay) * Math.min(1, dt * rate);
+    }
+    return this.delay;
   }
 }
 

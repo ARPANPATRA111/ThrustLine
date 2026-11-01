@@ -15,6 +15,7 @@ export default __t.row({
   roomId: __t.u64().name("room_id"),
   name: __t.string(),
   colorIdx: __t.u8().name("color_idx"),
+  team: __t.u8(),
   isBot: __t.bool().name("is_bot"),
   joinedAt: __t.timestamp().name("joined_at"),
   alive: __t.bool(),

@@ -80,6 +80,11 @@ const PARTS: Part[] = [
   { name: 'square', w: 4, h: 4, draw: (g) => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, 4, 4); } },
   { name: 'bubbleAcid', w: 8, h: 8, draw: (g) => { g.beginPath(); g.arc(4, 4, 3, 0, Math.PI * 2); g.lineWidth = 1.5; g.strokeStyle = '#ffffff'; g.stroke(); } },
 
+  // ---------- Radar / team markers ----------
+  { name: 'arrow', w: 28, h: 28, draw: (g) => { g.beginPath(); g.moveTo(26, 14); g.lineTo(4, 3); g.lineTo(10, 14); g.lineTo(4, 25); g.closePath(); g.fillStyle = '#ffffff'; g.fill(); g.lineWidth = 2; g.strokeStyle = 'rgba(11,16,32,0.8)'; g.stroke(); } },
+  { name: 'pip', w: 10, h: 10, draw: (g) => { g.beginPath(); g.arc(5, 5, 4, 0, Math.PI * 2); g.fillStyle = '#ffffff'; g.fill(); g.lineWidth = 1.5; g.strokeStyle = '#0b1020'; g.stroke(); } },
+  { name: 'chevron', w: 16, h: 11, draw: (g) => { g.beginPath(); g.moveTo(1, 1); g.lineTo(8, 9); g.lineTo(15, 1); g.lineTo(11, 1); g.lineTo(8, 4.5); g.lineTo(5, 1); g.closePath(); g.fillStyle = '#ffffff'; g.fill(); g.lineWidth = 1.2; g.strokeStyle = '#0b1020'; g.stroke(); } },
+
   // ---------- Pickups with baked glow halos ----------
   { name: 'pk0', w: 48, h: 48, draw: pickup('#ff4d6d', (g) => { g.fillStyle = '#ffffff'; g.fillRect(20, 13, 8, 22); g.fillRect(13, 20, 22, 8); }) },
   { name: 'pk1', w: 48, h: 48, draw: pickup('#fbbf24', (g) => { rr(g, 13, 16, 22, 16, 2); fillStroke(g, '#c8892a'); g.fillStyle = '#ffe9a8'; g.fillRect(15, 22, 18, 3); }) },

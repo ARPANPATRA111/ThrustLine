@@ -3,7 +3,7 @@
 import type { Identity } from 'spacetimedb';
 import { DbConnection, tables, type EventContext, type SubscriptionHandle } from '../module_bindings';
 import type {
-  BoomEv, Grenade, HitEv, KillEv, MeleeEv, Pickup, PickupEv, Player, PongEv, Pstate, Room, ShotEv,
+  BoomEv, Grenade, HitEv, KickEv, KillEv, MeleeEv, Pickup, PickupEv, Player, PongEv, Pstate, Room, ShotEv,
 } from '../module_bindings/types';
 
 export const STDB_URI: string = import.meta.env.VITE_STDB_URI ?? 'ws://localhost:3000';
@@ -33,6 +33,7 @@ export interface NetHandlers {
   boom?: (e: BoomEv) => void;
   pickupTaken?: (e: PickupEv) => void;
   pong?: (e: PongEv) => void;
+  kicked?: (e: KickEv) => void;
   state?: (s: ConnState) => void;
   reconnected?: () => void;
 }
@@ -131,13 +132,14 @@ export class Net {
     db.boomEv.onInsert((_c: EventContext, e) => h().boom?.(e));
     db.pickupEv.onInsert((_c: EventContext, e) => h().pickupTaken?.(e));
     db.pongEv.onInsert((_c: EventContext, e) => h().pong?.(e));
+    db.kickEv.onInsert((_c: EventContext, e) => h().kicked?.(e));
   }
 
-  /** Always-on subscription: my own player row (tells me my room) and pongs addressed to me. */
+  /** Always-on subscription: my own player row (tells me my room), pongs and kick notices for me. */
   private subscribeSelf(conn: DbConnection, me: Identity): void {
     conn.subscriptionBuilder()
       .onError((ctx) => console.error('self subscription failed', ctx.event))
-      .subscribe([tables.player.where((r) => r.identity.eq(me)), tables.pongEv.where((r) => r.to.eq(me))]);
+      .subscribe([tables.player.where((r) => r.identity.eq(me)), tables.pongEv.where((r) => r.to.eq(me)), tables.kickEv.where((r) => r.to.eq(me))]);
   }
 
   /** Subscribe to exactly one room's rows and events; switching rooms swaps the subscription. */

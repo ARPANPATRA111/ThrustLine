@@ -14,6 +14,7 @@ import {
   HOP_FUEL,
   HOP_SPEED,
   JET_ACCEL,
+  JET_DAMPING,
   JET_MAX_UP,
   MAX_FALL,
   MAX_IMPULSE_SPEED_UP,
@@ -43,6 +44,11 @@ export interface MoveInput {
   /** -1 left, 0 none, +1 right (touch sticks may pass fractions). */
   moveX: number;
   thrust: boolean;
+  /**
+   * Analog jetpack power 0..1 (touch stick: how far up you push). Omitted = full power.
+   * About 0.6 hovers (JET_HOVER); less sinks slowly, more climbs.
+   */
+  thrustAmount?: number;
   down: boolean;
 }
 
@@ -103,13 +109,18 @@ export function stepPlayer(map: GameMap, b: PlayerBody, input: MoveInput, dt: nu
     if (!opt.infiniteFuel) b.fuel -= HOP_FUEL;
     b.grounded = false;
   } else if (input.thrust && !b.grounded && b.fuel > 0) {
-    // Holding thrust in the air is flight: net upward accel = JET_ACCEL - GRAVITY.
+    // Holding thrust in the air is flight. Power is analog (Mini Militia style): full power climbs
+    // (net 1200 px/s² up), about 60 % hovers, less sinks gently. Vertical damping while the jets
+    // fire settles the speed, so hovering and drifting sideways at one height are easy to hold.
+    const power = Math.max(0, Math.min(1, input.thrustAmount ?? 1));
     b.jetting = true;
-    b.vy -= JET_ACCEL * dt;
-    if (b.vy < -JET_MAX_UP) b.vy = Math.min(-JET_MAX_UP, b.vy + JET_ACCEL * dt); // never speeds past the cap
-    if (!opt.infiniteFuel) b.fuel = Math.max(0, b.fuel - FUEL_DRAIN * dt);
+    b.vy -= JET_ACCEL * power * dt;
+    if (b.vy < -JET_MAX_UP) b.vy = Math.min(-JET_MAX_UP, b.vy + JET_ACCEL * power * dt); // never speeds past the cap
+    if (!opt.infiniteFuel) b.fuel = Math.max(0, b.fuel - FUEL_DRAIN * (0.4 + 0.6 * power) * dt);
   }
   b.vy += GRAVITY * dt;
+  // Damping goes after gravity so that at hover power the net change is exactly zero.
+  if (b.jetting) b.vy -= b.vy * JET_DAMPING * dt;
   if (b.vy > MAX_FALL) b.vy = MAX_FALL;
   b.vx = clamp(b.vx, -MAX_IMPULSE_SPEED_X, MAX_IMPULSE_SPEED_X);
   if (b.vy < -MAX_IMPULSE_SPEED_UP) b.vy = -MAX_IMPULSE_SPEED_UP;

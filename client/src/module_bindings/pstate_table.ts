@@ -22,4 +22,5 @@ export default __t.row({
   weapon: __t.u8(),
   seq: __t.u32(),
   serverMicros: __t.i64().name("server_micros"),
+  sentMs: __t.f64().name("sent_ms"),
 });

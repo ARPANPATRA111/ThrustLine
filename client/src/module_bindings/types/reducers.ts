@@ -6,23 +6,31 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import BackToLobbyReducer from "../back_to_lobby_reducer";
 import ChoosePrimaryReducer from "../choose_primary_reducer";
 import CreateRoomReducer from "../create_room_reducer";
 import DevTeleportReducer from "../dev_teleport_reducer";
 import JoinRoomReducer from "../join_room_reducer";
+import KickPlayerReducer from "../kick_player_reducer";
 import LeaveRoomReducer from "../leave_room_reducer";
+import MovePlayerTeamReducer from "../move_player_team_reducer";
 import PingReducer from "../ping_reducer";
 import StartRoundReducer from "../start_round_reducer";
+import SwitchTeamReducer from "../switch_team_reducer";
 import SyncReducer from "../sync_reducer";
 import UpdateRoomSettingsReducer from "../update_room_settings_reducer";
 
+export type BackToLobbyParams = __Infer<typeof BackToLobbyReducer>;
 export type ChoosePrimaryParams = __Infer<typeof ChoosePrimaryReducer>;
 export type CreateRoomParams = __Infer<typeof CreateRoomReducer>;
 export type DevTeleportParams = __Infer<typeof DevTeleportReducer>;
 export type JoinRoomParams = __Infer<typeof JoinRoomReducer>;
+export type KickPlayerParams = __Infer<typeof KickPlayerReducer>;
 export type LeaveRoomParams = __Infer<typeof LeaveRoomReducer>;
+export type MovePlayerTeamParams = __Infer<typeof MovePlayerTeamReducer>;
 export type PingParams = __Infer<typeof PingReducer>;
 export type StartRoundParams = __Infer<typeof StartRoundReducer>;
+export type SwitchTeamParams = __Infer<typeof SwitchTeamReducer>;
 export type SyncParams = __Infer<typeof SyncReducer>;
 export type UpdateRoomSettingsParams = __Infer<typeof UpdateRoomSettingsReducer>;
 

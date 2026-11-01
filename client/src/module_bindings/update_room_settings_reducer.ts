@@ -17,6 +17,7 @@ import {
 export default {
   mode: __t.u8(),
   roundSec: __t.u32(),
+  teams: __t.bool(),
   get rules() {
     return Rules;
   },

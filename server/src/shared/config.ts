@@ -53,10 +53,19 @@ export const PICKUP_SIZE = 32;
 export const SCORE_KILL = 100;
 export const SCORE_BOUNTY_BONUS = 50;
 export const SCORE_SELF_DEATH = -50;
+/** Killing a teammate (friendly fire on): no kill credit, and this penalty. */
+export const SCORE_TEAMKILL = -50;
 export const BOUNTY_STREAK = 3;
 
 // ---------- Round & rooms ----------
-export const MAX_PLAYERS = 6;
+export const MAX_PLAYERS = 8;
+/** After a round ends, everyone returns to the lobby automatically after this many seconds. */
+export const LOBBY_RETURN_SEC = 12;
+
+// ---------- Teams ----------
+export const TEAM_NONE = 0;
+export const TEAM_RED = 1;
+export const TEAM_BLUE = 2;
 export const ROUND_LENGTHS_SEC = [120, 180, 300, 480, 600];
 export const DEV_ROUND_SEC = 30;
 export const DEFAULT_ROUND_SEC = 300;
@@ -91,6 +100,10 @@ export const DEFAULT_RULES = {
   maxHp: 100,
   respawnSec: 4,
   botSkill: BOT_NORMAL,
+  /** Teams only: teammates can hurt each other. */
+  friendlyFire: true,
+  /** Grenades ignore gravity and drift where they are thrown (zero-g). */
+  floatingGrenades: false,
 };
 
 // ---------- Grenades ----------
@@ -111,6 +124,8 @@ export const GRENADE_COOLDOWN_BOOM = 1.0;
 export const GRENADE_BOOM_MAX_LIVE = 2;
 /** The grenade simulation runs at a fixed 120 Hz so server and client agree exactly. */
 export const GRENADE_TICK_HZ = 120;
+/** Zero-g grenades: velocity multiplier per 120 Hz tick (slow drift to a stop, ~680 px travel). */
+export const GRENADE_ZEROG_DRAG = 0.99;
 /** Distance from the player's centre to the hand where a grenade spawns. */
 export const HAND_OFFSET = 18;
 
@@ -164,6 +179,22 @@ export const FLAG_FACING_RIGHT = 1;
 export const FLAG_GROUNDED = 2;
 export const FLAG_JETTING = 4;
 export const FLAG_RELOADING = 8;
+
+// ---------- Analog jetpack (Mini Militia style) ----------
+/** Thrust fraction that exactly cancels gravity (1800 / 3000): hover. */
+export const JET_HOVER = GRAVITY / JET_ACCEL;
+/** Vertical damping while the jets fire, so hovering and gentle climbs are easy to hold. */
+export const JET_DAMPING = 2.5;
+
+// ---------- Latency handling ----------
+/** Server-side position history per player used for lag compensation. */
+export const HISTORY_LEN = 16;
+/** Hits are judged against where the target was up to this long ago (shooter's view). */
+export const LAGCOMP_MAX_MS = 700;
+/** How far a client's clock may run ahead of the server's in total (anti speed-hack budget). */
+export const TIME_DEBT_MAX_MS = 350;
+/** Longest movement interval the server accepts in one sync. */
+export const MOVE_MAX_DT_SEC = 0.5;
 
 // ---------- kill causes (weapon ids 0..5 are reused as causes) ----------
 export const CAUSE_ACID = 10;

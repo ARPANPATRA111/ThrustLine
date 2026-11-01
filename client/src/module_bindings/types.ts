@@ -36,6 +36,7 @@ export const Grenade = __t.object("Grenade", {
   vy0: __t.f32(),
   thrownMicros: __t.i64(),
   fuseMs: __t.u32(),
+  zeroG: __t.bool(),
 });
 export type Grenade = __Infer<typeof Grenade>;
 
@@ -43,6 +44,7 @@ export const HitClaim = __t.object("HitClaim", {
   target: __t.identity(),
   pellets: __t.u8(),
   angle: __t.f32(),
+  viewMs: __t.f64(),
 });
 export type HitClaim = __Infer<typeof HitClaim>;
 
@@ -57,14 +59,36 @@ export const HitEv = __t.object("HitEv", {
 });
 export type HitEv = __Infer<typeof HitEv>;
 
+export const KickEv = __t.object("KickEv", {
+  to: __t.identity(),
+  roomCode: __t.string(),
+});
+export type KickEv = __Infer<typeof KickEv>;
+
+export const Kicked = __t.object("Kicked", {
+  id: __t.u64(),
+  roomId: __t.u64(),
+  identity: __t.identity(),
+});
+export type Kicked = __Infer<typeof Kicked>;
+
 export const KillEv = __t.object("KillEv", {
   roomId: __t.u64(),
   killer: __t.identity(),
   victim: __t.identity(),
   cause: __t.u8(),
   bounty: __t.bool(),
+  teamkill: __t.bool(),
 });
 export type KillEv = __Infer<typeof KillEv>;
+
+export const LobbyJob = __t.object("LobbyJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  roomId: __t.u64(),
+  roundNo: __t.u32(),
+});
+export type LobbyJob = __Infer<typeof LobbyJob>;
 
 export const MeleeEv = __t.object("MeleeEv", {
   roomId: __t.u64(),
@@ -106,6 +130,7 @@ export const Player = __t.object("Player", {
   roomId: __t.u64(),
   name: __t.string(),
   colorIdx: __t.u8(),
+  team: __t.u8(),
   isBot: __t.bool(),
   joinedAt: __t.timestamp(),
   alive: __t.bool(),
@@ -139,6 +164,11 @@ export const Pmeta = __t.object("Pmeta", {
   prevX: __t.f32(),
   prevY: __t.f32(),
   prevMicros: __t.i64(),
+  lastClientMs: __t.f64(),
+  timeDebtMs: __t.f64(),
+  histT: __t.array(__t.f64()),
+  histX: __t.array(__t.f32()),
+  histY: __t.array(__t.f32()),
   lastFire: __t.array(__t.i64()),
   lastMeleeMicros: __t.i64(),
   lastThrowMicros: __t.i64(),
@@ -167,6 +197,7 @@ export const Pstate = __t.object("Pstate", {
   weapon: __t.u8(),
   seq: __t.u32(),
   serverMicros: __t.i64(),
+  sentMs: __t.f64(),
 });
 export type Pstate = __Infer<typeof Pstate>;
 
@@ -187,11 +218,13 @@ export const Room = __t.object("Room", {
   mode: __t.u8(),
   roundSec: __t.u32(),
   dev: __t.bool(),
+  teams: __t.bool(),
   get rules() {
     return Rules;
   },
   startedAtMicros: __t.i64(),
   endsAtMicros: __t.i64(),
+  lobbyAtMicros: __t.i64(),
   roundNo: __t.u32(),
   createdAt: __t.timestamp(),
 });
@@ -214,6 +247,8 @@ export const Rules = __t.object("Rules", {
   maxHp: __t.u16(),
   respawnSec: __t.u8(),
   botSkill: __t.u8(),
+  friendlyFire: __t.bool(),
+  floatingGrenades: __t.bool(),
 });
 export type Rules = __Infer<typeof Rules>;
 

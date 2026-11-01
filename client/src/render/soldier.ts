@@ -5,8 +5,20 @@ import { BitmapText, Container, Sprite, type Texture } from 'pixi.js';
 import { FLAG_GROUNDED, FLAG_JETTING, PLAYER_H } from '@shared/config';
 import { FONT } from './font';
 
-export const PLAYER_COLORS = [0x22d3ee, 0xf472b6, 0xa3e635, 0xfbbf24, 0xa78bfa, 0xfb7185];
-export const PLAYER_CSS = ['#22D3EE', '#F472B6', '#A3E635', '#FBBF24', '#A78BFA', '#FB7185'];
+export const PLAYER_COLORS = [0x22d3ee, 0xf472b6, 0xa3e635, 0xfbbf24, 0xa78bfa, 0xfb7185, 0x2dd4bf, 0xe5e7eb];
+export const PLAYER_CSS = ['#22D3EE', '#F472B6', '#A3E635', '#FBBF24', '#A78BFA', '#FB7185', '#2DD4BF', '#E5E7EB'];
+/** Team colours (index = team: 1 red, 2 blue). */
+export const TEAM_COLORS = [0, 0xff4d5e, 0x3d8bff];
+export const TEAM_CSS = ['', '#FF4D5E', '#3D8BFF'];
+export const TEAM_NAMES = ['', 'RED', 'BLUE'];
+
+/** The colour a player is drawn in: their team colour in team matches, else their own colour. */
+export function playerColor(colorIdx: number, team: number): number {
+  return team ? TEAM_COLORS[team] : PLAYER_COLORS[colorIdx % PLAYER_COLORS.length];
+}
+export function playerCss(colorIdx: number, team: number): string {
+  return team ? TEAM_CSS[team] : PLAYER_CSS[colorIdx % PLAYER_CSS.length];
+}
 export const GOLD = 0xffd54a;
 
 function part(tex: Texture, ax: number, ay: number): Sprite {
@@ -32,6 +44,10 @@ export class SoldierView {
   private tag: BitmapText;
   /** Soft additive glow in the player colour: makes soldiers pop against the dark rig. */
   private glow: Sprite;
+  /** Chevron above teammates' heads (team matches). */
+  private ally: Sprite;
+  private colorIdx = 0;
+  private team = 0;
   private phase = 0;
   private flameTick = 0;
   private currentWeapon = -1;
@@ -75,12 +91,20 @@ export class SoldierView {
     this.glow.alpha = 0.32;
     this.glow.scale.set(2.6, 3);
     this.glow.position.set(0, -26);
-    this.root.addChild(this.glow, this.body, this.bubble, this.crown, this.tag);
+    this.ally = part(tex.chevron, 0.5, 1);
+    this.ally.position.set(0, -76);
+    this.ally.visible = false;
+    this.root.addChild(this.glow, this.body, this.bubble, this.crown, this.tag, this.ally);
     this.setColor(colorIdx);
   }
 
-  setColor(colorIdx: number): void {
-    const c = PLAYER_COLORS[colorIdx % PLAYER_COLORS.length];
+  /** Colour by team (team match) or personal colour; `ally` marks a teammate of the viewer. */
+  setColor(colorIdx: number, team = 0, ally = false): void {
+    this.colorIdx = colorIdx;
+    this.team = team;
+    const c = playerColor(colorIdx, team);
+    this.ally.visible = ally;
+    this.ally.tint = c;
     this.torso.tint = c;
     this.glow.tint = c;
     this.helmet.tint = c;
@@ -143,8 +167,8 @@ export class SoldierView {
   }
 
   /** Restore normal colour after bounty ends. */
-  refreshColor(colorIdx: number, bounty: boolean): void {
-    this.helmet.tint = bounty ? GOLD : PLAYER_COLORS[colorIdx % PLAYER_COLORS.length];
+  refreshColor(_colorIdx: number, bounty: boolean): void {
+    this.helmet.tint = bounty ? GOLD : playerColor(this.colorIdx, this.team);
   }
 
   destroy(): void {

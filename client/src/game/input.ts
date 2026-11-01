@@ -16,7 +16,7 @@ export class Input {
   onDebug: () => void = () => {};
 
   // Written by the touch controls.
-  touch = { moveX: 0, thrust: false, down: false, aim: null as number | null, fire: false };
+  touch = { moveX: 0, thrust: false, thrustAmount: 1, down: false, aim: null as number | null, fire: false };
 
   constructor() {
     window.addEventListener('keydown', (e) => this.onKey(e, true));
@@ -69,6 +69,7 @@ export class Input {
     const k = this.keys;
     let moveX = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
     let thrust = k.has('KeyW') || k.has('Space') || k.has('ArrowUp');
+    let thrustAmount = 1; // keyboard: full power
     let down = k.has('KeyS') || k.has('ArrowDown');
     let fire = this.mouseDown;
     let firePressed = this.edges.fire;
@@ -76,6 +77,7 @@ export class Input {
     if (this.usingTouch) {
       const t = this.touch;
       if (t.moveX !== 0) moveX = t.moveX;
+      if (t.thrust && !thrust) thrustAmount = t.thrustAmount; // touch: analog power
       thrust = thrust || t.thrust;
       down = down || t.down;
       if (t.aim !== null) aim = t.aim;
@@ -85,6 +87,7 @@ export class Input {
     }
     out.moveX = moveX;
     out.thrust = thrust;
+    out.thrustAmount = thrustAmount;
     out.down = down;
     out.aim = aim;
     out.fire = fire;

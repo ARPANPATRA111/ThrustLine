@@ -5,7 +5,19 @@
 //   Left stick: horizontal = run, push up = jetpack, pull firmly straight down = drop through.
 //   Right stick: direction aims, push past ~55% = fire (automatic weapons keep firing).
 // Action buttons sit on an arc around the aim stick and only show when the mode uses them.
+import { JET_HOVER } from '@shared/config';
 import type { Input } from '../game/input';
+
+/**
+ * Stick "up" amount (0..1) to jet power: 0.15-0.3 ramps from a slow sink to hover, 0.3-0.55 is
+ * a hover plateau (JET_HOVER), and beyond that power rises to full climb at the edge.
+ */
+export function jetPower(up: number): number {
+  if (up <= 0.15) return 0;
+  if (up < 0.3) return 0.45 + ((up - 0.15) / 0.15) * (JET_HOVER - 0.45);
+  if (up < 0.55) return JET_HOVER;
+  return JET_HOVER + Math.min(1, (up - 0.55) / 0.4) * (1 - JET_HOVER);
+}
 
 /** Thumb travel (px) that counts as a full push. */
 const RADIUS = 56;
@@ -122,7 +134,11 @@ export class TouchControls {
     const { nx, ny } = this.offset(this.move!, e);
     const t = this.input.touch;
     t.moveX = Math.abs(nx) > 0.22 ? Math.max(-1, Math.min(1, nx * 1.3)) : 0;
-    t.thrust = ny < -0.35;
+    // Analog jetpack (Mini Militia style): the further up you push, the stronger the jets.
+    // A gentle push sits in a wide "hover" band, so you can fly sideways at one height.
+    const up = -ny;
+    t.thrust = up > 0.15;
+    t.thrustAmount = jetPower(up);
     // Dropping through a platform needs a firm, mostly vertical pull, so running diagonally
     // downward never drops you by accident.
     t.down = ny > 0.75 && Math.abs(ny) > Math.abs(nx) * 1.8;
