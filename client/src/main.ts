@@ -79,7 +79,7 @@ async function boot(): Promise<void> {
   const touch = new TouchControls($('touch'), input);
   touch.setLefty(settings.lefty);
   // Exposed for automated tests and debugging in the console.
-  (window as unknown as { __tl: unknown }).__tl = { game, net, time, app };
+  (window as unknown as { __tl: unknown }).__tl = { game, net, time, app, audio };
 
   // Connect while the audio is being synthesised.
   const connected = net.connect();

@@ -223,13 +223,3 @@ export function applyImpulse(b: PlayerBody, ix: number, iy: number): void {
   if (iy < 0) b.grounded = false;
 }
 
-/** Hitbox helpers used by raycasts and validation. */
-export function bodyLeft(x: number): number {
-  return x - HALF_W;
-}
-export function bodyTop(y: number): number {
-  return y - PLAYER_H;
-}
-export function bodyCenterY(y: number): number {
-  return y - PLAYER_H / 2;
-}

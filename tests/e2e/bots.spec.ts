@@ -30,6 +30,22 @@ test('CPU players join, move and fight', async ({ browser }) => {
     };
   });
   await page.waitForTimeout(2500);
+
+  // Audio was unlocked by the first tap; a 30 s round is entirely Frenzy, so the Frenzy loop plays.
+  const audio = await page.evaluate(() => ({ state: (window as any).__tl.audio.ctx.state, music: (window as any).__tl.audio.musicKind }));
+  console.log(`audio: ${JSON.stringify(audio)}`);
+  expect(audio.state).toBe('running');
+  expect(audio.music).toBe('musicFrenzy');
+  await expect(page.locator('#timer')).toContainText('FRENZY');
+
+  // F3 toggles the debug overlay with FPS and the renderer name.
+  await page.keyboard.press('F3');
+  await expect(page.locator('#debug')).toBeVisible();
+  await expect(page.locator('#debug')).toContainText(/FPS \d+/);
+  await expect(page.locator('#debug')).toContainText(/Renderer (webgl|webgpu)/);
+  console.log((await page.locator('#debug').innerText()).replace(/\n/g, ' | '));
+  await page.keyboard.press('F3');
+
   const a = await snap();
   await page.waitForTimeout(4000);
   const b = await snap();

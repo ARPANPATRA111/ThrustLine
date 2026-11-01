@@ -1,0 +1,54 @@
+# Decisions
+
+Every deviation from the build brief, and every non-obvious choice, one line each (decision · reason).
+
+## Tooling and deployment
+
+- Upgraded the SpacetimeDB CLI from 2.0.1 to 2.14.0 · the `spacetimedb` npm SDK is 2.14.0; matching versions avoid codegen/bundler mismatches.
+- TypeScript 7 (current `typescript` on npm) · latest stable; strict mode, zero errors in both packages.
+- Vercel deploys from the repo root (`vercel.json` at the root, build `npm run build -w client`, output `client/dist`) instead of from `client/` · the client imports `../server/src/shared`, which isn't uploaded when the deploy root is `client/` (the first deploy failed for exactly this reason).
+- `npm run publish:cloud` reads the database name from `client/.env.production` · one source of truth for the Maincloud name (`thrustline-zhtm`).
+- The production smoke test uses a `?dev=1` room · `devTeleport` is only allowed in dev rooms, and the brief's smoke test needs it.
+
+## Server module
+
+- Scheduled reducers are bound with `spacetimedb.reducer({ onSchedule: table }, …)` and still check `ctx.senderAuth.isInternal` · `onSchedule` is the current API; scheduled reducers are private by default in 2.x, the check is defence in depth.
+- Added `player.pistolMag` · the pistol keeps its own magazine when you swap; one `mag` field can't hold two weapons.
+- Added `player.isBot` and a `bot` argument on `joinRoom` · CPU players (requested by the developer) show a CPU tag, and host hand-off prefers humans.
+- `sync` takes two extra fields, `life` and `corr` · a sync from a previous life, or sent before the client applied a correction, is stale and must not move the player.
+- `ShotIn` has an `ends` array (tracer end points) · the server has no per-pellet directions, so it relays the shooter's end points to other clients for tracers.
+- `HitClaim` has its own `angle` (average direction of the rays that hit) · moving-sniper spread (6°) and shotgun pellets (±14°) would fail the "claimed ray within half-diagonal + 40 px" check if only the aim angle were sent.
+- `pickup_ev` carries `pickupId` · clients play the pickup ring at the right crate.
+- `pmeta` stores `connId`, `lastHazardMicros`, `hasDeath`, and `lastFire` as an array · reload race protection, acid timing, "no death yet", per-weapon fire times.
+- Movement check uses 1400 px/s instead of 1100 · a blast (1000 px/s sideways) while falling at 900 px/s moves ~1345 px/s; 1100 would snap legitimate blast-jumps back.
+- A sync under 25 ms after the previous one skips only the movement write; its actions still run · bunched mobile packets would otherwise silently drop shots.
+- Fire rate uses a token bucket with a 200 ms burst allowance · two shots fired 100 ms apart can arrive in one sync; the average rate is still enforced.
+- A shot's origin may be within 48 px of the shooter's current or previous accepted position · shotgun recoil moves the shooter up to ~36 px between firing and the next sync (found by the weapons e2e test).
+- `dt` for the movement check is measured from the last accepted position (`pstate.serverMicros`) · matches "time since the last accepted sync".
+- Pickups are only consumed when they help (health below 100, reserve not full, fewer than 3 grenades) · walking over a full health pack shouldn't waste it.
+- Spawn protection also ends on knife swings and grenade throws · consistent with "ends early if you fire".
+- A grenade that would spawn inside a wall starts at the thrower's centre · otherwise it could get stuck in a tile.
+- `endRound` also marks everyone dead · nobody keeps moving or shooting behind the leaderboard.
+- `clientDisconnected` cleans up only if the disconnecting connection owns the player row (`pmeta.connId`) · on a page reload the new connection may rejoin before the old one's disconnect arrives.
+- Rejoining the same room (reload/reconnect) keeps your stats · `joinRoom` for a room you're already in just adopts the new connection.
+- Dev rooms log every rejected move/shot/hit claim (`spacetime logs`) · makes validation visible in tests and in the viva.
+
+## Client
+
+- Atlas and map chunks are drawn with the Canvas 2D API, then uploaded as Pixi textures, instead of Pixi `Graphics` → `RenderTexture` · Canvas 2D has radial gradients for the baked glows; the result is the same: generated at load, one atlas texture (2× resolution), six map chunks.
+- The atlas is shelf-packed into a 1024×1024 logical (2048×2048 physical) canvas · within the brief's 2048 limit, crisp on high-DPI screens.
+- Automatic reconnect uses the SDK's `withAutomaticReconnect({ minDelayMs: 500, maxDelayMs: 8000 })` · it doubles 0.5 → 1 → 2 → 4 → 8 s like the brief (with the SDK's ±50 % jitter) and keeps subscriptions; the initial connection retries on the exact 0.5/1/2/4/8 s schedule.
+- On touch, holding the aim stick past 60 % also repeats semi-auto weapons at their fire rate · tapping a stick repeatedly isn't practical on a phone.
+- `Q` swaps primary ↔ pistol in Arms (knife has its own key, F) and frag ↔ knife in Boom · knife is always one key away; Blades has nothing to swap.
+- Grenade flights are precomputed once per grenade as a path array (the same deterministic 120 Hz simulation) and looked up each frame · no per-frame re-simulation or allocation.
+- Ammo prediction merges the server row only when the row object changes (for bots too) · otherwise prediction would be undone every frame.
+- The knife lunge's vertical part is halved · a full upward lunge felt like a jump.
+- Air drag of 300 px/s² when no direction is held (brief is silent) · keeps blast-jump momentum but lets you stop eventually.
+- Quality governor steps never raise resolution above `devicePixelRatio` · no point rendering 2× on a 1× screen.
+- `window.__tl` exposes the game objects · used by the Playwright tests (`debugState()`, `devTeleport`).
+
+## CPU players (added at the developer's request)
+
+- Bots run in the browser tab that adds them; each opens its own SpacetimeDB connection with a fresh identity and plays through `joinRoom`/`sync` · the server validates bots exactly like humans and no server tick is needed.
+- Only the host sees "+ Add CPU" / "− Remove CPU" in the lobby · one owner per bot; closing that tab disconnects its bots and the server cleans them up.
+- Bot brain: nearest visible enemy, aim error that shrinks with time in view, 0.3 s reaction delay, range keeping per weapon, wall hopping, acid look-ahead and escape · plain heuristics that are easy to explain and tune.
