@@ -26,13 +26,15 @@ async function openClient(browser: Browser, query: string): Promise<Page> {
   await page.goto(`/${query}`);
   await page.waitForSelector('#btn-tap:not(.hidden)', { timeout: 60_000 });
   await page.click('#btn-tap');
-  await page.waitForSelector('#scr-home:not(.hidden)', { timeout: 60_000 });
+  await page.waitForSelector(query.includes('room=') ? '#scr-lobby:not(.hidden)' : '#scr-home:not(.hidden)', { timeout: 60_000 });
   return page;
 }
 
 const st = (p: Page) => p.evaluate(() => (window as any).__tl.game.debugState());
 const reducer = (p: Page, name: string, args: object) =>
   p.evaluate(([n, a]) => (window as any).__tl.net.conn.reducers[n as string](a), [name, args] as const);
+
+const rules = (p: Page) => p.evaluate(() => (window as any).__tl.game.room.rules);
 
 async function waitAlive(p: Page): Promise<void> {
   await expect.poll(async () => (await st(p)).me?.alive, { timeout: 15_000 }).toBe(true);
@@ -92,10 +94,8 @@ test('every weapon works in Arms; Blades and Boom restrict loadouts', async ({ b
   await a.click('#btn-create');
   await a.waitForSelector('#scr-lobby:not(.hidden)');
   const code = (await a.textContent('#lobby-code'))!.trim();
-  await a.selectOption('#sel-round', '30');
+  await a.click('#seg-round [data-v="30"]');
   const b = await openClient(browser, `?room=${code}&dev=1`);
-  await b.fill('#in-name', 'Target');
-  await b.click('#btn-join');
   await b.waitForSelector('#scr-lobby:not(.hidden)');
   const pages = [a, b];
   const click = async () => { await a.mouse.down(); await a.waitForTimeout(80); await a.mouse.up(); };
@@ -129,7 +129,7 @@ test('every weapon works in Arms; Blades and Boom restrict loadouts', async ({ b
   await waitRoundEnd(pages);
 
   // ---- Round 3: Blades ----
-  await reducer(a, 'updateRoomSettings', { mode: 1, roundSec: 30 });
+  await reducer(a, 'updateRoomSettings', { mode: 1, roundSec: 30, rules: await rules(a) });
   await playRound(a, pages);
   await waitAlive(a);
   expect((await st(a)).mode).toBe(1);
@@ -146,7 +146,7 @@ test('every weapon works in Arms; Blades and Boom restrict loadouts', async ({ b
   await waitRoundEnd(pages);
 
   // ---- Round 4: Boom ----
-  await reducer(a, 'updateRoomSettings', { mode: 2, roundSec: 30 });
+  await reducer(a, 'updateRoomSettings', { mode: 2, roundSec: 30, rules: await rules(a) });
   await playRound(a, pages);
   await waitAlive(a);
   expect((await st(a)).mode).toBe(2);

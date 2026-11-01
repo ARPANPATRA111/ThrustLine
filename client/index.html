@@ -3,95 +3,176 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0B1020" />
+    <meta name="theme-color" content="#070b18" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="description" content="THRUSTLINE: a jetpack free-for-all over the acid sea of RIG-7." />
+    <meta property="og:title" content="THRUSTLINE · Jetpack free-for-all" />
+    <meta property="og:description" content="Join my room and fight over the acid sea of RIG-7. Up to 6 players, right in your browser." />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>THRUSTLINE</title>
   </head>
-  <body>
+  <body class="menu-mode">
     <div id="stage"></div>
+    <div id="menu-shade"></div>
+
+    <!-- Icon set: every icon is drawn here as SVG (no downloaded art). -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></symbol>
+      <symbol id="i-enter" viewBox="0 0 24 24"><path d="M10 7l5 5-5 5M15 12H3M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></symbol>
+      <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.6" fill="currentColor"/><circle cx="6" cy="12" r="2.6" fill="currentColor"/><circle cx="18" cy="19" r="2.6" fill="currentColor"/><path d="M8.3 10.8l7.4-4.4M8.3 13.2l7.4 4.4" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="2" fill="none"/><path d="M9.3 9.4a2.8 2.8 0 1 1 3.8 2.6c-.8.3-1.1.9-1.1 1.7v.4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/><circle cx="12" cy="17.2" r="1.3" fill="currentColor"/></symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" stroke="currentColor" stroke-width="2" fill="none"/><path d="M19.4 13.5l1.6 1.2-2 3.4-1.9-.7a7.5 7.5 0 0 1-2 1.2L14.8 21h-4l-.3-2.4a7.5 7.5 0 0 1-2-1.2l-1.9.7-2-3.4 1.6-1.2a7.6 7.6 0 0 1 0-2.4L4.6 9.9l2-3.4 1.9.7a7.5 7.5 0 0 1 2-1.2L10.8 3h4l.3 2.4a7.5 7.5 0 0 1 2 1.2l1.9-.7 2 3.4-1.6 1.2a7.6 7.6 0 0 1 0 2.4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5" fill="currentColor"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0z" fill="currentColor"/><circle cx="17" cy="9" r="2.8" fill="currentColor" opacity=".6"/><path d="M15.5 14.3A5.5 5.5 0 0 1 21.5 20h-4.3" fill="currentColor" opacity=".6"/></symbol>
+      <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="11" rx="3" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="9.5" cy="12.5" r="1.6" fill="currentColor"/><circle cx="14.5" cy="12.5" r="1.6" fill="currentColor"/><path d="M12 7V4M10 4h4M3 11v4M21 11v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-dice" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="9" cy="9" r="1.5" fill="currentColor"/><circle cx="15" cy="15" r="1.5" fill="currentColor"/><circle cx="15" cy="9" r="1.5" fill="currentColor"/><circle cx="9" cy="15" r="1.5" fill="currentColor"/></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.4" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="10" cy="17" r="2.4" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+      <symbol id="i-crown" viewBox="0 0 24 24"><path d="M3 18L4.5 7l5 4.5L12 5l2.5 6.5 5-4.5L21 18z" fill="currentColor"/></symbol>
+      <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.5s-8-4.9-8-11A4.5 4.5 0 0 1 12 6.6 4.5 4.5 0 0 1 20 9.5c0 6.1-8 11-8 11z" fill="currentColor"/></symbol>
+      <symbol id="i-jet" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="12" rx="3" fill="currentColor"/><path d="M9 16l-1.5 5h3zM15 16l-1.5 5h3z" fill="currentColor" opacity=".7"/></symbol>
+      <symbol id="i-ammo" viewBox="0 0 24 24"><path d="M6 21V10l2-5 2 5v11zM14 21V10l2-5 2 5v11z" fill="currentColor"/></symbol>
+      <symbol id="i-grenade" viewBox="0 0 24 24"><ellipse cx="12" cy="14.5" rx="6" ry="7" fill="currentColor"/><rect x="9.5" y="3.5" width="5" height="4" rx="1" fill="currentColor"/><path d="M14.5 5.5h3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-knife" viewBox="0 0 24 24"><path d="M3 21l7-7M9 15l11-11c1 3-1 8-5 11l-3 1z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" fill="currentColor" fill-opacity=".35"/></symbol>
+      <symbol id="i-gun" viewBox="0 0 24 24"><path d="M2 8h18v4h-8l-1 2H8l-1 5H3l1-7H2z" fill="currentColor"/></symbol>
+      <symbol id="i-scope" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></symbol>
+      <symbol id="i-reload" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+      <symbol id="i-swap" viewBox="0 0 24 24"><path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+      <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.6 16a5 5 0 0 1 6.8 0" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/><circle cx="12" cy="19.5" r="1.6" fill="currentColor"/></symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+      <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+      <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H3.5a3.5 3.5 0 0 0 3.8 4.2M17 6h3.5a3.5 3.5 0 0 1-3.8 4.2M12 14v4M8 21h8" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" fill="none"/></symbol>
+      <symbol id="i-skull" viewBox="0 0 24 24"><path d="M12 3a8 8 0 0 0-5 14.2V20h10v-2.8A8 8 0 0 0 12 3z" fill="currentColor"/><circle cx="9" cy="11.5" r="2" fill="#070b18"/><circle cx="15" cy="11.5" r="2" fill="#070b18"/></symbol>
+      <symbol id="i-acid" viewBox="0 0 24 24"><path d="M12 3s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z" fill="currentColor"/></symbol>
+      <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6z" fill="currentColor"/></symbol>
+      <symbol id="i-box" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="M3 7l9 4 9-4M12 11v10" stroke="currentColor" stroke-width="2" fill="none"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" fill="none"/><path d="M12 7v5l3 3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></symbol>
+      <symbol id="i-rotate" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="10" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M8 3.5a9 9 0 0 1 9 1.5l-1.5.5M16 20.5a9 9 0 0 1-9-1.5l1.5-.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></symbol>
+    </svg>
 
     <!-- Loading -->
-    <section id="scr-loading" class="screen center">
-      <h1 class="logo">THRUST<span>LINE</span></h1>
-      <p class="tag">RIG-7 · JETPACK FREE-FOR-ALL</p>
-      <div class="bar"><div id="load-bar"></div></div>
-      <p id="load-text" class="muted">Generating sprites…</p>
-      <button id="btn-tap" class="btn big hidden">Tap to start</button>
+    <section id="scr-loading" class="screen center menu-screen">
+      <div class="load-wrap">
+        <div class="logo"><span class="logo-a">THRUST</span><span class="logo-b">LINE</span></div>
+        <p class="tagline">RIG-7 · JETPACK FREE-FOR-ALL</p>
+        <div class="bar"><div id="load-bar"></div></div>
+        <p id="load-text" class="muted small">Generating sprites…</p>
+        <button id="btn-tap" class="btn primary xl hidden"><svg class="ic"><use href="#i-play" /></svg><span id="tap-label">Tap to start</span></button>
+        <p id="load-tip" class="tip"></p>
+      </div>
     </section>
 
     <!-- Home -->
-    <section id="scr-home" class="screen center hidden">
-      <h1 class="logo">THRUST<span>LINE</span></h1>
-      <p class="tag">RIG-7 · JETPACK FREE-FOR-ALL</p>
-      <div class="panel">
-        <label class="field">Nickname<input id="in-name" maxlength="16" autocomplete="off" spellcheck="false" /></label>
-        <button id="btn-create" class="btn big">Create room</button>
-        <div class="row">
-          <input id="in-code" class="code-in" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" />
-          <button id="btn-join" class="btn">Join room</button>
+    <section id="scr-home" class="screen menu-screen hidden">
+      <div class="home-grid">
+        <div class="hero">
+          <div class="logo"><span class="logo-a">THRUST</span><span class="logo-b">LINE</span></div>
+          <p class="tagline">RIG-7 · JETPACK FREE-FOR-ALL</p>
+          <ul class="chips">
+            <li><svg class="ic"><use href="#i-jet" /></svg>Jetpack combat</li>
+            <li><svg class="ic"><use href="#i-users" /></svg>Up to 6 players</li>
+            <li><svg class="ic"><use href="#i-cpu" /></svg>CPU opponents</li>
+            <li><svg class="ic"><use href="#i-sliders" /></svg>Custom rules</li>
+          </ul>
         </div>
-        <div class="row">
-          <button id="btn-howto" class="btn ghost">How to play</button>
-          <button id="btn-settings" class="btn ghost">Settings</button>
+        <div class="card home-card">
+          <label class="lbl" for="in-name">Your callsign</label>
+          <div class="field-row">
+            <input id="in-name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Callsign" />
+            <button id="btn-dice" class="btn ghost icon" title="Random callsign" aria-label="Random callsign"><svg class="ic"><use href="#i-dice" /></svg></button>
+          </div>
+          <button id="btn-create" class="btn primary lg"><svg class="ic"><use href="#i-plus" /></svg>Create room</button>
+          <div class="divider"><span>or join a friend</span></div>
+          <div class="field-row">
+            <input id="in-code" class="code-in" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" />
+            <button id="btn-join" class="btn secondary"><svg class="ic"><use href="#i-enter" /></svg>Join</button>
+          </div>
+          <div class="foot-row">
+            <button id="btn-howto" class="btn ghost sm"><svg class="ic"><use href="#i-help" /></svg>How to play</button>
+            <button id="btn-settings" class="btn ghost sm"><svg class="ic"><use href="#i-gear" /></svg>Settings</button>
+          </div>
+          <p id="conn-status" class="status"></p>
         </div>
-        <p id="conn-status" class="muted small"></p>
       </div>
     </section>
 
     <!-- Lobby -->
-    <section id="scr-lobby" class="screen center hidden">
-      <p class="muted">ROOM CODE</p>
-      <div id="lobby-code" class="room-code">----</div>
-      <div class="row">
-        <button id="btn-copy" class="btn ghost">Copy link</button>
-        <button id="btn-share" class="btn ghost hidden">Share</button>
+    <section id="scr-lobby" class="screen menu-screen hidden">
+      <header class="lobby-head">
+        <button id="btn-leave" class="btn ghost sm"><svg class="ic"><use href="#i-back" /></svg>Leave</button>
+        <div class="room-chip">
+          <span class="lbl">Room code</span>
+          <span id="lobby-code" class="room-code">----</span>
+        </div>
+        <div class="invite">
+          <button id="btn-copy" class="btn ghost sm"><svg class="ic"><use href="#i-link" /></svg><span>Copy invite</span></button>
+          <button id="btn-share" class="btn secondary sm"><svg class="ic"><use href="#i-share" /></svg><span>Share</span></button>
+        </div>
+      </header>
+      <div class="lobby-grid">
+        <div class="card players-card">
+          <div class="card-title"><svg class="ic"><use href="#i-users" /></svg>Players<span id="lobby-count" class="count">1/6</span></div>
+          <ul id="lobby-players" class="plist"></ul>
+          <div id="bot-row" class="bot-row">
+            <button id="btn-addbot" class="btn ghost sm"><svg class="ic"><use href="#i-cpu" /></svg>Add CPU</button>
+            <button id="btn-rmbot" class="btn ghost sm"><svg class="ic"><use href="#i-close" /></svg>Remove</button>
+          </div>
+        </div>
+        <div class="card settings-card">
+          <div class="card-title"><svg class="ic"><use href="#i-sliders" /></svg>Match settings<span id="host-note" class="count">Host only</span></div>
+          <div class="set-scroll" id="room-settings">
+            <div id="mode-cards" class="mode-cards">
+              <button data-mode="0" class="mode"><svg class="ic"><use href="#i-gun" /></svg><b>Arms</b><small>All weapons</small></button>
+              <button data-mode="1" class="mode"><svg class="ic"><use href="#i-knife" /></svg><b>Blades</b><small>Melee only</small></button>
+              <button data-mode="2" class="mode"><svg class="ic"><use href="#i-grenade" /></svg><b>Boom</b><small>Grenades only</small></button>
+              <button data-mode="3" class="mode"><svg class="ic"><use href="#i-scope" /></svg><b>Snipers</b><small>Rifles only</small></button>
+            </div>
+            <div class="set-row"><span class="lbl"><svg class="ic"><use href="#i-clock" /></svg>Round</span><div id="seg-round" class="seg"></div></div>
+            <div class="set-pair">
+              <div class="set-row"><span class="lbl"><svg class="ic"><use href="#i-heart" /></svg>Health</span><div id="seg-hp" class="seg"></div></div>
+              <div class="set-row"><span class="lbl"><svg class="ic"><use href="#i-reload" /></svg>Respawn</span><div id="seg-respawn" class="seg"></div></div>
+            </div>
+            <div class="set-row"><span class="lbl"><svg class="ic"><use href="#i-cpu" /></svg>CPU skill</span><div id="seg-bot" class="seg"></div></div>
+            <div class="toggles">
+              <label class="tog"><input type="checkbox" data-rule="infiniteFuel" /><span class="sw"></span><svg class="ic"><use href="#i-jet" /></svg>Infinite jetpack</label>
+              <label class="tog"><input type="checkbox" data-rule="infiniteAmmo" /><span class="sw"></span><svg class="ic"><use href="#i-ammo" /></svg>Infinite ammo</label>
+              <label class="tog"><input type="checkbox" data-rule="pickups" /><span class="sw"></span><svg class="ic"><use href="#i-box" /></svg>Pickups</label>
+              <label class="tog"><input type="checkbox" data-rule="acid" /><span class="sw"></span><svg class="ic"><use href="#i-acid" /></svg>Acid hazard</label>
+              <label class="tog"><input type="checkbox" data-rule="frenzy" /><span class="sw"></span><svg class="ic"><use href="#i-bolt" /></svg>Final-minute Frenzy</label>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="panel wide">
-        <ul id="lobby-players" class="plist"></ul>
-        <div class="row settings-row">
-          <label class="field inline">Mode
-            <select id="sel-mode">
-              <option value="0">Arms</option>
-              <option value="1">Blades</option>
-              <option value="2">Boom</option>
-            </select>
-          </label>
-          <label class="field inline">Round
-            <select id="sel-round"></select>
-          </label>
-        </div>
-        <div class="row">
-          <button id="btn-addbot" class="btn ghost">+ Add CPU</button>
-          <button id="btn-rmbot" class="btn ghost">− Remove CPU</button>
-        </div>
-        <div class="row">
-          <button id="btn-start" class="btn big">Start</button>
-          <button id="btn-leave" class="btn ghost">Leave</button>
-        </div>
-        <p id="lobby-wait" class="muted small hidden">Waiting for the host to start…</p>
-      </div>
+      <footer class="lobby-foot">
+        <span id="lobby-wait" class="muted">Waiting for the host to start…</span>
+        <button id="btn-start" class="btn primary lg"><svg class="ic"><use href="#i-play" /></svg>Start match</button>
+      </footer>
     </section>
 
     <!-- In-game HUD -->
     <section id="scr-game" class="screen hud hidden">
       <div class="hud-tl">
-        <div class="meter"><div id="hp-fill" class="fill hp"></div><span id="hp-text">100</span></div>
-        <div class="meter fuel"><div id="fuel-fill" class="fill fuelc"></div></div>
+        <div class="vitals">
+          <div class="vrow"><svg class="ic hp-ic"><use href="#i-heart" /></svg><div class="meter hp"><div id="hp-fill" class="fill"></div></div><span id="hp-text" class="vnum">100</span></div>
+          <div class="vrow"><svg class="ic fuel-ic"><use href="#i-jet" /></svg><div class="meter fuel"><div id="fuel-fill" class="fill"></div></div><span id="fuel-text" class="vnum small"></span></div>
+        </div>
       </div>
       <div class="hud-tc">
         <div id="timer" class="timer">5:00</div>
+        <div class="netstat"><span id="net-ping" class="ping good"><svg class="ic"><use href="#i-wifi" /></svg><b>--</b><i>ms</i></span><span id="net-fps"><b>--</b><i>FPS</i></span></div>
       </div>
       <div class="hud-tr">
         <ol id="mini-board" class="mini-board"></ol>
         <ul id="killfeed" class="killfeed"></ul>
       </div>
       <div id="weapon-box" class="weapon-box">
-        <canvas id="weapon-icon" width="96" height="40"></canvas>
-        <div><span id="ammo-mag">12</span><span id="ammo-res" class="muted">/∞</span></div>
+        <canvas id="weapon-icon" width="120" height="44"></canvas>
+        <div class="ammo"><span id="ammo-mag">12</span><span id="ammo-res">/∞</span></div>
         <div id="nade-count" class="nades"></div>
         <div id="reload-tag" class="reload hidden">RELOADING</div>
       </div>
@@ -101,16 +182,18 @@
       <div id="frenzy-tint" class="frenzy-tint"></div>
       <div id="dmg-arc" class="dmg-arc"></div>
       <div id="banner" class="banner"></div>
-      <button id="btn-menu" class="icon-btn menu-btn" aria-label="Menu">≡</button>
-      <button id="btn-fullscreen" class="icon-btn fs-btn hidden" aria-label="Fullscreen">⛶</button>
+      <div class="hud-tools">
+        <button id="btn-menu" class="icon-btn" aria-label="Menu"><svg class="ic"><use href="#i-menu" /></svg></button>
+        <button id="btn-fullscreen" class="icon-btn hidden" aria-label="Fullscreen"><svg class="ic"><use href="#i-expand" /></svg></button>
+      </div>
       <div id="touch" class="touch hidden">
-        <div id="stick-l" class="stick hidden"><div class="knob"></div></div>
-        <div id="stick-r" class="stick hidden"><div class="knob"></div></div>
+        <div id="stick-l" class="stick stick-l"><div class="ring"></div><div class="knob"><svg class="ic"><use href="#i-jet" /></svg></div></div>
+        <div id="stick-r" class="stick stick-r"><div class="ring"></div><div class="knob"><svg class="ic"><use href="#i-scope" /></svg></div></div>
         <div id="touch-btns" class="touch-btns">
-          <button data-act="swap" class="tbtn">SWAP</button>
-          <button data-act="reload" class="tbtn">RELOAD</button>
-          <button data-act="grenade" class="tbtn">NADE</button>
-          <button data-act="melee" class="tbtn">KNIFE</button>
+          <button data-act="reload" class="tbtn b-reload" aria-label="Reload"><svg class="ic"><use href="#i-reload" /></svg></button>
+          <button data-act="swap" class="tbtn b-swap" aria-label="Swap weapon"><svg class="ic"><use href="#i-swap" /></svg></button>
+          <button data-act="grenade" class="tbtn b-nade" aria-label="Throw grenade"><svg class="ic"><use href="#i-grenade" /></svg></button>
+          <button data-act="melee" class="tbtn b-knife" aria-label="Knife"><svg class="ic"><use href="#i-knife" /></svg></button>
         </div>
       </div>
       <div id="debug" class="debug hidden"></div>
@@ -118,69 +201,117 @@
 
     <!-- Respawn overlay -->
     <section id="scr-respawn" class="overlay center hidden">
-      <p id="killed-by" class="killed-by">Eliminated</p>
-      <div class="ring-wrap">
-        <svg viewBox="0 0 100 100" class="ring"><circle cx="50" cy="50" r="44" class="ring-bg"/><circle id="ring-fg" cx="50" cy="50" r="44" class="ring-fg"/></svg>
-        <span id="respawn-count">4</span>
-      </div>
-      <div id="primary-pick" class="row">
-        <button data-w="1" class="btn ghost pick">AR</button>
-        <button data-w="2" class="btn ghost pick">Shotgun</button>
-        <button data-w="3" class="btn ghost pick">Sniper</button>
+      <div class="respawn-card card">
+        <p id="killed-by" class="killed-by">Eliminated</p>
+        <div class="ring-wrap">
+          <svg viewBox="0 0 100 100" class="ring"><circle cx="50" cy="50" r="44" class="ring-bg" /><circle id="ring-fg" cx="50" cy="50" r="44" class="ring-fg" /></svg>
+          <span id="respawn-count">4</span>
+        </div>
+        <div id="primary-pick" class="pick-row">
+          <button data-w="1" class="pick"><img data-icon="w1" alt="" /><span>AR</span></button>
+          <button data-w="2" class="pick"><img data-icon="w2" alt="" /><span>Shotgun</span></button>
+          <button data-w="3" class="pick"><img data-icon="w3" alt="" /><span>Sniper</span></button>
+        </div>
       </div>
     </section>
 
-    <!-- Full scoreboard (Tab) and round end -->
+    <!-- Scoreboard (Tab) and round end -->
     <section id="scr-board" class="overlay center hidden">
-      <h2 id="board-title">SCOREBOARD</h2>
-      <table class="board"><thead><tr><th>#</th><th></th><th>Name</th><th>Score</th><th>K</th><th>D</th></tr></thead><tbody id="board-body"></tbody></table>
-      <div id="end-actions" class="row hidden">
-        <button id="btn-again" class="btn big">Play again</button>
-        <span id="wait-host" class="muted hidden">Waiting for host…</span>
-        <button id="btn-end-leave" class="btn ghost">Leave</button>
+      <div class="board-card card">
+        <div id="winner" class="winner hidden"><svg class="ic"><use href="#i-trophy" /></svg><span id="winner-name"></span></div>
+        <h2 id="board-title">SCOREBOARD</h2>
+        <table class="board">
+          <thead><tr><th>#</th><th>Player</th><th class="num">Score</th><th class="num">K</th><th class="num">D</th><th class="num">Ping</th></tr></thead>
+          <tbody id="board-body"></tbody>
+        </table>
+        <div id="end-actions" class="row hidden">
+          <button id="btn-again" class="btn primary lg"><svg class="ic"><use href="#i-reload" /></svg>Play again</button>
+          <span id="wait-host" class="muted hidden">Waiting for the host…</span>
+          <button id="btn-end-lobby" class="btn secondary">Lobby settings</button>
+          <button id="btn-end-leave" class="btn ghost"><svg class="ic"><use href="#i-back" /></svg>Leave</button>
+        </div>
       </div>
     </section>
 
     <!-- Menu -->
     <section id="scr-menu" class="overlay center hidden">
-      <h2>MENU</h2>
-      <div class="panel">
-        <button id="btn-menu-resume" class="btn big">Resume</button>
-        <button id="btn-menu-settings" class="btn ghost">Settings</button>
-        <button id="btn-menu-leave" class="btn ghost">Leave room</button>
+      <div class="card menu-card">
+        <h2>PAUSED</h2>
+        <p class="muted small">The match keeps running.</p>
+        <button id="btn-menu-resume" class="btn primary lg"><svg class="ic"><use href="#i-play" /></svg>Resume</button>
+        <button id="btn-menu-settings" class="btn ghost"><svg class="ic"><use href="#i-gear" /></svg>Settings</button>
+        <button id="btn-menu-howto" class="btn ghost"><svg class="ic"><use href="#i-help" /></svg>How to play</button>
+        <button id="btn-menu-leave" class="btn danger"><svg class="ic"><use href="#i-back" /></svg>Leave room</button>
       </div>
     </section>
 
     <!-- Settings -->
     <section id="scr-settings" class="overlay center hidden">
-      <h2>SETTINGS</h2>
-      <div class="panel">
-        <label class="field">Master volume<input id="set-master" type="range" min="0" max="1" step="0.05" /></label>
-        <label class="field">Music volume<input id="set-music" type="range" min="0" max="1" step="0.05" /></label>
-        <label class="field">SFX volume<input id="set-sfx" type="range" min="0" max="1" step="0.05" /></label>
-        <label class="field">Graphics quality
-          <select id="set-quality"><option value="auto">Auto</option><option value="high">High</option><option value="low">Low</option></select>
-        </label>
-        <label class="check"><input id="set-fps" type="checkbox" /> Show FPS / debug</label>
-        <label class="check"><input id="set-lefty" type="checkbox" /> Left-handed touch layout</label>
-        <button id="btn-settings-close" class="btn big">Done</button>
+      <div class="card settings-panel">
+        <div class="panel-head"><h2>SETTINGS</h2><button id="btn-settings-close" class="btn ghost icon" aria-label="Close"><svg class="ic"><use href="#i-close" /></svg></button></div>
+        <div class="settings-grid">
+          <label class="slider">Master volume<input id="set-master" type="range" min="0" max="1" step="0.05" /></label>
+          <label class="slider">Music<input id="set-music" type="range" min="0" max="1" step="0.05" /></label>
+          <label class="slider">Sound effects<input id="set-sfx" type="range" min="0" max="1" step="0.05" /></label>
+          <div class="slider">Graphics quality<div id="seg-quality" class="seg"></div></div>
+          <label class="tog"><input id="set-fps" type="checkbox" /><span class="sw"></span>Detailed stats (F3)</label>
+          <label class="tog"><input id="set-lefty" type="checkbox" /><span class="sw"></span>Left-handed touch</label>
+        </div>
       </div>
     </section>
 
-    <!-- How to play -->
+    <!-- How to play (visual) -->
     <section id="scr-howto" class="overlay center hidden">
-      <h2>HOW TO PLAY</h2>
-      <div class="panel wide howto">
-        <p>Free-for-all on RIG-7. Most score when the timer hits zero wins. Kill <b>+100</b>. Killing a gold <b>bounty</b> (3-kill streak) <b>+50</b>. Dying to acid or your own grenade <b>−50</b>.</p>
-        <p><b>Keyboard &amp; mouse:</b> A/D move · W or Space thrust (tap = hop, hold = fly) · S drop through platforms · mouse aims · click fires · right-click or F knife · G grenade · Q swap · R reload · Tab scoreboard · Esc menu.</p>
-        <p><b>Touch:</b> left thumb moves (push up to fly, down to drop), right thumb aims and fires when pushed far. Buttons: swap, reload, grenade, knife.</p>
-        <p><b>Modes:</b> Arms (guns), Blades (knives, +15% speed), Boom (unlimited grenades). Shotgun recoil and grenade blasts throw you around: chain them with the jetpack. The last minute is <b>FRENZY</b>: 1.5× damage and faster fuel. Stay out of the green acid.</p>
-        <button id="btn-howto-close" class="btn big">Got it</button>
+      <div class="card howto-card">
+        <div class="panel-head">
+          <div class="tabs" id="howto-tabs">
+            <button data-tab="controls" class="tab on">Controls</button>
+            <button data-tab="weapons" class="tab">Weapons</button>
+            <button data-tab="rules" class="tab">Scoring</button>
+          </div>
+          <button id="btn-howto-close" class="btn ghost icon" aria-label="Close"><svg class="ic"><use href="#i-close" /></svg></button>
+        </div>
+        <div class="tab-body" data-body="controls">
+          <div class="ctl-grid">
+            <div class="ctl-card">
+              <h3>Keyboard &amp; mouse</h3>
+              <div class="keys">
+                <div class="kgroup"><div class="krow"><kbd>W</kbd></div><div class="krow"><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div><small>Move · W fly · S drop</small></div>
+                <div class="kgroup"><div class="mouse"><span class="lmb"></span><span class="rmb"></span></div><small>Aim · Left fire · Right knife</small></div>
+                <div class="kgroup"><div class="krow"><kbd>G</kbd><kbd>Q</kbd><kbd>R</kbd></div><small>Grenade · Swap · Reload</small></div>
+                <div class="kgroup"><div class="krow"><kbd class="wide">Space</kbd></div><small>Jetpack (tap = hop)</small></div>
+              </div>
+            </div>
+            <div class="ctl-card">
+              <h3>Touch (landscape)</h3>
+              <div class="phone">
+                <div class="ph-stick l"><span>MOVE</span><i class="arr up">FLY</i><i class="arr dn">DROP</i></div>
+                <div class="ph-stick r"><span>AIM</span><i class="arr out">PUSH = FIRE</i></div>
+                <div class="ph-btns"><svg class="ic"><use href="#i-reload" /></svg><svg class="ic"><use href="#i-swap" /></svg><svg class="ic"><use href="#i-grenade" /></svg><svg class="ic"><use href="#i-knife" /></svg></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="tab-body hidden" data-body="weapons">
+          <div id="weapon-cards" class="weapon-cards"></div>
+        </div>
+        <div class="tab-body hidden" data-body="rules">
+          <div class="rule-cards">
+            <div class="rule"><svg class="ic c-red"><use href="#i-skull" /></svg><b>+100</b><span>Eliminate a player</span></div>
+            <div class="rule"><svg class="ic c-gold"><use href="#i-crown" /></svg><b>+50</b><span>Stop a gold bounty (3-kill streak)</span></div>
+            <div class="rule"><svg class="ic c-acid"><use href="#i-acid" /></svg><b>−50</b><span>Die to acid or your own grenade</span></div>
+            <div class="rule"><svg class="ic c-red"><use href="#i-bolt" /></svg><b>FRENZY</b><span>Last minute: 1.5× damage, 2× fuel</span></div>
+            <div class="rule"><img data-icon="pk0" alt="" /><b>+50 HP</b><span>Health pack</span></div>
+            <div class="rule"><img data-icon="pk1" alt="" /><b>Ammo</b><span>Refills your reserve</span></div>
+            <div class="rule"><img data-icon="pk2" alt="" /><b>+1 frag</b><span>Grenade crate</span></div>
+            <div class="rule"><svg class="ic c-cyan"><use href="#i-jet" /></svg><b>Blast-jump</b><span>Shotgun recoil &amp; blasts launch you</span></div>
+          </div>
+        </div>
       </div>
     </section>
 
     <div id="ov-reconnect" class="notice hidden">Reconnecting…</div>
-    <div id="ov-rotate" class="rotate hidden"><div>↻</div><p>Rotate your phone to landscape</p></div>
+    <div id="ov-rotate" class="rotate hidden"><svg class="ic"><use href="#i-rotate" /></svg><p>Turn your phone sideways</p><small>THRUSTLINE plays in landscape</small></div>
     <div id="toasts" class="toasts"></div>
 
     <script type="module" src="/src/main.ts"></script>

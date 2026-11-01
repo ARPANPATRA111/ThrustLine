@@ -7,7 +7,7 @@ import { schema, table, t, SenderError, type Infer, type InferSchema, type Reduc
 import { ScheduleAt, type Identity } from 'spacetimedb';
 import * as C from './shared/config';
 import { MAP_H, MAP_W, PICKUP_AMMO, PICKUP_GRENADE, PICKUP_HEALTH, RIG7, T_ACID, T_SOLID, boxTouchesTile, spawnWorldPos } from './shared/map';
-import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, PRIMARIES, allowedWeapons, damageAtDistance, defaultWeapon, grenadeDamage, isGun, isPrimary } from './shared/weapons';
+import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, PRIMARIES, allowedWeapons, canThrow, damageAtDistance, defaultWeapon, effectivePrimary, grenadeDamage, isGun, isPrimary, pickupActive } from './shared/weapons';
 import { fuseTicks, simulateGrenade } from './shared/grenade';
 import { pickSpawn, shuffledSpawnOrder, type Point } from './shared/spawn';
 import { lineOfSight } from './shared/raycast';
@@ -21,6 +21,25 @@ const ROOM_LOBBY = 0;
 const ROOM_PLAYING = 1;
 const ROOM_ENDED = 2;
 
+/** House rules the host can change in the lobby. */
+const Rules = t.object('Rules', {
+  /** Jetpack never runs out of fuel. */
+  infiniteFuel: t.bool(),
+  /** Guns never run dry and never need reloading. */
+  infiniteAmmo: t.bool(),
+  /** Health / ammo / grenade crates on the map. */
+  pickups: t.bool(),
+  /** The acid pit burns. */
+  acid: t.bool(),
+  /** Last-minute Frenzy (damage x1.5, fuel x2). */
+  frenzy: t.bool(),
+  maxHp: t.u16(),
+  respawnSec: t.u8(),
+  /** CPU difficulty: 0 easy, 1 normal, 2 hard. */
+  botSkill: t.u8(),
+});
+type RulesRow = Infer<typeof Rules>;
+
 const room = table(
   { name: 'room', public: true },
   {
@@ -31,6 +50,7 @@ const room = table(
     mode: t.u8(),
     roundSec: t.u32(),
     dev: t.bool(),
+    rules: Rules,
     startedAtMicros: t.i64(),
     endsAtMicros: t.i64(),
     roundNo: t.u32(),
@@ -67,6 +87,8 @@ const player = table(
     correction: t.u32(),
     cx: t.f32(),
     cy: t.f32(),
+    /** Round-trip time reported by the player's client, shown to everyone. */
+    pingMs: t.u16(),
   },
 );
 
@@ -245,7 +267,21 @@ function cleanName(raw: string): string {
   return name.length > 0 ? name : 'Rigger';
 }
 
+/** A name nobody else in the room is using: "Ace", then "Ace 2", "Ace 3"... */
+function uniqueName(ctx: Ctx, roomId: bigint, raw: string, self: Identity): string {
+  const base = cleanName(raw);
+  const taken = new Set(roomPlayers(ctx, roomId).filter((p) => !p.identity.isEqual(self)).map((p) => p.name.toLowerCase()));
+  if (!taken.has(base.toLowerCase())) return base;
+  for (let n = 2; n < 100; n++) {
+    const suffix = ` ${n}`;
+    const candidate = base.slice(0, C.NAME_MAX - suffix.length).trimEnd() + suffix;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+  return base;
+}
+
 function frenzyMul(r: RoomRow, now: bigint): number {
+  if (!r.rules.frenzy) return 1;
   return C.isFrenzy(Number(now) / 1000, Number(r.endsAtMicros) / 1000) ? C.FRENZY_DAMAGE_MUL : 1;
 }
 
@@ -277,11 +313,11 @@ function spawnAt(ctx: Ctx, r: RoomRow, p: PlayerRow, spawnIdx: number): PlayerRo
   const updated: PlayerRow = {
     ...p,
     alive: true,
-    hp: C.MAX_HP,
+    hp: r.rules.maxHp,
     lifeId: p.lifeId + 1,
     weapon: defaultWeapon(r.mode, p.primary),
-    mag: primaryMag(p.primary),
-    reserve: primaryReserve(p.primary),
+    mag: primaryMag(effectivePrimary(r.mode, p.primary)),
+    reserve: primaryReserve(effectivePrimary(r.mode, p.primary)),
     pistolMag: WEAPONS[W_PISTOL].mag,
     grenades: r.mode === C.MODE_ARMS ? C.GRENADE_ARMS_PER_LIFE : 0,
     reloadUntilMicros: 0n,
@@ -357,7 +393,8 @@ function applyDamage(ctx: Ctx, victim: PlayerRow, amount: number, attacker: Iden
   victim.streak = 0;
   victim.reloadUntilMicros = 0n;
   if (selfInflicted) victim.score += C.SCORE_SELF_DEATH;
-  victim.respawnAtMicros = scheduleRespawn(ctx, victim, C.RESPAWN_SEC);
+  const vr = ctx.db.room.id.find(victim.roomId);
+  victim.respawnAtMicros = scheduleRespawn(ctx, victim, vr ? vr.rules.respawnSec : C.RESPAWN_SEC);
   const meta = ctx.db.pmeta.identity.find(victim.identity);
   if (meta && pos) ctx.db.pmeta.identity.update({ ...meta, hasDeath: true, deathX: pos.x, deathY: pos.y });
   ctx.db.killEv.insert({ roomId: victim.roomId, killer: attacker, victim: victim.identity, cause, bounty: result.bounty });
@@ -400,12 +437,12 @@ function addPlayerToRoom(ctx: Ctx, r: RoomRow, name: string, isBot: boolean): vo
   ctx.db.player.insert({
     identity: ctx.sender,
     roomId: r.id,
-    name: cleanName(name),
+    name: uniqueName(ctx, r.id, name, ctx.sender),
     colorIdx: lowestFreeColor(ctx, r.id),
     isBot,
     joinedAt: ctx.timestamp,
     alive: false,
-    hp: C.MAX_HP,
+    hp: r.rules.maxHp,
     lifeId: 0,
     kills: 0,
     deaths: 0,
@@ -423,6 +460,7 @@ function addPlayerToRoom(ctx: Ctx, r: RoomRow, name: string, isBot: boolean): vo
     correction: 0,
     cx: start.x,
     cy: start.y,
+    pingMs: 0,
   });
   ctx.db.pstate.insert({ identity: ctx.sender, roomId: r.id, x: start.x, y: start.y, vx: 0, vy: 0, aim: 0, flags: 0, weapon: 0, seq: 0, serverMicros: now });
   ctx.db.pmeta.insert({
@@ -502,7 +540,7 @@ function validRoundSec(sec: number, dev: boolean): boolean {
 export const createRoom = spacetimedb.reducer(
   { name: t.string(), mode: t.u8(), roundSec: t.u32(), dev: t.bool() },
   (ctx, { name, mode, roundSec, dev }) => {
-    if (mode > C.MODE_BOOM) throw new SenderError('Unknown mode');
+    if (mode > C.MODE_SNIPERS) throw new SenderError('Unknown mode');
     if (!validRoundSec(roundSec, dev)) throw new SenderError('Invalid round length');
     removePlayer(ctx, ctx.sender); // leave any current room first
 
@@ -525,6 +563,7 @@ export const createRoom = spacetimedb.reducer(
       mode,
       roundSec,
       dev,
+      rules: { ...C.DEFAULT_RULES },
       startedAtMicros: 0n,
       endsAtMicros: 0n,
       roundNo: 0,
@@ -547,7 +586,7 @@ export const joinRoom = spacetimedb.reducer(
     const existing = ctx.db.player.identity.find(ctx.sender);
     if (existing && existing.roomId === r.id) {
       // Rejoining the same room (page reload / reconnect): keep stats, adopt the new connection.
-      ctx.db.player.identity.update({ ...existing, name: cleanName(name) });
+      ctx.db.player.identity.update({ ...existing, name: uniqueName(ctx, r.id, name, ctx.sender) });
       const meta = ctx.db.pmeta.identity.find(ctx.sender);
       if (meta) ctx.db.pmeta.identity.update({ ...meta, connId: ctx.connectionId ?? undefined });
       return;
@@ -568,16 +607,21 @@ export const leaveRoom = spacetimedb.reducer((ctx) => {
 });
 
 export const updateRoomSettings = spacetimedb.reducer(
-  { mode: t.u8(), roundSec: t.u32() },
-  (ctx, { mode, roundSec }) => {
+  { mode: t.u8(), roundSec: t.u32(), rules: Rules },
+  (ctx, { mode, roundSec, rules }) => {
     const { r } = requireMember(ctx);
     if (!r.hostIdentity.isEqual(ctx.sender)) throw new SenderError('Only the host can change settings');
     if (r.state === ROOM_PLAYING) throw new SenderError('Round in progress');
-    if (mode > C.MODE_BOOM) throw new SenderError('Unknown mode');
+    if (mode > C.MODE_SNIPERS) throw new SenderError('Unknown mode');
     if (!validRoundSec(roundSec, r.dev)) throw new SenderError('Invalid round length');
-    ctx.db.room.id.update({ ...r, mode, roundSec });
+    if (!validRules(rules)) throw new SenderError('Invalid house rules');
+    ctx.db.room.id.update({ ...r, mode, roundSec, rules });
   },
 );
+
+function validRules(rules: RulesRow): boolean {
+  return C.HP_OPTIONS.includes(rules.maxHp) && C.RESPAWN_OPTIONS.includes(rules.respawnSec) && rules.botSkill <= C.BOT_HARD;
+}
 
 export const startRound = spacetimedb.reducer((ctx) => {
   const { r } = requireMember(ctx);
@@ -612,8 +656,11 @@ export const choosePrimary = spacetimedb.reducer({ weapon: t.u8() }, (ctx, { wea
   ctx.db.player.identity.update({ ...p, primary: weapon });
 });
 
-export const ping = spacetimedb.reducer({ clientMs: t.f64() }, (ctx, { clientMs }) => {
+/** Clock-sync ping. The client also reports its last measured round trip, which everyone can see. */
+export const ping = spacetimedb.reducer({ clientMs: t.f64(), rttMs: t.u16() }, (ctx, { clientMs, rttMs }) => {
   ctx.db.pongEv.insert({ to: ctx.sender, clientMs, serverMicros: nowMicros(ctx) });
+  const p = ctx.db.player.identity.find(ctx.sender);
+  if (p && rttMs > 0 && Math.abs(p.pingMs - rttMs) >= 3) ctx.db.player.identity.update({ ...p, pingMs: Math.min(rttMs, 9999) });
 });
 
 /** Test-only: move yourself. Only dev rooms (created with ?dev=1) accept it. */
@@ -725,7 +772,7 @@ export const sync = spacetimedb.reducer(
     // ---- 4. Acid hazard ----
     const hazardDt = Math.min(Number(now - meta.lastHazardMicros) / 1e6, C.SYNC_MAX_DT_SEC);
     meta.lastHazardMicros = now;
-    if (boxTouchesTile(RIG7, pos.x - C.PLAYER_W / 2, pos.y - C.PLAYER_H, pos.x + C.PLAYER_W / 2, pos.y, T_ACID)) {
+    if (r.rules.acid && boxTouchesTile(RIG7, pos.x - C.PLAYER_W / 2, pos.y - C.PLAYER_H, pos.x + C.PLAYER_W / 2, pos.y, T_ACID)) {
       applyDamage(ctx, p, C.ACID_DPS * hazardDt, p.identity, C.CAUSE_ACID);
     }
 
@@ -739,7 +786,7 @@ export const sync = spacetimedb.reducer(
         p.weapon = a.weapon;
         p.reloadUntilMicros = 0n; // switching cancels a reload
       }
-      if (a.reload) startReload(p, now);
+      if (a.reload && !r.rules.infiniteAmmo) startReload(p, now);
       for (const shot of a.shots.slice(0, MAX_SHOTS_PER_SYNC)) {
         if (!p.alive) break;
         handleShot(ctx, r, p, meta, pos, shot, now, fmul);
@@ -755,7 +802,7 @@ export const sync = spacetimedb.reducer(
 
 /** In dev rooms, log why an action was rejected (useful in tests and when debugging live). */
 function rejected(r: RoomRow, what: string): void {
-  if (r.dev) console.info(`[${r.code}] rejected ${what}`);
+  if (r.dev || what.startsWith('move')) console.info(`[${r.code}] rejected ${what}`);
 }
 
 function finishReload(p: PlayerRow): void {
@@ -782,22 +829,23 @@ function startReload(p: PlayerRow, now: bigint): void {
 }
 
 function collectPickups(ctx: Ctx, r: RoomRow, p: PlayerRow, pos: { x: number; y: number }, now: bigint): void {
+  if (!r.rules.pickups) return;
   const left = pos.x - C.PLAYER_W / 2;
   const right = pos.x + C.PLAYER_W / 2;
   const top = pos.y - C.PLAYER_H;
   for (const pk of ctx.db.pickup.roomId.filter(r.id)) {
     if (pk.availableAtMicros !== 0n) continue;
-    if (r.mode !== C.MODE_ARMS && pk.kind !== PICKUP_HEALTH) continue; // Blades/Boom: health only
+    if (!pickupActive(r.mode, pk.kind)) continue;
     const px = pk.tx * C.TILE;
     const py = pk.ty * C.TILE;
     if (right <= px || left >= px + C.PICKUP_SIZE || pos.y <= py || top >= py + C.PICKUP_SIZE) continue;
 
     // Only consume a pickup that actually helps.
     if (pk.kind === PICKUP_HEALTH) {
-      if (p.hp >= C.MAX_HP) continue;
-      p.hp = Math.min(C.MAX_HP, p.hp + C.HEALTH_PACK_HP);
+      if (p.hp >= r.rules.maxHp) continue;
+      p.hp = Math.min(r.rules.maxHp, p.hp + C.HEALTH_PACK_HP);
     } else if (pk.kind === PICKUP_AMMO) {
-      const full = primaryReserve(p.primary);
+      const full = primaryReserve(effectivePrimary(r.mode, p.primary));
       if (p.reserve >= full) continue;
       p.reserve = full;
     } else if (pk.kind === PICKUP_GRENADE) {
@@ -828,8 +876,10 @@ function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x:
   if (!shotOriginOk(pos, shot.ox, shot.oy) && !shotOriginOk({ x: meta.prevX, y: meta.prevY }, shot.ox, shot.oy)) return rejected(r, `shot: origin (${shot.ox.toFixed(0)},${shot.oy.toFixed(0)}) far from (${pos.x.toFixed(0)},${pos.y.toFixed(0)})`);
 
   // Accepted: spend ammo and advance the fire-rate token bucket.
-  if (wid === W_PISTOL) p.pistolMag -= 1;
-  else p.mag -= 1;
+  if (!r.rules.infiniteAmmo) {
+    if (wid === W_PISTOL) p.pistolMag -= 1;
+    else p.mag -= 1;
+  }
   const minGap = secToMicros(C.FIRE_RATE_TOLERANCE / w.rate);
   const floor = now - FIRE_BURST_MICROS;
   const advanced = meta.lastFire[wid] + minGap;
@@ -848,6 +898,9 @@ function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x:
     const tmeta = ctx.db.pmeta.identity.find(target.identity);
     if (!tps) continue;
     // The target's current or previous accepted position may match (latency tolerance).
+    // Cover wins: the target's CURRENT server position must be in line of sight. (The ray and
+    // range may still match the previous position, which absorbs latency.)
+    if (!lineOfSight(RIG7, shot.ox, shot.oy, tps.x, tps.y - C.PLAYER_H / 2)) { rejected(r, 'hit claim: target is behind cover now'); continue; }
     let d = hitClaimDistance(RIG7, w, shot.ox, shot.oy, claim.angle, { x: tps.x, y: tps.y });
     if (d < 0 && tmeta) d = hitClaimDistance(RIG7, w, shot.ox, shot.oy, claim.angle, { x: tmeta.prevX, y: tmeta.prevY });
     if (d < 0) { rejected(r, 'hit claim: out of range, behind a wall or off the ray'); continue; }
@@ -884,16 +937,16 @@ function handleMelee(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x
 type PStateRow = Infer<typeof pstate.rowType>;
 
 function handleThrow(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x: number; y: number }, ps: PStateRow, angle: number, now: bigint): void {
-  if (r.mode === C.MODE_BLADES) return;
+  if (!canThrow(r.mode)) return;
   if (r.mode === C.MODE_ARMS) {
-    if (p.grenades <= 0 || !fireRateOk(meta.lastThrowMicros, now, 1 / C.GRENADE_COOLDOWN_ARMS)) return;
+    if ((p.grenades <= 0 && !r.rules.infiniteAmmo) || !fireRateOk(meta.lastThrowMicros, now, 1 / C.GRENADE_COOLDOWN_ARMS)) return;
   } else {
     if (!fireRateOk(meta.lastThrowMicros, now, 1 / C.GRENADE_COOLDOWN_BOOM)) return;
     const live = [...ctx.db.grenade.owner.filter(p.identity)].length;
     if (live >= C.GRENADE_BOOM_MAX_LIVE) return;
   }
   meta.lastThrowMicros = now;
-  if (r.mode === C.MODE_ARMS) p.grenades -= 1;
+  if (r.mode === C.MODE_ARMS && !r.rules.infiniteAmmo) p.grenades -= 1;
   p.spawnProtectUntilMicros = 0n;
 
   const dx = Math.cos(angle);

@@ -127,6 +127,7 @@ export const Player = __t.object("Player", {
   correction: __t.u32(),
   cx: __t.f32(),
   cy: __t.f32(),
+  pingMs: __t.u16(),
 });
 export type Player = __Infer<typeof Player>;
 
@@ -186,6 +187,9 @@ export const Room = __t.object("Room", {
   mode: __t.u8(),
   roundSec: __t.u32(),
   dev: __t.bool(),
+  get rules() {
+    return Rules;
+  },
   startedAtMicros: __t.i64(),
   endsAtMicros: __t.i64(),
   roundNo: __t.u32(),
@@ -200,6 +204,18 @@ export const RoundEndJob = __t.object("RoundEndJob", {
   roundNo: __t.u32(),
 });
 export type RoundEndJob = __Infer<typeof RoundEndJob>;
+
+export const Rules = __t.object("Rules", {
+  infiniteFuel: __t.bool(),
+  infiniteAmmo: __t.bool(),
+  pickups: __t.bool(),
+  acid: __t.bool(),
+  frenzy: __t.bool(),
+  maxHp: __t.u16(),
+  respawnSec: __t.u8(),
+  botSkill: __t.u8(),
+});
+export type Rules = __Infer<typeof Rules>;
 
 export const ShotEv = __t.object("ShotEv", {
   roomId: __t.u64(),

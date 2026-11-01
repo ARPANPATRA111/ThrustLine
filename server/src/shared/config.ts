@@ -57,7 +57,7 @@ export const BOUNTY_STREAK = 3;
 
 // ---------- Round & rooms ----------
 export const MAX_PLAYERS = 6;
-export const ROUND_LENGTHS_SEC = [180, 300, 480];
+export const ROUND_LENGTHS_SEC = [120, 180, 300, 480, 600];
 export const DEV_ROUND_SEC = 30;
 export const DEFAULT_ROUND_SEC = 300;
 export const FRENZY_SEC = 60;
@@ -72,7 +72,26 @@ export const ROOM_CODE_LEN = 4;
 export const MODE_ARMS = 0;
 export const MODE_BLADES = 1;
 export const MODE_BOOM = 2;
+export const MODE_SNIPERS = 3;
+export const MODE_NAMES = ['Arms', 'Blades', 'Boom', 'Snipers'];
 export const BLADES_RUN_MUL = 1.15;
+
+// ---------- House rules (host-editable) ----------
+export const HP_OPTIONS = [50, 100, 150, 200];
+export const RESPAWN_OPTIONS = [2, 4, 6];
+export const BOT_EASY = 0;
+export const BOT_NORMAL = 1;
+export const BOT_HARD = 2;
+export const DEFAULT_RULES = {
+  infiniteFuel: false,
+  infiniteAmmo: false,
+  pickups: true,
+  acid: true,
+  frenzy: true,
+  maxHp: 100,
+  respawnSec: 4,
+  botSkill: BOT_NORMAL,
+};
 
 // ---------- Grenades ----------
 export const GRENADE_FUSE_MS = 2500;
@@ -127,6 +146,8 @@ export const PING_MEDIAN_OF = 5;
 // ---------- Client sim & camera ----------
 export const SIM_HZ = 60;
 export const VIEW_HEIGHT = 680;
+/** Minimum view height (most zoomed in), used on short phone screens. */
+export const VIEW_HEIGHT_MIN = 420;
 export const VIEW_MAX_WIDTH = 1500;
 export const CAMERA_LERP = 0.12;
 export const CAMERA_LEAD = 90;

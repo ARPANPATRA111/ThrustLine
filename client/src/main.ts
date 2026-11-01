@@ -1,5 +1,9 @@
 // Boot, loading screen and the screen router. Screens are plain DOM sections in index.html;
 // the room's state (lobby / playing / ended) decides which one is visible.
+import '@fontsource/russo-one/latin-400.css';
+import '@fontsource/chakra-petch/latin-500.css';
+import '@fontsource/chakra-petch/latin-600.css';
+import '@fontsource/chakra-petch/latin-700.css';
 import './style.css';
 import { Application } from 'pixi.js';
 import * as C from '@shared/config';
@@ -13,19 +17,34 @@ import { PLAYER_CSS } from './render/soldier';
 import { Audio } from './audio/audio';
 import { Game } from './game/game';
 import { Input } from './game/input';
-import { Hud, escapeHtml, rankPlayers } from './ui/hud';
+import { Hud, escapeHtml, pingClass, rankPlayers } from './ui/hud';
 import { TouchControls } from './ui/touch';
+import { LobbyView } from './ui/lobby';
+import { randomCallsign, setupHowTo } from './ui/howto';
 import { loadSettings, saveSettings, type Quality } from './ui/settings';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
 const DEV = params.get('dev') === '1';
+/** Room code from an invite link (?room=ABCD). */
+const INVITE = (params.get('room') ?? '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
 const isTouchDevice = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+
+const TIPS = [
+  'Tap thrust for a hop, hold it to fly.',
+  'Shotgun recoil launches you: blast-jump across the rig.',
+  'A 3-kill streak makes you a gold bounty worth +50.',
+  'The last minute is FRENZY: 1.5x damage, 2x fuel.',
+  'Stay out of the green acid.',
+  'Grenades bounce: bank them off walls.',
+  'Hosts can add CPU players and change the house rules.',
+];
 
 const SCREENS = ['scr-loading', 'scr-home', 'scr-lobby', 'scr-game'];
 function showScreen(id: string): void {
   for (const s of SCREENS) $(s).classList.toggle('hidden', s !== id);
   document.body.classList.toggle('in-game', id === 'scr-game');
+  document.body.classList.toggle('menu-mode', id !== 'scr-game');
 }
 function showOverlay(id: string, on: boolean): void {
   $(id).classList.toggle('hidden', !on);
@@ -44,7 +63,14 @@ async function boot(): Promise<void> {
     $('load-bar').style.transform = `scaleX(${f})`;
     if (text) $('load-text').textContent = text;
   };
+  let tip = Math.floor(Math.random() * TIPS.length);
+  $('load-tip').textContent = TIPS[tip];
+  const tipTimer = setInterval(() => { tip = (tip + 1) % TIPS.length; $('load-tip').textContent = TIPS[tip]; }, 3500);
   const settings = loadSettings();
+  if (!settings.name) {
+    settings.name = randomCallsign();
+    saveSettings(settings);
+  }
 
   // ---- Renderer: WebGPU where available, WebGL everywhere else ----
   const app = new Application();
@@ -53,7 +79,7 @@ async function boot(): Promise<void> {
     antialias: false,
     autoDensity: true,
     resolution: Math.min(window.devicePixelRatio || 1, 2),
-    backgroundColor: 0x0b1020,
+    backgroundColor: 0x070b18,
     width: window.innerWidth,
     height: window.innerHeight,
   });
@@ -68,16 +94,19 @@ async function boot(): Promise<void> {
   await nextFrame();
 
   const net = new Net();
-  const time = new TimeSync((clientMs) => void net.conn?.reducers.ping({ clientMs }).catch(() => {}));
+  const time = new TimeSync((clientMs) => void net.conn?.reducers.ping({ clientMs, rttMs: Math.round(time.rtt) }).catch(() => {}));
   const audio = new Audio();
   const input = new Input();
   const hud = new Hud();
-  hud.skullURL = atlas.iconURL('skull');
+  hud.causeIcons = { 0: atlas.iconURL('w0'), 1: atlas.iconURL('w1'), 2: atlas.iconURL('w2'), 3: atlas.iconURL('w3'), 4: atlas.iconURL('w4'), 5: atlas.iconURL('w5'), [C.CAUSE_ACID]: atlas.iconURL('bubbleAcid', 3) };
   const game = new Game(app, atlas, audio, net, time, input, hud);
   game.setQuality(settings.quality);
   game.debug = settings.showDebug;
+  game.setAttract(true); // the live map drifts behind the loading screen and menus
   const touch = new TouchControls($('touch'), input);
   touch.setLefty(settings.lefty);
+  setupHowTo(atlas);
+  const crownURL = atlas.iconURL('crownIcon');
   // Exposed for automated tests and debugging in the console.
   (window as unknown as { __tl: unknown }).__tl = { game, net, time, app, audio };
 
@@ -86,25 +115,33 @@ async function boot(): Promise<void> {
   setProgress(0.45, 'Synthesising audio…');
   await audio.generate((f) => setProgress(0.45 + f * 0.55));
   setProgress(1, 'Ready');
+  $('tap-label').textContent = INVITE ? `Join room ${INVITE}` : 'Tap to start';
   $('btn-tap').classList.remove('hidden');
-  $('load-text').textContent = '';
+  $('load-text').textContent = INVITE ? `You've been invited to room ${INVITE}` : '';
 
   // ---------------------------------------------------------------- state
   let myRoomId: bigint | null = null;
   let boardHeld = false;
   let menuOpen = false;
+  /** Host chose "Lobby settings" on the round-over screen. */
+  let lobbyWhileEnded = false;
   let wakeLock: { release(): Promise<void> } | null = null;
   const myRow = (): Player | undefined => (net.identity ? net.conn?.db.player.identity.find(net.identity) ?? undefined : undefined);
   const myRoom = (): Room | undefined => (myRoomId !== null ? net.conn?.db.room.id.find(myRoomId) ?? undefined : undefined);
   const roomPlayers = (): Player[] => (myRoomId === null ? [] : [...(net.conn?.db.player.iter() ?? [])].filter((p) => p.roomId === myRoomId));
   const isHost = () => !!myRoom() && !!net.identity && myRoom()!.hostIdentity.isEqual(net.identity);
-  const nameValue = () => ($<HTMLInputElement>('in-name').value.trim() || 'Rigger').slice(0, C.NAME_MAX);
+  const nameValue = () => ($<HTMLInputElement>('in-name').value.trim() || settings.name || randomCallsign()).slice(0, C.NAME_MAX);
 
   /** Wrap a reducer call: show SenderError text as a toast. */
   const call = async (p: Promise<void> | undefined): Promise<boolean> => {
     if (!p) { toast('Not connected'); return false; }
     try { await p; return true; } catch (e) { toast(errorText(e)); return false; }
   };
+
+  const lobby = new LobbyView(
+    (mode, roundSec, rules) => void call(net.conn?.reducers.updateRoomSettings({ mode, roundSec, rules })),
+    () => audio.play('click'),
+  );
 
   // ---------------------------------------------------------------- net → game
   net.h = {
@@ -113,13 +150,16 @@ async function boot(): Promise<void> {
       $('conn-status').textContent = text;
       const notice = $('ov-reconnect');
       notice.textContent = text;
-      notice.classList.toggle('hidden', s === 'connected' || $('scr-loading').offsetParent !== null || s === 'connecting');
-      if (s === 'connected') { time.start(); }
+      notice.classList.toggle('hidden', s === 'connected' || !$('scr-loading').classList.contains('hidden') || s === 'connecting');
+      if (s === 'connected') time.start();
     },
     reconnected: () => void rejoinSaved(),
     pong: (e) => time.onPong(e.clientMs, e.serverMicros),
     roomChanged: (r) => {
-      if (r && r.id === myRoomId) game.setRoom(r);
+      if (r && r.id === myRoomId) {
+        if (r.state !== 2) lobbyWhileEnded = false;
+        game.setRoom(r);
+      }
       route();
     },
     playerUpsert: (p, old) => {
@@ -133,7 +173,6 @@ async function boot(): Promise<void> {
     },
     playerDelete: (p) => {
       if (p.identity.toHexString() === net.myKey) {
-        // Our own row is gone (left, or cleaned up after a disconnect).
         if (myRoomId !== null && p.roomId === myRoomId) leaveLocal(false);
       } else if (p.roomId === myRoomId) game.playerDelete(p);
       route();
@@ -150,13 +189,13 @@ async function boot(): Promise<void> {
     boom: (e) => game.onBoom(e),
     pickupTaken: (e) => game.onPickup(e),
   };
-
   // The connection may already be up (it was started during loading): start the clock sync now.
   if (net.conn) time.start();
 
   function enterRoom(roomId: bigint): void {
     game.clear();
     myRoomId = roomId;
+    lobbyWhileEnded = false;
     net.subscribeRoom(roomId);
     const r = myRoom();
     if (r) Net.savedRoom = r.code;
@@ -169,9 +208,11 @@ async function boot(): Promise<void> {
     net.subscribeRoom(null);
     game.clear();
     menuOpen = false;
+    lobbyWhileEnded = false;
     showOverlay('scr-menu', false);
     void wakeLock?.release().catch(() => {});
     wakeLock = null;
+    if (INVITE) history.replaceState(null, '', location.pathname + (DEV ? '?dev=1' : ''));
     route();
   }
 
@@ -188,27 +229,32 @@ async function boot(): Promise<void> {
 
   // ---------------------------------------------------------------- router
   function route(): void {
-    if (!$('btn-tap').classList.contains('hidden') || !net.conn) return; // still on the loading screen
+    if (!$('btn-tap').classList.contains('hidden') || !net.conn || !$('scr-loading').classList.contains('hidden')) return;
     const room = myRoom();
     const me = myRow();
     if (!room || !me || me.roomId !== room.id) {
       showScreen('scr-home');
       for (const id of ['scr-respawn', 'scr-board', 'scr-menu']) showOverlay(id, false);
       game.stop();
+      game.setAttract(true);
       input.enabled = false;
+      checkRotate();
       return;
     }
     if (Net.savedRoom !== room.code) Net.savedRoom = room.code;
-    if (room.state === 0) {
+    if (room.state === 0 || (room.state === 2 && lobbyWhileEnded && isHost())) {
       showScreen('scr-lobby');
       game.stop();
+      game.setAttract(true);
       input.enabled = false;
       for (const id of ['scr-respawn', 'scr-board']) showOverlay(id, false);
       renderLobby(room);
+      checkRotate();
       return;
     }
     showScreen('scr-game');
     touch.show(isTouchDevice || input.usingTouch);
+    touch.setButtons(game.touchButtons());
     $('btn-fullscreen').classList.toggle('hidden', !document.fullscreenEnabled);
     game.start();
     void acquireWakeLock();
@@ -220,37 +266,21 @@ async function boot(): Promise<void> {
     else game.killedBy = '';
     showOverlay('scr-board', ended || boardHeld);
     if (ended || boardHeld) renderBoard(ended);
+    checkRotate();
   }
 
   // ---------------------------------------------------------------- lobby
-  const selRound = $<HTMLSelectElement>('sel-round');
-  const roundOptions = (dev: boolean) => (dev ? [C.DEV_ROUND_SEC, ...C.ROUND_LENGTHS_SEC] : C.ROUND_LENGTHS_SEC);
   function renderLobby(room: Room): void {
-    $('lobby-code').textContent = room.code;
-    const players = roundPlayersSorted();
-    const myKey = net.myKey;
-    $('lobby-players').innerHTML = players.map((p) => {
-      const host = room.hostIdentity.isEqual(p.identity) ? `<img class="crown" src="${atlas.iconURL('crownIcon')}" width="18" height="12" alt="host">` : '';
-      const you = p.identity.toHexString() === myKey ? ' <span class="muted">(you)</span>' : '';
-      const cpu = p.isBot ? ' <span class="cpu-tag">CPU</span>' : '';
-      return `<li><span class="swatch" style="color:${PLAYER_CSS[p.colorIdx]};background:${PLAYER_CSS[p.colorIdx]}"></span>${escapeHtml(p.name)}${cpu}${you}${host}</li>`;
-    }).join('');
+    const players = roomPlayers().sort((a, b) => (a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch ? -1 : 1));
+    lobby.render(room, players, net.myKey, isHost(), crownURL);
     const host = isHost();
-    const opts = roundOptions(room.dev);
-    const optsHtml = opts.map((s) => `<option value="${s}">${s < 60 ? `${s} s` : `${s / 60} min`}</option>`).join('');
-    if (selRound.dataset.html !== optsHtml) { selRound.innerHTML = optsHtml; selRound.dataset.html = optsHtml; }
-    $<HTMLSelectElement>('sel-mode').value = String(room.mode);
-    selRound.value = String(room.roundSec);
-    $<HTMLSelectElement>('sel-mode').disabled = !host;
-    selRound.disabled = !host;
     $('btn-start').classList.toggle('hidden', !host);
-    $('btn-addbot').classList.toggle('hidden', !host);
-    $('btn-rmbot').classList.toggle('hidden', !host || game.bots.count === 0);
+    $('bot-row').classList.toggle('hidden', !host);
+    $('btn-rmbot').classList.toggle('hidden', game.bots.count === 0);
     $<HTMLButtonElement>('btn-addbot').disabled = players.length + (game.bots.count - game.bots.bots.length) >= C.MAX_PLAYERS;
     $('lobby-wait').classList.toggle('hidden', host);
-    $('btn-share').classList.toggle('hidden', !navigator.share);
+    $('btn-start').innerHTML = `<svg class="ic"><use href="#i-play" /></svg>${room.state === 2 ? 'Play again' : 'Start match'}`;
   }
-  const roundPlayersSorted = () => roomPlayers().sort((a, b) => (a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch ? -1 : 1));
 
   // ---------------------------------------------------------------- respawn overlay
   function renderRespawn(me: Player, room: Room): void {
@@ -261,8 +291,9 @@ async function boot(): Promise<void> {
   setInterval(() => {
     if ($('scr-respawn').classList.contains('hidden')) return;
     const left = game.respawnLeft();
+    const total = (myRoom()?.rules.respawnSec ?? C.RESPAWN_SEC) * 1000;
     $('respawn-count').textContent = String(Math.ceil(left / 1000));
-    $('ring-fg').style.strokeDashoffset = String(276.5 * (1 - left / (C.RESPAWN_SEC * 1000)));
+    $('ring-fg').style.strokeDashoffset = String(276.5 * (1 - Math.min(1, left / total)));
   }, 100);
   document.querySelectorAll<HTMLButtonElement>('#primary-pick .pick').forEach((b) => {
     b.addEventListener('click', () => {
@@ -274,14 +305,18 @@ async function boot(): Promise<void> {
 
   // ---------------------------------------------------------------- scoreboard / round end
   function renderBoard(ended: boolean): void {
-    $('board-title').textContent = ended ? 'ROUND OVER' : 'SCOREBOARD';
     const ranked = rankPlayers(roomPlayers());
+    $('board-title').textContent = ended ? 'ROUND OVER' : 'SCOREBOARD';
+    $('winner').classList.toggle('hidden', !ended || ranked.length === 0);
+    if (ended && ranked[0]) $('winner-name').textContent = ranked[0].identity.toHexString() === net.myKey ? 'YOU WIN!' : `${ranked[0].name} wins`;
     $('board-body').innerHTML = ranked.map((p, i) => {
       const me = p.identity.toHexString() === net.myKey ? ' class="me"' : '';
-      return `<tr${me}><td>${i + 1}</td><td><span class="swatch" style="display:inline-block;color:${PLAYER_CSS[p.colorIdx]};background:${PLAYER_CSS[p.colorIdx]}"></span></td><td>${escapeHtml(p.name)}${p.isBot ? ' <span class="cpu-tag">CPU</span>' : ''}</td><td class="num">${p.score}</td><td class="num">${p.kills}</td><td class="num">${p.deaths}</td></tr>`;
+      const ping = p.isBot ? '<span class="cpu-tag">CPU</span>' : p.pingMs ? `<span class="ping ${pingClass(p.pingMs)}">${p.pingMs}</span>` : '–';
+      return `<tr${me}><td><span class="rank r${i + 1}">${i + 1}</span></td><td><span class="pn"><span class="avatar" style="width:12px;height:12px;border-radius:4px;background:${PLAYER_CSS[p.colorIdx]};color:${PLAYER_CSS[p.colorIdx]}"></span>${escapeHtml(p.name)}</span></td><td class="num">${p.score}</td><td class="num">${p.kills}</td><td class="num">${p.deaths}</td><td class="num">${ping}</td></tr>`;
     }).join('');
     $('end-actions').classList.toggle('hidden', !ended);
     $('btn-again').classList.toggle('hidden', !isHost());
+    $('btn-end-lobby').classList.toggle('hidden', !isHost());
     $('wait-host').classList.toggle('hidden', isHost());
   }
   input.onScoreboard = (show) => { boardHeld = show; route(); };
@@ -301,16 +336,21 @@ async function boot(): Promise<void> {
   input.onDebug = () => {
     settings.showDebug = !settings.showDebug;
     game.debug = settings.showDebug;
+    $<HTMLInputElement>('set-fps').checked = settings.showDebug;
     saveSettings(settings);
   };
   $('btn-menu').addEventListener('click', () => openMenu(true));
   $('btn-menu-resume').addEventListener('click', () => openMenu(false));
   $('btn-menu-leave').addEventListener('click', () => leaveLocal(true));
   $('btn-menu-settings').addEventListener('click', () => showOverlay('scr-settings', true));
-  $('btn-settings').addEventListener('click', () => showOverlay('scr-settings', true));
-  $('btn-howto').addEventListener('click', () => showOverlay('scr-howto', true));
+  $('btn-menu-howto').addEventListener('click', () => showOverlay('scr-howto', true));
+  $('btn-settings').addEventListener('click', () => { audio.play('click'); showOverlay('scr-settings', true); });
+  $('btn-howto').addEventListener('click', () => { audio.play('click'); showOverlay('scr-howto', true); });
   $('btn-howto-close').addEventListener('click', () => showOverlay('scr-howto', false));
   $('btn-settings-close').addEventListener('click', () => showOverlay('scr-settings', false));
+  for (const id of ['scr-howto', 'scr-settings']) {
+    $(id).addEventListener('click', (e) => { if (e.target === $(id)) showOverlay(id, false); });
+  }
   const bindRange = (id: string, key: 'master' | 'music' | 'sfx') => {
     const el = $<HTMLInputElement>(id);
     el.value = String(audio.volumes[key]);
@@ -319,9 +359,19 @@ async function boot(): Promise<void> {
   bindRange('set-master', 'master');
   bindRange('set-music', 'music');
   bindRange('set-sfx', 'sfx');
-  const selQ = $<HTMLSelectElement>('set-quality');
-  selQ.value = settings.quality;
-  selQ.addEventListener('change', () => { settings.quality = selQ.value as Quality; game.setQuality(settings.quality); saveSettings(settings); });
+  const segQ = $('seg-quality');
+  const renderQuality = () => {
+    segQ.innerHTML = (['auto', 'high', 'low'] as Quality[]).map((q) => `<button data-q="${q}" class="${q === settings.quality ? 'on' : ''}">${q}</button>`).join('');
+  };
+  renderQuality();
+  segQ.addEventListener('click', (e) => {
+    const q = (e.target as HTMLElement).closest<HTMLButtonElement>('button')?.dataset.q as Quality | undefined;
+    if (!q) return;
+    settings.quality = q;
+    game.setQuality(q);
+    saveSettings(settings);
+    renderQuality();
+  });
   const chkFps = $<HTMLInputElement>('set-fps');
   chkFps.checked = settings.showDebug;
   chkFps.addEventListener('change', () => { settings.showDebug = chkFps.checked; game.debug = chkFps.checked; saveSettings(settings); });
@@ -332,38 +382,45 @@ async function boot(): Promise<void> {
   // ---------------------------------------------------------------- home
   const inName = $<HTMLInputElement>('in-name');
   inName.value = settings.name;
-  inName.addEventListener('change', () => { settings.name = inName.value.trim().slice(0, C.NAME_MAX); saveSettings(settings); });
+  const saveName = () => { settings.name = nameValue(); saveSettings(settings); };
+  inName.addEventListener('change', saveName);
+  $('btn-dice').addEventListener('click', () => { inName.value = randomCallsign(); saveName(); audio.play('click'); });
   const inCode = $<HTMLInputElement>('in-code');
-  inCode.value = (params.get('room') ?? '').toUpperCase().slice(0, 4);
+  inCode.value = INVITE;
   inCode.addEventListener('input', () => { inCode.value = inCode.value.toUpperCase().replace(/[^A-Z]/g, ''); });
   $('btn-create').addEventListener('click', async () => {
     audio.play('click');
-    settings.name = nameValue();
-    saveSettings(settings);
+    saveName();
     await call(net.conn?.reducers.createRoom({ name: nameValue(), mode: C.MODE_ARMS, roundSec: C.DEFAULT_ROUND_SEC, dev: DEV }));
   });
-  const join = async () => {
+  const join = async (code = inCode.value.trim().toUpperCase()) => {
     audio.play('click');
-    const code = inCode.value.trim().toUpperCase();
-    if (code.length !== 4) { toast('Enter the 4-letter room code'); return; }
-    settings.name = nameValue();
-    saveSettings(settings);
-    await call(net.conn?.reducers.joinRoom({ code, name: nameValue(), bot: false }));
+    if (code.length !== 4) { toast('Enter the 4-letter room code'); return false; }
+    saveName();
+    return call(net.conn?.reducers.joinRoom({ code, name: nameValue(), bot: false }));
   };
-  $('btn-join').addEventListener('click', join);
+  $('btn-join').addEventListener('click', () => void join());
   inCode.addEventListener('keydown', (e) => { if (e.key === 'Enter') void join(); });
 
   // ---------------------------------------------------------------- lobby buttons
+  /** Invite link: opening it joins this room directly with an automatic unique callsign. */
   const roomLink = () => `${location.origin}${location.pathname}?room=${myRoom()?.code ?? ''}${DEV ? '&dev=1' : ''}`;
   $('btn-copy').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(roomLink()); toast('Link copied', 'info'); } catch { toast(roomLink(), 'info'); }
+    try { await navigator.clipboard.writeText(roomLink()); toast('Invite link copied: paste it in your group', 'info'); } catch { toast(roomLink(), 'info'); }
   });
-  $('btn-share').addEventListener('click', () => void navigator.share?.({ title: 'THRUSTLINE', text: `Join my THRUSTLINE room ${myRoom()?.code}`, url: roomLink() }).catch(() => {}));
-  const pushSettings = () => void call(net.conn?.reducers.updateRoomSettings({ mode: Number($<HTMLSelectElement>('sel-mode').value), roundSec: Number(selRound.value) }));
-  $('sel-mode').addEventListener('change', pushSettings);
-  selRound.addEventListener('change', pushSettings);
-  $('btn-start').addEventListener('click', () => { audio.play('click'); void call(net.conn?.reducers.startRound({})); });
-  $('btn-again').addEventListener('click', () => { audio.play('click'); void call(net.conn?.reducers.startRound({})); });
+  $('btn-share').addEventListener('click', async () => {
+    const url = roomLink();
+    const data = { title: 'THRUSTLINE', text: `Join my THRUSTLINE room ${myRoom()?.code}! Tap to jump straight in:`, url };
+    if (navigator.share) {
+      try { await navigator.share(data); } catch { /* cancelled */ }
+    } else {
+      try { await navigator.clipboard.writeText(`${data.text} ${url}`); toast('Invite copied to clipboard', 'info'); } catch { toast(url, 'info'); }
+    }
+  });
+  const startMatch = () => { audio.play('click'); lobbyWhileEnded = false; void call(net.conn?.reducers.startRound({})); };
+  $('btn-start').addEventListener('click', startMatch);
+  $('btn-again').addEventListener('click', startMatch);
+  $('btn-end-lobby').addEventListener('click', () => { lobbyWhileEnded = true; route(); });
   $('btn-leave').addEventListener('click', () => leaveLocal(true));
   $('btn-end-leave').addEventListener('click', () => leaveLocal(true));
   $('btn-addbot').addEventListener('click', async () => {
@@ -383,12 +440,14 @@ async function boot(): Promise<void> {
       await (screen.orientation as unknown as { lock?: (o: string) => Promise<void> }).lock?.('landscape');
     } catch { /* not supported */ }
   });
-  const checkRotate = () => {
-    const portrait = isTouchDevice && window.innerHeight > window.innerWidth && !$('scr-game').classList.contains('hidden');
+  /** Phones: every screen is landscape-only. */
+  function checkRotate(): void {
+    const portrait = isTouchDevice && window.innerHeight > window.innerWidth;
     $('ov-rotate').classList.toggle('hidden', !portrait);
-  };
+  }
   window.addEventListener('resize', checkRotate);
-  setInterval(checkRotate, 1000);
+  window.addEventListener('orientationchange', () => setTimeout(checkRotate, 200));
+  checkRotate();
   async function acquireWakeLock(): Promise<void> {
     if (wakeLock || !('wakeLock' in navigator)) return;
     try {
@@ -406,12 +465,21 @@ async function boot(): Promise<void> {
   $('btn-tap').addEventListener('click', async () => {
     audio.unlock();
     audio.play('click');
+    clearInterval(tipTimer);
     $('btn-tap').classList.add('hidden');
     $('load-text').textContent = 'Connecting…';
     await connected;
-    showScreen('scr-home');
-    if (isIOS && !standalone) toast('Tip: Share → Add to Home Screen for fullscreen', 'info');
-    await rejoinSaved();
+    if (isTouchDevice && document.fullscreenEnabled) {
+      try { await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch { /* optional */ }
+    }
+    $('scr-loading').classList.add('hidden');
+    if (isIOS && !standalone && isTouchDevice) toast('Tip: Share → Add to Home Screen for fullscreen', 'info');
+    if (INVITE && Net.savedRoom !== INVITE) {
+      // Invite link: join straight away with the saved callsign (or a fresh random one).
+      if (!(await join(INVITE))) route();
+    } else {
+      await rejoinSaved();
+    }
     route();
   });
 }

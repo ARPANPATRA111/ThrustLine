@@ -4,6 +4,8 @@ import { WEAPON_DRAW, WEAPON_SIZE } from '../render/atlas';
 import { PLAYER_CSS } from '../render/soldier';
 import type { Player } from '../module_bindings/types';
 
+const CAUSE_NAMES: Record<number, string> = { 0: 'pistol', 1: 'AR', 2: 'shotgun', 3: 'sniper', 4: 'knife', 5: 'frag', 10: 'acid' };
+
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 export function escapeHtml(s: string): string {
@@ -15,11 +17,21 @@ export function rankPlayers(players: Player[]): Player[] {
   return [...players].sort((a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths);
 }
 
+/** Ping colour band: under 80 ms good, under 160 ms ok, otherwise bad. */
+export function pingClass(ms: number): 'good' | 'ok' | 'bad' {
+  return ms < 80 ? 'good' : ms < 160 ? 'ok' : 'bad';
+}
+
 export class Hud {
+  private hpMeter = document.querySelector<HTMLElement>('.meter.hp')!;
   private hpFill = $('hp-fill');
   private hpText = $('hp-text');
   private fuelFill = $('fuel-fill');
+  private fuelText = $('fuel-text');
   private timer = $('timer');
+  private ping = $('net-ping');
+  private pingVal = this.ping.querySelector('b')!;
+  private fpsVal = $('net-fps').querySelector('b')!;
   private mag = $('ammo-mag');
   private res = $('ammo-res');
   private nades = $('nade-count');
@@ -38,7 +50,8 @@ export class Hud {
   private hitTimer = 0;
   private vigTimer = 0;
   private bannerTimer = 0;
-  skullURL = '';
+  /** Kill-feed icons by cause (weapon id, or acid), as data URLs from the atlas. */
+  causeIcons: Record<number, string> = {};
 
   private changed(key: string, v: string | number | boolean): boolean {
     if (this.last[key] === v) return false;
@@ -51,16 +64,19 @@ export class Hud {
     this.feed.innerHTML = '';
   }
 
-  setHP(hp: number): void {
+  setHP(hp: number, maxHp: number): void {
     const v = Math.max(0, Math.ceil(hp));
-    if (!this.changed('hp', v)) return;
-    this.hpFill.style.transform = `scaleX(${v / 100})`;
+    if (!this.changed('hp', v * 1000 + maxHp)) return;
+    this.hpFill.style.transform = `scaleX(${Math.min(1, v / maxHp)})`;
     this.hpText.textContent = String(v);
+    this.hpMeter.classList.toggle('low', v / maxHp < 0.3);
   }
 
-  setFuel(f: number): void {
-    const v = Math.round(f);
-    if (this.changed('fuel', v)) this.fuelFill.style.transform = `scaleX(${v / 100})`;
+  setFuel(f: number, infinite: boolean): void {
+    const v = infinite ? -1 : Math.round(f);
+    if (!this.changed('fuel', v)) return;
+    this.fuelFill.style.transform = `scaleX(${infinite ? 1 : v / 100})`;
+    this.fuelText.textContent = infinite ? '∞' : '';
   }
 
   setTimer(text: string, frenzy: boolean): void {
@@ -71,14 +87,27 @@ export class Hud {
     }
   }
 
+  /** Always-visible network chip: round-trip ping (colour coded) and frames per second. */
+  setNet(pingMs: number | null, fps: number): void {
+    const p = pingMs === null ? '--' : String(Math.round(pingMs));
+    if (this.changed('ping', p)) {
+      this.pingVal.textContent = p;
+      this.ping.className = `ping ${pingMs === null ? 'ok' : pingClass(pingMs)}`;
+    }
+    const f = String(Math.round(fps));
+    if (this.changed('fps', f)) this.fpsVal.textContent = f;
+  }
+
   setWeapon(w: number): void {
     if (!this.changed('weapon', w)) return;
     const g = this.icon.getContext('2d')!;
-    g.clearRect(0, 0, this.icon.width, this.icon.height);
+    const W = this.icon.width;
+    const H = this.icon.height;
+    g.clearRect(0, 0, W, H);
     const [ww, wh] = WEAPON_SIZE[w];
-    const scale = Math.min(80 / ww, 32 / wh, 2.4);
+    const scale = Math.min((W - 8) / ww, (H - 6) / wh, 3);
     g.save();
-    g.translate(this.icon.width - ww * scale - 4, (this.icon.height - wh * scale) / 2);
+    g.translate(W - ww * scale - 4, (H - wh * scale) / 2);
     g.scale(scale, scale);
     WEAPON_DRAW[w](g, ww, wh);
     g.restore();
@@ -101,24 +130,26 @@ export class Hud {
     this.crosshair.style.transform = `translate(${x}px, ${y}px)`;
   }
 
-  /** Mini leaderboard: top 3 plus you. */
+  /** Mini leaderboard: top 3 plus you, with everyone's ping. */
   setMiniBoard(ranked: Player[], meKey: string): void {
     const rows: string[] = [];
     const myIdx = ranked.findIndex((p) => p.identity.toHexString() === meKey);
     ranked.forEach((p, i) => {
       if (i < 3 || i === myIdx) {
         const me = i === myIdx ? ' class="me"' : '';
-        rows.push(`<li${me}><span>${i + 1}.</span><span class="swatch" style="color:${PLAYER_CSS[p.colorIdx]};background:${PLAYER_CSS[p.colorIdx]}"></span><span>${escapeHtml(p.name)}</span><span class="sc">${p.score}</span></li>`);
+        const ping = p.isBot ? 'CPU' : p.pingMs ? `${p.pingMs}ms` : '';
+        rows.push(`<li${me}><span>${i + 1}</span><span class="dot" style="background:${PLAYER_CSS[p.colorIdx]}"></span><span>${escapeHtml(p.name)}</span><span class="sc">${p.score}</span><span class="pg">${ping}</span></li>`);
       }
     });
     const html = rows.join('');
     if (this.changed('mini', html)) this.mini.innerHTML = html;
   }
 
-  killFeed(killer: string, killerColor: number, how: string, victim: string, victimColor: number): void {
+  killFeed(killer: string, killerColor: number, cause: number, victim: string, victimColor: number): void {
     const li = document.createElement('li');
-    const k = killer ? `<span style="color:${PLAYER_CSS[killerColor]}">${escapeHtml(killer)}</span>` : '';
-    li.innerHTML = `${k}<span class="how">${escapeHtml(how)}</span><img src="${this.skullURL}" width="14" height="14" alt=""> <span style="color:${PLAYER_CSS[victimColor]}">${escapeHtml(victim)}</span>`;
+    const k = killer ? `<span class="killer" style="color:${PLAYER_CSS[killerColor]}">${escapeHtml(killer)}</span>` : '';
+    const icon = this.causeIcons[cause] ? `<img src="${this.causeIcons[cause]}" alt="${CAUSE_NAMES[cause] ?? ''}" title="${CAUSE_NAMES[cause] ?? ''}">` : '';
+    li.innerHTML = `${k}${icon}<span class="victim" style="color:${PLAYER_CSS[victimColor]}">${escapeHtml(victim)}</span>`;
     this.feed.prepend(li);
     while (this.feed.children.length > 4) this.feed.lastElementChild!.remove();
     setTimeout(() => li.remove(), 6000);
@@ -142,7 +173,7 @@ export class Hud {
     }
   }
 
-  showBanner(text: string, color = '#e6ecff', seconds = 1.6): void {
+  showBanner(text: string, color = '#eef2ff', seconds = 1.6): void {
     this.banner.textContent = text;
     this.banner.style.color = color;
     this.banner.classList.add('show');

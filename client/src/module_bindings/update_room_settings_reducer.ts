@@ -10,7 +10,14 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+import {
+  Rules,
+} from "./types";
+
 export default {
   mode: __t.u8(),
   roundSec: __t.u32(),
+  get rules() {
+    return Rules;
+  },
 };

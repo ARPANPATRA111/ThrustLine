@@ -1,5 +1,5 @@
 // Weapon table shared by client (feel, prediction) and server (authoritative damage).
-import { MODE_BLADES, MODE_BOOM } from './config';
+import { MODE_ARMS, MODE_BLADES, MODE_BOOM, MODE_SNIPERS } from './config';
 
 export const W_PISTOL = 0;
 export const W_AR = 1;
@@ -58,13 +58,31 @@ export function isPrimary(w: number): boolean {
 export function allowedWeapons(mode: number, primary: number): number[] {
   if (mode === MODE_BLADES) return [W_KNIFE];
   if (mode === MODE_BOOM) return [W_FRAG, W_KNIFE];
+  if (mode === MODE_SNIPERS) return [W_SNIPER, W_KNIFE];
   return [primary, W_PISTOL, W_KNIFE];
+}
+
+/** The primary gun actually carried: Snipers mode forces the sniper rifle. */
+export function effectivePrimary(mode: number, primary: number): number {
+  return mode === MODE_SNIPERS ? W_SNIPER : primary;
 }
 
 export function defaultWeapon(mode: number, primary: number): number {
   if (mode === MODE_BLADES) return W_KNIFE;
   if (mode === MODE_BOOM) return W_FRAG;
-  return primary;
+  return effectivePrimary(mode, primary);
+}
+
+/** Which pickup kinds (0 health, 1 ammo, 2 grenade) are active in a mode. */
+export function pickupActive(mode: number, kind: number): boolean {
+  if (mode === MODE_ARMS) return true;
+  if (mode === MODE_SNIPERS) return kind !== 2;
+  return kind === 0;
+}
+
+/** Grenades can be thrown in Arms (limited) and Boom (unlimited). */
+export function canThrow(mode: number): boolean {
+  return mode === MODE_ARMS || mode === MODE_BOOM;
 }
 
 /**

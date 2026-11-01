@@ -1,6 +1,6 @@
 // Camera: follows the local player with a 0.12 lerp, leads toward the aim (320 px with the
 // sniper), shakes briefly on firing and explosions, and never shows outside the map.
-import { CAMERA_LEAD, CAMERA_LEAD_SNIPER, CAMERA_LERP, VIEW_HEIGHT, VIEW_MAX_WIDTH } from '@shared/config';
+import { CAMERA_LEAD, CAMERA_LEAD_SNIPER, CAMERA_LERP, VIEW_HEIGHT, VIEW_HEIGHT_MIN, VIEW_MAX_WIDTH } from '@shared/config';
 import { MAP_H, MAP_W } from '@shared/map';
 
 export class Camera {
@@ -16,10 +16,15 @@ export class Camera {
   shakeX = 0;
   shakeY = 0;
 
-  /** About 680 world px tall; width follows the screen aspect ratio, capped at 1500. */
+  /**
+   * View size: about 680 world px tall on laptops, zooming in on short phone screens so soldiers
+   * stay big enough to see and hit (420 px tall on a ~390 px phone). Width follows the aspect
+   * ratio, capped at 1500.
+   */
   resize(screenW: number, screenH: number): void {
     const aspect = screenW / Math.max(1, screenH);
-    this.viewW = Math.min(VIEW_HEIGHT * aspect, VIEW_MAX_WIDTH);
+    const viewHeight = Math.min(VIEW_HEIGHT, Math.max(VIEW_HEIGHT_MIN, screenH * 1.08));
+    this.viewW = Math.min(viewHeight * aspect, VIEW_MAX_WIDTH);
     this.zoom = screenW / this.viewW;
     this.viewH = screenH / this.zoom;
   }

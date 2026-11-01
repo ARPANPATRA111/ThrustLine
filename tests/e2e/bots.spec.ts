@@ -20,11 +20,11 @@ test('CPU players join, move and fight', async ({ browser }) => {
   await page.fill('#in-name', 'Human');
   await page.click('#btn-create');
   await page.waitForSelector('#scr-lobby:not(.hidden)');
-  await page.selectOption('#sel-round', '30');
+  await page.click('#seg-round [data-v="30"]');
   await page.click('#btn-addbot');
-  await expect(page.locator('#lobby-players li')).toHaveCount(2, { timeout: 15_000 });
+  await expect(page.locator('#lobby-players li.pl')).toHaveCount(2, { timeout: 15_000 });
   await page.click('#btn-addbot');
-  await expect(page.locator('#lobby-players li')).toHaveCount(3, { timeout: 15_000 });
+  await expect(page.locator('#lobby-players li.pl')).toHaveCount(3, { timeout: 15_000 });
   await expect(page.locator('#lobby-players .cpu-tag')).toHaveCount(2);
   await page.click('#btn-start');
   await page.waitForSelector('#scr-game:not(.hidden)');

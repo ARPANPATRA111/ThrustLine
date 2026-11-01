@@ -7,7 +7,7 @@ import * as C from '@shared/config';
 import type { GameMap } from '@shared/map';
 import { type MoveInput, type PlayerBody, applyImpulse, makeBody, stepPlayer } from '@shared/physics';
 import { castTiles, rayVsBox, lineOfSight } from '@shared/raycast';
-import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, allowedWeapons, isGun, isPrimary } from '@shared/weapons';
+import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, allowedWeapons, canThrow, isGun, isPrimary } from '@shared/weapons';
 import type { DbConnection } from '../module_bindings';
 import type { Player, Pstate } from '../module_bindings/types';
 
@@ -48,9 +48,18 @@ export interface FxSink {
   shake(amount: number): void;
 }
 
+/** The room's house rules as the simulation needs them. */
+export interface SimRules {
+  infiniteFuel: boolean;
+  infiniteAmmo: boolean;
+  acid: boolean;
+  botSkill: number;
+}
+
 export interface WorldView {
   map: GameMap;
   mode: number;
+  rules: SimRules;
   serverNow(): number;
   /** Everyone this actor could hit, excluding itself. */
   targets(selfKey: string, out: Target[]): number;
@@ -158,7 +167,7 @@ export class Actor {
     this.prevY = this.body.y;
     if (!this.alive) return;
     this.aim = input.aim;
-    stepPlayer(world.map, this.body, input, dt, { runSpeedMul: runMul, fuelRefillMul: fuelMul });
+    stepPlayer(world.map, this.body, input, dt, { runSpeedMul: runMul, fuelRefillMul: fuelMul, infiniteFuel: world.rules.infiniteFuel });
     this.weapons(input, world);
   }
 
@@ -169,7 +178,7 @@ export class Actor {
     if (this.reloadUntilMs > 0 && now >= this.reloadUntilMs) this.finishReloadLocal();
 
     if (input.swap) this.swapWeapon(mode);
-    if (input.reload) this.requestReload();
+    if (input.reload && !world.rules.infiniteAmmo) this.requestReload();
 
     const w = this.weapon;
     if (isGun(w)) {
@@ -177,19 +186,20 @@ export class Actor {
       const trigger = def.kind === 'auto' ? input.fire : input.firePressed;
       if (trigger && now - this.lastShotMs[w] >= 1000 / def.rate && !this.reloading) {
         const left = w === W_PISTOL ? this.pistolMag : this.mag;
-        if (left > 0) this.fire(def.id, world, now);
+        if (left > 0 || world.rules.infiniteAmmo) this.fire(def.id, world, now);
         else if (input.firePressed) {
           this.fx?.empty();
-          this.requestReload();
+          if (!world.rules.infiniteAmmo) this.requestReload();
         }
       }
     } else if (w === W_KNIFE && input.firePressed) {
       this.doMelee(now);
     } else if (w === W_FRAG && input.fire) {
-      this.doThrow(now, mode);
+      this.doThrow(now, mode, world.rules.infiniteAmmo);
     }
     if (input.melee) this.doMelee(now);
-    if (input.grenade && mode === C.MODE_ARMS) this.doThrow(now, mode);
+    // The grenade key / NADE button throws in every mode that has grenades (Arms and Boom).
+    if (input.grenade && canThrow(mode)) this.doThrow(now, mode, world.rules.infiniteAmmo);
   }
 
   private swapWeapon(mode: number): void {
@@ -230,8 +240,10 @@ export class Actor {
   private fire(wid: number, world: WorldView, now: number): void {
     const def = WEAPONS[wid];
     this.lastShotMs[wid] = now;
-    if (wid === W_PISTOL) this.pistolMag--;
-    else this.mag--;
+    if (!world.rules.infiniteAmmo) {
+      if (wid === W_PISTOL) this.pistolMag--;
+      else this.mag--;
+    }
 
     const cx = this.body.x;
     const cy = this.centerY;
@@ -296,11 +308,11 @@ export class Actor {
     this.markActive();
   }
 
-  private doThrow(now: number, mode: number): void {
-    if (mode === C.MODE_BLADES) return;
+  private doThrow(now: number, mode: number, infinite: boolean): void {
+    if (!canThrow(mode)) return;
     const cooldown = mode === C.MODE_BOOM ? C.GRENADE_COOLDOWN_BOOM : C.GRENADE_COOLDOWN_ARMS;
     if (now - this.lastThrowMs < cooldown * 1000) return;
-    if (mode === C.MODE_ARMS) {
+    if (mode === C.MODE_ARMS && !infinite) {
       if (this.grenades <= 0) return;
       this.grenades--;
     }

@@ -49,6 +49,8 @@ export interface MoveInput {
 export interface StepOptions {
   runSpeedMul: number;
   fuelRefillMul: number;
+  /** House rule: the jetpack never runs dry. */
+  infiniteFuel?: boolean;
 }
 
 export const DEFAULT_STEP: StepOptions = { runSpeedMul: 1, fuelRefillMul: 1 };
@@ -98,14 +100,14 @@ export function stepPlayer(map: GameMap, b: PlayerBody, input: MoveInput, dt: nu
   if (tapped && b.grounded && b.fuel >= HOP_FUEL) {
     // A tap on the ground is an instant hop.
     b.vy = -HOP_SPEED;
-    b.fuel -= HOP_FUEL;
+    if (!opt.infiniteFuel) b.fuel -= HOP_FUEL;
     b.grounded = false;
   } else if (input.thrust && !b.grounded && b.fuel > 0) {
     // Holding thrust in the air is flight: net upward accel = JET_ACCEL - GRAVITY.
     b.jetting = true;
     b.vy -= JET_ACCEL * dt;
     if (b.vy < -JET_MAX_UP) b.vy = Math.min(-JET_MAX_UP, b.vy + JET_ACCEL * dt); // never speeds past the cap
-    b.fuel = Math.max(0, b.fuel - FUEL_DRAIN * dt);
+    if (!opt.infiniteFuel) b.fuel = Math.max(0, b.fuel - FUEL_DRAIN * dt);
   }
   b.vy += GRAVITY * dt;
   if (b.vy > MAX_FALL) b.vy = MAX_FALL;

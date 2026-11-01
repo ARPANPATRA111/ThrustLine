@@ -76,6 +76,18 @@ export class Effects {
     f.s.visible = true;
     f.kind = 1;
     f.life = f.max = 2 / 60;
+    // A brief additive light around the muzzle.
+    const l = this.take();
+    l.s.texture = this.tex.dot;
+    l.s.anchor.set(0.5);
+    l.s.position.set(x + Math.cos(angle) * 8, y + Math.sin(angle) * 8);
+    l.s.rotation = 0;
+    l.s.scale.set(big ? 3.2 : 2.2);
+    l.s.tint = 0xffd27a;
+    l.s.alpha = 0.55;
+    l.s.visible = true;
+    l.kind = 0;
+    l.life = l.max = 0.07;
   }
 
   slash(x: number, y: number, angle: number, color: number): void {

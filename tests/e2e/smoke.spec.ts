@@ -24,15 +24,17 @@ type DebugState = {
   renderer: string;
 };
 
-async function openClient(browser: Browser, query: string, viewport = { width: 1280, height: 720 }, mobile = false): Promise<Page> {
+/** Open a client with a saved callsign. With ?room=CODE (an invite link) it joins that room directly. */
+async function openClient(browser: Browser, query: string, name: string, viewport = { width: 1280, height: 720 }, mobile = false): Promise<Page> {
   const ctx = await browser.newContext({ viewport, isMobile: mobile, hasTouch: mobile });
   contexts.push(ctx);
+  await ctx.addInitScript((n) => localStorage.setItem('tl:settings', JSON.stringify({ name: n })), name);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}`));
   await page.goto(`/${query}`);
   await page.waitForSelector('#btn-tap:not(.hidden)', { timeout: 60_000 });
   await page.click('#btn-tap');
-  await page.waitForSelector('#scr-home:not(.hidden)', { timeout: 60_000 });
+  await page.waitForSelector(query.includes('room=') ? '#scr-lobby:not(.hidden), #scr-game:not(.hidden)' : '#scr-home:not(.hidden)', { timeout: 60_000 });
   return page;
 }
 
@@ -40,27 +42,25 @@ const state = (p: Page) => p.evaluate(() => (window as any).__tl.game.debugState
 
 test('rooms, movement, kills and round end across clients', async ({ browser }) => {
   // --- Host creates a dev room ---
-  const host = await openClient(browser, '?dev=1');
+  const host = await openClient(browser, '?dev=1', NAMES[0]);
+  await host.waitForTimeout(500);
   if (SHOTS) await host.screenshot({ path: `${SHOT_DIR}/home.png` });
-  await host.fill('#in-name', NAMES[0]);
+  await expect(host.locator('#in-name')).toHaveValue(NAMES[0]);
   await host.click('#btn-create');
   await host.waitForSelector('#scr-lobby:not(.hidden)');
   const code = (await host.textContent('#lobby-code'))!.trim();
   expect(code).toMatch(/^[A-Z]{4}$/);
-  await host.selectOption('#sel-round', '30');
+  await host.click('#seg-round [data-v="30"]');
 
-  // --- Others join by code ---
+  // --- Others open the invite link and land in the lobby automatically ---
   const pages = [host];
   for (let i = 1; i < PLAYERS; i++) {
-    const p = await openClient(browser, `?room=${code}&dev=1`);
-    await expect(p.locator('#in-code')).toHaveValue(code);
-    await p.fill('#in-name', NAMES[i]);
-    await p.click('#btn-join');
-    await p.waitForSelector('#scr-lobby:not(.hidden)');
+    const p = await openClient(browser, `?room=${code}&dev=1`, NAMES[i]);
+    await expect(p.locator('#lobby-code')).toHaveText(code);
     pages.push(p);
   }
-  await expect(host.locator('#lobby-players li')).toHaveCount(PLAYERS);
-  await expect(host.locator('#sel-round')).toHaveValue('30');
+  await expect(host.locator('#lobby-players li.pl')).toHaveCount(PLAYERS);
+  await expect(host.locator('#seg-round [data-v="30"]')).toHaveClass(/on/);
   if (SHOTS) await host.screenshot({ path: `${SHOT_DIR}/lobby.png` });
 
   // --- Start the round ---
@@ -120,10 +120,12 @@ test('rooms, movement, kills and round end across clients', async ({ browser }) 
   // The same kill must appear in every client's kill feed.
   await expect(shooter.locator('#killfeed li').first()).toBeVisible();
   // Newest row first (rows expire after 6 s, oldest first).
-  const entry = (await shooter.locator('#killfeed li').first().innerText()).trim();
-  console.log(`kill feed: ${entry}`);
+  const row = shooter.locator('#killfeed li').first();
+  const killerName = (await row.locator('.killer').innerText()).trim();
+  const victimShown = (await row.locator('.victim').innerText()).trim();
+  console.log(`kill feed: ${killerName} -> ${victimShown}`);
   for (const p of pages) {
-    await expect(p.locator('#killfeed li', { hasText: entry })).not.toHaveCount(0, { timeout: 5000 });
+    await expect(p.locator('#killfeed li').filter({ hasText: killerName }).filter({ hasText: victimShown })).not.toHaveCount(0, { timeout: 5000 });
   }
 
   // --- Round end: leaderboard on every client ---
@@ -138,9 +140,7 @@ test('rooms, movement, kills and round end across clients', async ({ browser }) 
   if (SHOTS) {
     await host.click('#btn-again');
     await host.waitForSelector('#scr-board', { state: 'hidden', timeout: 10_000 });
-    const phone = await openClient(browser, `?room=${code}&dev=1`, { width: 844, height: 390 }, true);
-    await phone.fill('#in-name', 'Phone');
-    await phone.click('#btn-join');
+    const phone = await openClient(browser, `?room=${code}&dev=1`, 'Phone', { width: 844, height: 390 }, true);
     await phone.waitForSelector('#scr-game:not(.hidden)');
     await phone.waitForSelector('#scr-respawn', { state: 'hidden', timeout: 10_000 });
     // Put one thumb on each stick so the controls are visible in the screenshot.
@@ -148,10 +148,10 @@ test('rooms, movement, kills and round end across clients', async ({ browser }) 
       const el = document.getElementById('touch')!;
       const fire = (type: string, id: number, x: number, y: number) =>
         el.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', clientX: x, clientY: y, bubbles: true }));
-      fire('pointerdown', 11, 130, 290);
-      fire('pointermove', 11, 165, 270);
-      fire('pointerdown', 12, 700, 280);
-      fire('pointermove', 12, 730, 260);
+      fire('pointerdown', 11, 150, 280);
+      fire('pointermove', 11, 180, 265);
+      fire('pointerdown', 12, 700, 290);
+      fire('pointermove', 12, 730, 275);
     });
     await phone.waitForTimeout(600);
     await phone.screenshot({ path: `${SHOT_DIR}/gameplay-mobile.png` });

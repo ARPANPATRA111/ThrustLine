@@ -3,9 +3,9 @@
 import { type Application, Container, Sprite, type Texture, TilingSprite } from 'pixi.js';
 import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
-import { RIG7, MAP_H } from '@shared/map';
+import { RIG7, MAP_H, MAP_W } from '@shared/map';
 import { fuseTicks, grenadePath } from '@shared/grenade';
-import { W_FRAG, W_KNIFE, W_PISTOL, W_SNIPER, isGun } from '@shared/weapons';
+import { W_FRAG, W_KNIFE, W_PISTOL, W_SNIPER, canThrow, isGun, pickupActive } from '@shared/weapons';
 import type { BoomEv, Grenade, HitEv, KillEv, MeleeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
 import type { Net } from '../net/connection';
 import type { TimeSync } from '../net/timesync';
@@ -17,7 +17,7 @@ import { Effects } from '../render/effects';
 import { PLAYER_COLORS, SoldierView } from '../render/soldier';
 import type { Audio } from '../audio/audio';
 import { type Hud, rankPlayers } from '../ui/hud';
-import { Actor, type ActorInput, type FxSink, type Target, type WorldView, emptyInput } from './actor';
+import { Actor, type ActorInput, type FxSink, type SimRules, type Target, type WorldView, emptyInput } from './actor';
 import { BotManager } from './bot';
 import { Camera } from './camera';
 import type { Input } from './input';
@@ -25,7 +25,6 @@ import type { Quality } from '../ui/settings';
 
 const STEP = 1 / C.SIM_HZ;
 const WEAPON_SOUND = ['pistol', 'ar', 'shotgun', 'sniper'] as const;
-const CAUSE_TEXT: Record<number, string> = { 0: 'pistol', 1: 'AR', 2: 'shotgun', 3: 'sniper', 4: 'knife', 5: 'frag', [C.CAUSE_ACID]: 'acid' };
 
 interface Remote {
   id: Identity;
@@ -65,6 +64,11 @@ const QUALITY_STEPS = [
 export class Game implements WorldView {
   map = RIG7;
   mode = C.MODE_ARMS;
+  /** House rules of the current room (defaults until the room row arrives). */
+  rules: SimRules = { ...C.DEFAULT_RULES };
+  maxHp = C.MAX_HP;
+  pickupsOn = true;
+  frenzyOn = true;
   room: Room | undefined;
   local: Actor | null = null;
   localRow: Player | null = null;
@@ -145,7 +149,7 @@ export class Game implements WorldView {
     app.ticker.add(() => this.frame());
     app.ticker.stop();
     document.addEventListener('visibilitychange', () => {
-      if (!this.running) return;
+      if (!this.running && !this.attract) return;
       if (document.hidden) app.ticker.stop();
       else app.ticker.start();
     });
@@ -160,16 +164,31 @@ export class Game implements WorldView {
     if (this.running) return;
     this.running = true;
     this.app.stage.visible = true;
+    this.app.ticker.maxFPS = 0; // uncapped during play (the display's refresh rate)
     this.acc = 0;
     this.app.ticker.start();
   }
 
   stop(): void {
     this.running = false;
-    this.app.ticker.stop();
-    this.app.stage.visible = false;
     this.audio.setJet(false);
     this.audio.setMusic(null);
+    this.setAttract(this.attract);
+  }
+
+  /** Behind the menus: render the empty map with a slow camera drift at 30 fps. */
+  attract = false;
+  setAttract(on: boolean): void {
+    this.attract = on;
+    if (this.running) return;
+    if (on) {
+      this.app.stage.visible = true;
+      this.app.ticker.maxFPS = 30;
+      this.app.ticker.start();
+    } else {
+      this.app.ticker.stop();
+      this.app.stage.visible = false;
+    }
   }
 
   /** Forget everything about the current room (leaving). */
@@ -195,7 +214,7 @@ export class Game implements WorldView {
   }
 
   get frenzy(): boolean {
-    return !!this.room && this.room.state === 1 && C.isFrenzy(this.serverNow(), Number(this.room.endsAtMicros) / 1000);
+    return !!this.room && this.room.state === 1 && this.frenzyOn && C.isFrenzy(this.serverNow(), Number(this.room.endsAtMicros) / 1000);
   }
 
   // ------------------------------------------------------------------ server data
@@ -205,6 +224,10 @@ export class Game implements WorldView {
     this.room = r;
     if (!r) return;
     this.mode = r.mode;
+    this.rules = { infiniteFuel: r.rules.infiniteFuel, infiniteAmmo: r.rules.infiniteAmmo, acid: r.rules.acid, botSkill: r.rules.botSkill };
+    this.maxHp = r.rules.maxHp;
+    this.pickupsOn = r.rules.pickups;
+    this.frenzyOn = r.rules.frenzy;
     if (prev && prev.state === 1 && r.state === 2) {
       this.audio.play('sting', 0.8);
       this.audio.setMusic(null);
@@ -354,7 +377,7 @@ export class Game implements WorldView {
     const victim = this.rowOf(vKey);
     const killer = this.rowOf(kKey);
     const self = vKey === kKey || e.cause === C.CAUSE_ACID;
-    this.hud.killFeed(self ? '' : killer?.name ?? '?', killer?.colorIdx ?? 0, CAUSE_TEXT[e.cause] ?? '', victim?.name ?? '?', victim?.colorIdx ?? 0);
+    this.hud.killFeed(self ? '' : killer?.name ?? '?', killer?.colorIdx ?? 0, e.cause, victim?.name ?? '?', victim?.colorIdx ?? 0);
     const pos = this.positionOf(vKey);
     if (pos) this.deathBurst(pos.x, pos.y, victim?.colorIdx ?? 0);
     if (vKey === this.net.myKey) {
@@ -489,7 +512,7 @@ export class Game implements WorldView {
     for (const r of this.remotes.values()) {
       if (r.key === selfKey || !r.row.alive || !r.hasSample || Number(r.row.spawnProtectUntilMicros) / 1000 > now) continue;
       // Bots hosted in this tab: use their exact simulated position.
-      const bot = this.bots.bots.find((b) => b.actor.key === r.key);
+      const bot = this.bots.get(r.key);
       if (bot) push(r.id, r.key, bot.actor.body.x, bot.actor.body.y);
       else push(r.id, r.key, r.s.x, r.s.y);
     }
@@ -506,6 +529,7 @@ export class Game implements WorldView {
     const frenzy = this.frenzy;
     const runMul = this.mode === C.MODE_BLADES ? C.BLADES_RUN_MUL : 1;
     const fuelMul = frenzy ? C.FRENZY_FUEL_MUL : 1;
+    if (!playing && !this.running) this.attractCamera(dt);
 
     // --- Fixed 60 Hz simulation with an accumulator ---
     const local = this.local;
@@ -562,7 +586,20 @@ export class Game implements WorldView {
     // --- Remote players at serverNow - 100 ms ---
     const renderT = now - C.INTERP_DELAY_MS;
     for (const r of this.remotes.values()) {
-      r.hasSample = r.buf.sample(renderT, r.s);
+      const bot = this.bots.get(r.key);
+      if (bot && bot.actor.alive) {
+        const b = bot.actor.body;
+        r.s.x = bot.actor.prevX + (b.x - bot.actor.prevX) * alpha;
+        r.s.y = bot.actor.prevY + (b.y - bot.actor.prevY) * alpha;
+        r.s.vx = b.vx;
+        r.s.vy = b.vy;
+        r.s.aim = bot.actor.aim;
+        r.s.flags = (b.grounded ? C.FLAG_GROUNDED : 0) | (b.jetting ? C.FLAG_JETTING : 0);
+        r.s.weapon = bot.actor.weapon;
+        r.hasSample = true;
+      } else {
+        r.hasSample = r.buf.sample(renderT, r.s);
+      }
       const show = r.hasSample && r.row.alive && playing;
       r.view.root.visible = show;
       if (!show) continue;
@@ -588,21 +625,21 @@ export class Game implements WorldView {
     // --- Pickups bob, hidden while respawning ---
     const tSec = now / 1000;
     for (const p of this.pickups.values()) {
-      const avail = p.row.availableAtMicros === 0n && (this.mode === C.MODE_ARMS || p.row.kind === 0);
+      const avail = this.pickupsOn && p.row.availableAtMicros === 0n && pickupActive(this.mode, p.row.kind);
       p.sprite.visible = avail;
       if (avail) p.sprite.y = p.baseY - 6 + Math.sin(tSec * 3 + p.row.tx) * 3;
     }
 
     // --- Acid ---
     this.acid.tilePosition.x += dt * 18;
-    this.acidGlow.alpha = 0.3 + Math.sin(tSec * 2) * 0.08;
+    this.acidGlow.alpha = (this.rules.acid ? 0.3 : 0.12) + Math.sin(tSec * 2) * 0.08;
     if (Math.random() < dt * 8) {
       this.particles.emit({ tex: this.tex.bubbleAcid, x: this.acidR.x + Math.random() * this.acidR.w, y: this.acidR.y + 6, vx: 0, vy: -20 - Math.random() * 30, life: 0.8, scale0: 0.6, scale1: 1.4, color: 0xb8ff9a, additive: true });
     }
 
     // --- Camera, world transform, parallax ---
     const cam = this.camera;
-    if (!local || !local.alive || !playing) cam.follow(cam.x, cam.y, 0, false, dt);
+    if ((!local || !local.alive || !playing) && this.running) cam.follow(cam.x, cam.y, 0, false, dt);
     const z = cam.zoom;
     this.world.scale.set(z);
     this.world.position.set(Math.round((-cam.left + cam.shakeX) * z), Math.round((-cam.top + cam.shakeY) * z));
@@ -661,22 +698,24 @@ export class Game implements WorldView {
       this.hud.setTimer(frenzy ? `FRENZY ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`, frenzy);
     }
     if (local && row) {
-      this.hud.setHP(row.alive ? row.hp : 0);
-      this.hud.setFuel(local.body.fuel);
+      this.hud.setHP(row.alive ? row.hp : 0, this.maxHp);
+      this.hud.setFuel(local.body.fuel, this.rules.infiniteFuel);
       this.hud.setWeapon(local.weapon);
       const w = local.weapon;
       if (isGun(w)) {
-        this.hud.setAmmo(String(w === W_PISTOL ? local.pistolMag : local.mag), w === W_PISTOL ? '/∞' : `/${local.reserve}`);
+        if (this.rules.infiniteAmmo) this.hud.setAmmo('∞', '');
+        else this.hud.setAmmo(String(w === W_PISTOL ? local.pistolMag : local.mag), w === W_PISTOL ? '/∞' : `/${local.reserve}`);
       } else if (w === W_FRAG) {
         this.hud.setAmmo('∞', '');
       } else {
         this.hud.setAmmo(w === W_KNIFE ? '—' : '', '');
       }
-      this.hud.setNades(this.mode === C.MODE_ARMS ? '● '.repeat(local.grenades).trim() || '○' : '');
+      this.hud.setNades(this.mode === C.MODE_ARMS ? (this.rules.infiniteAmmo ? '● ∞' : '● '.repeat(local.grenades).trim() || '○') : '');
       this.hud.setReloading(local.reloading && isGun(w));
     }
     if (this.hudTimer <= 0) {
       this.hudTimer = 0.25;
+      this.hud.setNet(this.time.synced ? this.time.rtt : null, this.fps);
       const players = this.allPlayers();
       this.hud.setMiniBoard(rankPlayers(players), this.net.myKey);
       if (this.debug) {
@@ -685,6 +724,28 @@ export class Game implements WorldView {
         );
       } else this.hud.setDebug(null);
     }
+  }
+
+  /** Slow, smooth drift across the map for the menu background. */
+  private attractT = Math.random() * 100;
+  private attractCamera(dt: number): void {
+    this.attractT += dt;
+    const t = this.attractT * 0.05;
+    const cam = this.camera;
+    cam.x = MAP_W / 2 + Math.sin(t) * (MAP_W / 2 - cam.viewW / 2);
+    cam.y = MAP_H * 0.62 + Math.sin(t * 1.7) * MAP_H * 0.25;
+    cam.clamp();
+  }
+
+  /** Which touch buttons make sense right now (mode + rules). */
+  touchButtons(): { reload: boolean; swap: boolean; grenade: boolean; melee: boolean } {
+    const m = this.mode;
+    return {
+      reload: (m === C.MODE_ARMS || m === C.MODE_SNIPERS) && !this.rules.infiniteAmmo,
+      swap: m === C.MODE_ARMS || m === C.MODE_SNIPERS,
+      grenade: canThrow(m),
+      melee: m !== C.MODE_BLADES, // in Blades the fire stick already swings the knife
+    };
   }
 
   /** Snapshot of what this client sees, for automated tests (window.__tl.game.debugState()). */

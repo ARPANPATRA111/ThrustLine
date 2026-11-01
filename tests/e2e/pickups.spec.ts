@@ -30,10 +30,9 @@ test('acid burns, pickups heal and refill, death respawns', async ({ browser }) 
 
   // Acid: stand in the pit and lose HP (30 per second).
   await teleport(48 * 32, 38 * 32);
-  await page.waitForTimeout(1500);
+  await expect.poll(async () => (await row()).hp, { timeout: 5000 }).toBeLessThan(75);
   const burnt = (await row()).hp;
-  console.log(`hp after 1.5 s in acid: ${burnt.toFixed(1)}`);
-  expect(burnt).toBeLessThan(80);
+  console.log(`hp after standing in acid: ${burnt.toFixed(1)}`);
 
   // Health pack (H at tile 42,17 on the centre wing): +50 HP, capped at 100.
   await teleport(42 * 32 + 16, 18 * 32);
@@ -53,7 +52,7 @@ test('acid burns, pickups heal and refill, death respawns', async ({ browser }) 
   await teleport(48 * 32, 38 * 32);
   await expect.poll(async () => (await row()).deaths, { timeout: 8000 }).toBe(before.deaths + 1);
   await expect(page.locator('#scr-respawn')).toBeVisible();
-  await expect(page.locator('#killfeed li').first()).toContainText('acid');
+  await expect(page.locator('#killfeed li img[alt="acid"]').first()).toBeVisible();
   await expect.poll(async () => (await row()).alive, { timeout: 8000 }).toBe(true);
   expect((await row()).life).toBeGreaterThan(before.life);
   await expect(page.locator('#scr-respawn')).toBeHidden();

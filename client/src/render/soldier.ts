@@ -30,6 +30,8 @@ export class SoldierView {
   private bubble: Sprite;
   private crown: Sprite;
   private tag: BitmapText;
+  /** Soft additive glow in the player colour: makes soldiers pop against the dark rig. */
+  private glow: Sprite;
   private phase = 0;
   private flameTick = 0;
   private currentWeapon = -1;
@@ -68,13 +70,19 @@ export class SoldierView {
     this.tag.anchor.set(0.5, 1);
     this.tag.position.set(0, -60);
     this.tag.alpha = 0.9;
-    this.root.addChild(this.body, this.bubble, this.crown, this.tag);
+    this.glow = part(tex.dot, 0.5, 0.5);
+    this.glow.blendMode = 'add';
+    this.glow.alpha = 0.32;
+    this.glow.scale.set(2.6, 3);
+    this.glow.position.set(0, -26);
+    this.root.addChild(this.glow, this.body, this.bubble, this.crown, this.tag);
     this.setColor(colorIdx);
   }
 
   setColor(colorIdx: number): void {
     const c = PLAYER_COLORS[colorIdx % PLAYER_COLORS.length];
     this.torso.tint = c;
+    this.glow.tint = c;
     this.helmet.tint = c;
     this.armGroup.children[1].tint = c;
     this.tag.tint = c;

@@ -4,10 +4,12 @@ import { Container, Sprite, Texture, TilingSprite } from 'pixi.js';
 import { MAP_CHUNK, TILE } from '@shared/config';
 import { type GameMap, MAP_H, MAP_W, T_ACID, T_ONEWAY, T_SOLID, tileAt } from '@shared/map';
 
-const C_SOLID = '#2a3350';
-const C_SOLID_DARK = '#1e2642';
-const C_LIP = '#5b6b9a';
-const C_GRATE = '#6b7aa8';
+/** Cheap deterministic hash so decorative details are the same on every load. */
+function hash(x: number, y: number): number {
+  let h = (x * 374761393 + y * 668265263) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
 
 /** Draw one tile of the map into a 2D context at (px, py). */
 function drawTile(g: CanvasRenderingContext2D, map: GameMap, tx: number, ty: number, px: number, py: number): void {
@@ -18,21 +20,51 @@ function drawTile(g: CanvasRenderingContext2D, map: GameMap, tx: number, ty: num
     const down = tileAt(map, tx, ty + 1) !== T_SOLID;
     const left = tileAt(map, tx - 1, ty) !== T_SOLID;
     const right = tileAt(map, tx + 1, ty) !== T_SOLID;
-    g.fillStyle = C_SOLID;
+    // Brushed-metal body: a gentle vertical gradient per tile.
+    const grad = g.createLinearGradient(0, py, 0, py + TILE);
+    grad.addColorStop(0, '#2d3866');
+    grad.addColorStop(1, '#222b52');
+    g.fillStyle = grad;
     g.fillRect(px, py, TILE, TILE);
-    // Subtle panel seams.
-    g.fillStyle = 'rgba(0,0,0,0.12)';
+    // Panel seams and a soft inner highlight.
+    g.fillStyle = 'rgba(0,0,0,0.18)';
     g.fillRect(px, py + TILE - 1, TILE, 1);
     g.fillRect(px + TILE - 1, py, 1, TILE);
-    if (left) { g.fillStyle = C_SOLID_DARK; g.fillRect(px, py, 3, TILE); }
-    if (right) { g.fillStyle = C_SOLID_DARK; g.fillRect(px + TILE - 3, py, 3, TILE); }
-    if (down) { g.fillStyle = '#151b33'; g.fillRect(px, py + TILE - 4, TILE, 4); }
+    g.fillStyle = 'rgba(255,255,255,0.035)';
+    g.fillRect(px + 1, py + 1, TILE - 3, 1);
+    // Deep interior tiles sometimes carry a lit window strip or a vent.
+    const h = hash(tx, ty);
+    if (!up && !down && !left && !right) {
+      if (h < 0.07) {
+        g.fillStyle = h < 0.035 ? 'rgba(34,211,238,0.55)' : 'rgba(255,190,90,0.5)';
+        g.fillRect(px + 6, py + 12, TILE - 12, 6);
+        g.fillStyle = 'rgba(255,255,255,0.35)';
+        g.fillRect(px + 6, py + 12, TILE - 12, 1.5);
+      } else if (h < 0.14) {
+        g.fillStyle = 'rgba(0,0,0,0.3)';
+        for (let i = 0; i < 4; i++) g.fillRect(px + 7, py + 8 + i * 5, TILE - 14, 2);
+      }
+    }
+    if (left) { g.fillStyle = '#19203f'; g.fillRect(px, py, 3, TILE); g.fillStyle = 'rgba(120,140,220,0.25)'; g.fillRect(px + 3, py, 1, TILE); }
+    if (right) { g.fillStyle = '#19203f'; g.fillRect(px + TILE - 3, py, 3, TILE); }
+    if (down) {
+      g.fillStyle = '#121833';
+      g.fillRect(px, py + TILE - 5, TILE, 5);
+      // Hazard stripes on undersides.
+      g.fillStyle = 'rgba(255,200,60,0.18)';
+      for (let i = -8; i < TILE; i += 10) { g.beginPath(); g.moveTo(px + i, py + TILE); g.lineTo(px + i + 5, py + TILE - 5); g.lineTo(px + i + 10, py + TILE - 5); g.lineTo(px + i + 5, py + TILE); g.fill(); }
+    }
     if (up) {
-      // Bright top lip with rivets.
-      g.fillStyle = C_LIP;
-      g.fillRect(px, py, TILE, 5);
-      g.fillStyle = '#8796c8';
-      g.fillRect(px, py, TILE, 1.5);
+      // Walkable top: steel lip with a neon edge and a glow that spills onto the wall below.
+      g.fillStyle = '#5b6b9a';
+      g.fillRect(px, py, TILE, 6);
+      const glow = g.createLinearGradient(0, py + 6, 0, py + 16);
+      glow.addColorStop(0, 'rgba(34,211,238,0.22)');
+      glow.addColorStop(1, 'rgba(34,211,238,0)');
+      g.fillStyle = glow;
+      g.fillRect(px, py + 6, TILE, 10);
+      g.fillStyle = '#7ff0ff';
+      g.fillRect(px, py, TILE, 2);
       g.fillStyle = '#0b1020';
       g.beginPath();
       g.arc(px + 7, py + 11, 1.6, 0, Math.PI * 2);
@@ -40,18 +72,29 @@ function drawTile(g: CanvasRenderingContext2D, map: GameMap, tx: number, ty: num
       g.fill();
     }
   } else if (code === T_ONEWAY) {
-    // Grate: solid top bar with slats underneath.
-    g.fillStyle = C_GRATE;
-    g.fillRect(px, py, TILE, 6);
-    g.fillStyle = '#9aa8d8';
+    // See-through mesh catwalk: a bright top rail, a lattice you can see (and shoot) through,
+    // and a thin lower rail. Visibly different from solid walls.
+    g.fillStyle = '#8d9ad0';
+    g.fillRect(px, py, TILE, 4);
+    g.fillStyle = '#ffd54a';
     g.fillRect(px, py, TILE, 1.5);
-    g.fillStyle = 'rgba(107,122,168,0.55)';
-    for (let i = 2; i < TILE; i += 6) g.fillRect(px + i, py + 6, 2, 7);
-    g.fillStyle = 'rgba(107,122,168,0.35)';
-    g.fillRect(px, py + 12, TILE, 2);
+    g.strokeStyle = 'rgba(141,154,208,0.55)';
+    g.lineWidth = 1.2;
+    g.beginPath();
+    for (let i = 0; i < TILE; i += 8) {
+      g.moveTo(px + i, py + 4);
+      g.lineTo(px + i + 8, py + 13);
+      g.moveTo(px + i + 8, py + 4);
+      g.lineTo(px + i, py + 13);
+    }
+    g.stroke();
+    g.fillStyle = 'rgba(141,154,208,0.7)';
+    g.fillRect(px, py + 13, TILE, 2);
+    // Support struts every few tiles.
+    if (tx % 4 === 0) { g.fillStyle = 'rgba(91,107,154,0.35)'; g.fillRect(px + 14, py + 15, 4, 10); }
   } else if (code !== T_ACID && tileAt(map, tx, ty - 1) === T_ONEWAY && tx % 6 === 0) {
     // Background girder under platforms.
-    g.strokeStyle = 'rgba(91,107,154,0.18)';
+    g.strokeStyle = 'rgba(91,107,154,0.16)';
     g.lineWidth = 2;
     g.beginPath();
     g.moveTo(px + 4, py);

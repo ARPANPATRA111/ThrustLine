@@ -12,4 +12,5 @@ import {
 
 export default {
   clientMs: __t.f64(),
+  rttMs: __t.u16(),
 };

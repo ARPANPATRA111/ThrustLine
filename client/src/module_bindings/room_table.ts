@@ -9,6 +9,10 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
+import {
+  Rules,
+} from "./types";
+
 
 export default __t.row({
   id: __t.u64().primaryKey(),
@@ -18,6 +22,9 @@ export default __t.row({
   mode: __t.u8(),
   roundSec: __t.u32().name("round_sec"),
   dev: __t.bool(),
+  get rules() {
+    return Rules;
+  },
   startedAtMicros: __t.i64().name("started_at_micros"),
   endsAtMicros: __t.i64().name("ends_at_micros"),
   roundNo: __t.u32().name("round_no"),
