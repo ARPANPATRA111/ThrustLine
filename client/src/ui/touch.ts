@@ -33,7 +33,7 @@ export class TouchControls {
       const rightZone = this.lefty ? e.clientX < w * 0.4 : e.clientX > w * 0.6;
       if (leftZone && !this.move) this.move = this.begin(e, elL);
       else if (rightZone && !this.aim) this.aim = this.begin(e, elR);
-      root.setPointerCapture?.(e.pointerId);
+      try { root.setPointerCapture(e.pointerId); } catch { /* synthetic or already-released pointer */ }
     });
     root.addEventListener('pointermove', (e) => {
       if (this.move?.id === e.pointerId) this.updateMove(e);

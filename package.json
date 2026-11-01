@@ -16,7 +16,7 @@
     "publish:cloud": "node scripts/publish-cloud.mjs",
     "build": "npm run build -w client",
     "e2e": "playwright test",
-    "deploy": "npm run typecheck && npm test && npm run gen && npm run publish:cloud && npm run build && cd client && vercel --prod --yes"
+    "deploy": "npm run typecheck && npm test && npm run gen && npm run publish:cloud && npm run build && vercel --prod --yes"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

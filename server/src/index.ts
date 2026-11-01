@@ -712,6 +712,7 @@ export const sync = spacetimedb.reducer(
         });
       } else {
         // Rejected: tell the client to snap back to the last accepted position.
+        rejected(r, `move to (${a.x.toFixed(0)},${a.y.toFixed(0)}) from (${ps.x.toFixed(0)},${ps.y.toFixed(0)}) in ${dt.toFixed(3)} s`);
         p.correction += 1;
         p.cx = ps.x;
         p.cy = ps.y;
@@ -751,6 +752,11 @@ export const sync = spacetimedb.reducer(
     ctx.db.pmeta.identity.update(meta);
   },
 );
+
+/** In dev rooms, log why an action was rejected (useful in tests and when debugging live). */
+function rejected(r: RoomRow, what: string): void {
+  if (r.dev) console.info(`[${r.code}] rejected ${what}`);
+}
 
 function finishReload(p: PlayerRow): void {
   p.reloadUntilMicros = 0n;
@@ -811,13 +817,15 @@ type ShotRow = Infer<typeof ShotIn>;
 /** Validate one shot (section 6, "favour the shooter within tolerances") and apply its hits. */
 function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x: number; y: number }, shot: ShotRow, now: bigint, fmul: number): void {
   const wid = shot.weapon;
-  if (!isGun(wid) || wid !== p.weapon || !allowedWeapons(r.mode, p.primary).includes(wid)) return;
-  if (p.reloadUntilMicros > 0n) return;
+  if (!isGun(wid) || wid !== p.weapon || !allowedWeapons(r.mode, p.primary).includes(wid)) return rejected(r, 'shot: weapon not equipped');
+  if (p.reloadUntilMicros > 0n) return rejected(r, 'shot: reloading');
   const w = WEAPONS[wid];
-  if (!fireRateOk(meta.lastFire[wid], now, w.rate)) return;
+  if (!fireRateOk(meta.lastFire[wid], now, w.rate)) return rejected(r, 'shot: too fast');
   const magLeft = wid === W_PISTOL ? p.pistolMag : p.mag;
-  if (magLeft <= 0) return;
-  if (!shotOriginOk(pos, shot.ox, shot.oy)) return;
+  if (magLeft <= 0) return rejected(r, 'shot: empty');
+  // The shot may have been fired before this sync's movement (e.g. shotgun recoil moved the
+  // shooter since), so the origin may be near the current OR the previous accepted position.
+  if (!shotOriginOk(pos, shot.ox, shot.oy) && !shotOriginOk({ x: meta.prevX, y: meta.prevY }, shot.ox, shot.oy)) return rejected(r, `shot: origin (${shot.ox.toFixed(0)},${shot.oy.toFixed(0)}) far from (${pos.x.toFixed(0)},${pos.y.toFixed(0)})`);
 
   // Accepted: spend ammo and advance the fire-rate token bucket.
   if (wid === W_PISTOL) p.pistolMag -= 1;
@@ -842,7 +850,7 @@ function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x:
     // The target's current or previous accepted position may match (latency tolerance).
     let d = hitClaimDistance(RIG7, w, shot.ox, shot.oy, claim.angle, { x: tps.x, y: tps.y });
     if (d < 0 && tmeta) d = hitClaimDistance(RIG7, w, shot.ox, shot.oy, claim.angle, { x: tmeta.prevX, y: tmeta.prevY });
-    if (d < 0) continue;
+    if (d < 0) { rejected(r, 'hit claim: out of range, behind a wall or off the ray'); continue; }
     const pellets = Math.max(1, Math.min(claim.pellets, w.pellets));
     const dmg = pellets * damageAtDistance(w, d) * fmul;
     const res = damageOther(ctx, target, dmg, p.identity, wid);

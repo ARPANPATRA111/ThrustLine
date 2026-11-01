@@ -73,6 +73,9 @@ export class Game implements WorldView {
   running = false;
   killedBy = '';
   debug = false;
+  /** Counters for automated tests: hits this client dealt, explosions seen. */
+  hitsDealt = 0;
+  booms = 0;
 
   private tex: Record<string, Texture>;
   private world = new Container();
@@ -87,6 +90,8 @@ export class Game implements WorldView {
   private particles: Particles;
   private effects: Effects;
   private localView: SoldierView | null = null;
+  /** Faint aim line shown on touch screens (no mouse crosshair there). */
+  private aimLine: Sprite;
   private remotes = new Map<string, Remote>();
   private grenades = new Map<bigint, GrenadeView>();
   private pickups = new Map<bigint, PickupView>();
@@ -119,6 +124,10 @@ export class Game implements WorldView {
       this.parallax.push(ts);
       this.bg.addChild(ts);
     }
+    this.aimLine = new Sprite(this.tex.tracer);
+    this.aimLine.anchor.set(0, 0.5);
+    this.aimLine.alpha = 0.25;
+    this.aimLine.scale.set(240 / 8, 0.6);
     this.acid = makeAcid(this.acidR);
     this.acidGlow = new Sprite(this.tex.dot);
     this.acidGlow.anchor.set(0.5);
@@ -129,7 +138,7 @@ export class Game implements WorldView {
     this.acidGlow.scale.set((this.acidR.w * 1.4) / 32, 90 / 32);
     this.world.addChild(
       bakeMap(RIG7), this.acid, this.acidGlow, this.pickupLayer, this.grenadeLayer, this.playerLayer,
-      this.particles.normal, this.effects.layer, this.particles.additive, this.effects.textLayer,
+      this.particles.normal, this.aimLine, this.effects.layer, this.particles.additive, this.effects.textLayer,
     );
     app.stage.addChild(this.bg, this.world);
     app.stage.visible = false;
@@ -321,6 +330,7 @@ export class Game implements WorldView {
     const vColor = this.colorOf(victimKey);
     this.sparks(e.x, e.y, vColor, 6);
     if (attackerKey === this.net.myKey && victimKey !== this.net.myKey) {
+      this.hitsDealt++;
       const sx = (e.x - this.camera.left) * this.camera.zoom;
       const sy = (e.y - this.camera.top) * this.camera.zoom;
       this.hud.hit(sx, sy, e.killed);
@@ -362,6 +372,7 @@ export class Game implements WorldView {
   }
 
   onBoom(e: BoomEv): void {
+    this.booms++;
     this.explosion(e.x, e.y);
     this.local?.knockback(RIG7, e.x, e.y);
     this.bots.knockback(this, e.x, e.y);
@@ -539,9 +550,12 @@ export class Game implements WorldView {
         const bounty = this.localRow.streak >= C.BOUNTY_STREAK;
         this.localView.update(x, y, local.aim, b.vx, flags, local.weapon, dt, bounty, Number(this.localRow.spawnProtectUntilMicros) / 1000 > now);
         this.localView.refreshColor(this.localRow.colorIdx, bounty);
+        this.aimLine.position.set(x, y - 30);
+        this.aimLine.rotation = local.aim;
         const sniper = local.weapon === W_SNIPER;
         this.camera.follow(x, y - C.PLAYER_H / 2, local.aim, sniper, dt);
       }
+      this.aimLine.visible = show && this.controls.usingTouch;
       this.audio.setJet(show && local.body.jetting);
     }
 
@@ -671,6 +685,22 @@ export class Game implements WorldView {
         );
       } else this.hud.setDebug(null);
     }
+  }
+
+  /** Snapshot of what this client sees, for automated tests (window.__tl.game.debugState()). */
+  debugState() {
+    const cam = this.camera;
+    const toScreen = (x: number, y: number) => ({ sx: (x - cam.left) * cam.zoom, sy: (y - cam.top) * cam.zoom });
+    return {
+      room: this.room ? { code: this.room.code, state: this.room.state } : null,
+      me: this.local ? { x: this.local.body.x, y: this.local.body.y, alive: this.local.alive, weapon: this.local.weapon, grenades: this.local.grenades, ...toScreen(this.local.body.x, this.local.centerY) } : null,
+      mode: this.mode,
+      hitsDealt: this.hitsDealt,
+      booms: this.booms,
+      remotes: [...this.remotes.values()].map((r) => ({ name: r.row.name, alive: r.row.alive, x: r.s.x, y: r.s.y, ...toScreen(r.s.x, r.s.y - C.PLAYER_H / 2) })),
+      kills: this.allPlayers().reduce((n, p) => n + p.kills, 0),
+      renderer: this.app.renderer.name,
+    };
   }
 
   allPlayers(): Player[] {
