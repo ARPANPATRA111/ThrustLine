@@ -1,10 +1,17 @@
 // Acid hazard, pickups and respawn, with one client in a dev room.
-import { test, expect } from '@playwright/test';
+import { test, expect, type BrowserContext } from '@playwright/test';
+
+const contexts: BrowserContext[] = [];
+test.afterEach(async () => {
+  for (const c of contexts.splice(0)) await c.close();
+});
 
 test.skip(!!process.env.BASE_URL?.startsWith('https'), 'local only');
 
 test('acid burns, pickups heal and refill, death respawns', async ({ browser }) => {
-  const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  contexts.push(ctx);
+  const page = await ctx.newPage();
   await page.goto('/?dev=1');
   await page.waitForSelector('#btn-tap:not(.hidden)', { timeout: 60_000 });
   await page.click('#btn-tap');

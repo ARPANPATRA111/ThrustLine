@@ -1,10 +1,17 @@
 // CPU players: the host adds two bots in the lobby; they join as real clients, move, fight,
 // and appear on the leaderboard. Runs locally and against production.
-import { test, expect } from '@playwright/test';
+import { test, expect, type BrowserContext } from '@playwright/test';
+
+const contexts: BrowserContext[] = [];
+test.afterEach(async () => {
+  for (const c of contexts.splice(0)) await c.close();
+});
 
 test('CPU players join, move and fight', async ({ browser }) => {
   test.setTimeout(150_000);
-  const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  contexts.push(ctx);
+  const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}`));
   await page.goto('/?dev=1');
   await page.waitForSelector('#btn-tap:not(.hidden)', { timeout: 60_000 });

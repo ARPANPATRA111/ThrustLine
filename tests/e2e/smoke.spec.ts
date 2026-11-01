@@ -4,7 +4,12 @@
 // and checks that every client sees movement, the kill and the round-end leaderboard.
 // Local:      npx playwright test            (3 players, saves docs/screenshots/*)
 // Production: BASE_URL=https://... PLAYERS=2 npx playwright test
-import { test, expect, type Browser, type Page } from '@playwright/test';
+import { test, expect, type Browser, type Page, type BrowserContext } from '@playwright/test';
+
+const contexts: BrowserContext[] = [];
+test.afterEach(async () => {
+  for (const c of contexts.splice(0)) await c.close();
+});
 
 const PLAYERS = Number(process.env.PLAYERS ?? 3);
 const SHOTS = process.env.SCREENSHOTS !== '0' && !process.env.BASE_URL?.startsWith('https');
@@ -21,6 +26,7 @@ type DebugState = {
 
 async function openClient(browser: Browser, query: string, viewport = { width: 1280, height: 720 }, mobile = false): Promise<Page> {
   const ctx = await browser.newContext({ viewport, isMobile: mobile, hasTouch: mobile });
+  contexts.push(ctx);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}`));
   await page.goto(`/${query}`);

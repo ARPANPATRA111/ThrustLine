@@ -5,7 +5,12 @@
 //   3. Blades: only the knife; Q does nothing; G throws nothing; knife hits.
 //   4. Boom: frags only; firing throws a grenade that explodes.
 // (The AR is covered by smoke.spec.ts.)
-import { test, expect, type Browser, type Page } from '@playwright/test';
+import { test, expect, type Browser, type Page, type BrowserContext } from '@playwright/test';
+
+const contexts: BrowserContext[] = [];
+test.afterEach(async () => {
+  for (const c of contexts.splice(0)) await c.close();
+});
 
 test.skip(!!process.env.BASE_URL?.startsWith('https'), 'local only');
 test.setTimeout(300_000);
@@ -14,7 +19,9 @@ const FLOOR_Y = 36 * 32;
 const SHOOTER_X = 6 * 32 + 16;
 
 async function openClient(browser: Browser, query: string): Promise<Page> {
-  const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  contexts.push(ctx);
+  const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}`));
   await page.goto(`/${query}`);
   await page.waitForSelector('#btn-tap:not(.hidden)', { timeout: 60_000 });
