@@ -121,7 +121,7 @@ sent through **event tables**: rows that are broadcast once and never stored.
 | Backend | **SpacetimeDB 2.x** TypeScript module | Database and server in one: tables, server functions (reducers), real-time subscriptions, timers (scheduled reducers) and event broadcast are built in. No separate web server, no REST API, no cache layer to write. | Node.js + Socket.IO + Redis (we would write state sync, persistence and timers ourselves), Firebase (not designed for 20 Hz game state; no server-side validation of physics), Colyseus (a game server, but a separate service to host) |
 | Client SDK | **`spacetimedb` npm package** + generated bindings | Typed tables and reducer calls generated from the server code: a renamed field fails to compile instead of failing at runtime. | Hand-written WebSocket protocol |
 | Build | **Vite** | Instant dev server, static `dist/` output | Webpack |
-| Hosting | **Vercel** (client), **SpacetimeDB Maincloud** or self-hosted SpacetimeDB (server) | Free static hosting with HTTPS and a CDN; managed database server | Netlify, GitHub Pages |
+| Hosting | **Vercel** (client), **SpacetimeDB Maincloud** (server; a free India server is prepared, see section 19) | Free static hosting with HTTPS and a CDN; managed database server | Netlify, GitHub Pages |
 | Tests | **Vitest** (unit), **Playwright** (real multi-browser games) | Fast unit tests for the simulation; end-to-end tests that open several real browsers and play | Jest, Cypress |
 | Fonts | Russo One, Chakra Petch (OFL licence, npm `@fontsource`) | Game-like look, bundled locally (no third-party CDN) | System fonts |
 
@@ -556,9 +556,11 @@ npm run deploy         # typecheck, tests, generate bindings, publish module, bu
 ```
 
 - Client: static files on **Vercel** (https://thrustline-drab.vercel.app).
-- Server: **SpacetimeDB Maincloud** (database `thrustline-zhtm`), or a self-hosted SpacetimeDB
-  on a free Oracle Cloud server in India (`deploy/oracle/`). `client/.env.production` decides
-  which; `npm run deploy` publishes to whichever it names.
+- Server (live today): **SpacetimeDB Maincloud** (database `thrustline-zhtm`, Virginia, USA,
+  ~250 ms ping from India). `client/.env.production` names the server and `npm run deploy`
+  publishes to it.
+- Prepared but **not set up yet**: a self-hosted SpacetimeDB on a free Oracle Cloud server in
+  India (`deploy/oracle/`, ~25–40 ms). Switching would only change `client/.env.production`.
 - After a schema change: `npm run publish:cloud -- --delete-data=always` (match data is disposable).
 
 ---
@@ -572,11 +574,11 @@ limited by distance (light in fibre covers ~200 km per millisecond, plus routing
 
 | Server | Round trip | Notes |
 | --- | --- | --- |
-| SpacetimeDB Maincloud (Leesburg, Virginia, USA) | ~245–305 ms | the original host |
-| Cloudflare Durable Object (via Singapore / Hong Kong / Tokyo) | 87–235 ms | free tier; route varies per connection |
-| AWS Mumbai | ~67 ms | free only for a limited period |
-| Oracle Cloud Mumbai | ~38 ms | Always Free |
-| Oracle Cloud Hyderabad | ~25 ms | Always Free |
+| SpacetimeDB Maincloud (Leesburg, Virginia, USA) | ~245–305 ms | **the live server today** |
+| Cloudflare Durable Object (via Singapore / Hong Kong / Tokyo) | 87–235 ms | measured with a test probe; not used |
+| AWS Mumbai | ~67 ms | measured only; free for a limited period |
+| Oracle Cloud Mumbai | ~38 ms | measured only; Always Free |
+| Oracle Cloud Hyderabad | ~25 ms | measured only; Always Free |
 | Same Wi-Fi (laptop as server, LAN mode) | ~2–10 ms | demo fallback |
 
 **Decisions**
@@ -585,9 +587,10 @@ limited by distance (light in fibre covers ~200 km per millisecond, plus routing
    interpolation on the sender's timeline, client-timeline movement checks with an anti-cheat
    budget, lag-compensated hit checks with "cover wins". Result at ~250 ms real ping: 0
    snap-backs and no visible jumps in a hard-flying test.
-2. **Move the server closer (prepared, free)**: Cloudflare was measured but its free routing from
-   this ISP leaves India, so latency was inconsistent. A self-hosted SpacetimeDB on Oracle Cloud's
-   Always Free tier in Hyderabad/Mumbai gives ~25–40 ms with no code change. Creating the account
+2. **Move the server closer (prepared, not done yet)**: Cloudflare was measured but its free routing
+   from this ISP leaves India, so latency was inconsistent. A self-hosted SpacetimeDB on Oracle
+   Cloud's Always Free tier in Hyderabad/Mumbai would give ~25–40 ms with no code change. Until it
+   is set up, the game runs on Maincloud at ~250 ms. Creating the account
    needs a person (card verification), so the steps are in `deploy/oracle/README.md` and the
    server setup is one script.
 3. **Why not rewrite the server for Cloudflare?** It would replace a working, tested backend with
@@ -710,8 +713,9 @@ still hits. We still require line of sight to the target's current position ("co
 The managed server is in Virginia, USA; from India the round trip is ~250 ms. In code we made the
 game smooth and fair at that ping (prediction, adaptive interpolation, client-timeline movement
 checks, lag compensation). To lower ping itself we measured alternatives: Cloudflare 87–235 ms
-(routes outside India), Oracle Cloud Hyderabad ~25 ms (Always Free). The game is ready to move to
-the Indian server with one setup script and a config change.
+(routes outside India), Oracle Cloud Hyderabad ~25 ms (Always Free). Today it still runs on
+Maincloud at ~250 ms; moving to an Indian server is prepared (one setup script and a config
+change) but needs an Oracle account, which a person has to create.
 
 **Q: How does the client know the server time?**
 NTP-style pings: RTT = now − sent; offset = serverTime − (sent + RTT/2); median of the last five.
