@@ -1,0 +1,27 @@
+{
+  "name": "thrustline",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w client",
+    "test": "vitest run",
+    "typecheck": "tsc -p server --noEmit && tsc -p client --noEmit",
+    "gen": "spacetime generate --lang typescript --out-dir client/src/module_bindings --module-path server --yes",
+    "publish:local": "spacetime publish thrustline-dev --server local --module-path server --yes",
+    "publish:cloud": "node scripts/publish-cloud.mjs",
+    "build": "npm run build -w client",
+    "e2e": "playwright test",
+    "deploy": "npm run typecheck && npm test && npm run gen && npm run publish:cloud && npm run build && cd client && vercel --prod --yes"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

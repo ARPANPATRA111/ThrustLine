@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.vercel/
+test-results/
+playwright-report/
+*.log
+.env.local
+server/target/
+spacetime.local.json
