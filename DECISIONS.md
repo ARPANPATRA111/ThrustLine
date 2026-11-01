@@ -73,3 +73,20 @@ Every deviation from the build brief, and every non-obvious choice, one line eac
 - Tapping start on a phone also requests fullscreen where supported · more screen for the game; failures are ignored.
 - Move rejections are now logged in every room (other rejections only in dev rooms) · rare, and they help diagnose "snapped back" reports.
 - Publishing this schema change to Maincloud used `--delete-data=always` · only room/match data is lost, which is disposable.
+
+## Round 3: lobby flow, teams, jetpack, radar, latency
+
+- Ended rounds return the whole room to the lobby automatically after 12 s (scheduled `lobby_job`, `room.lobbyAtMicros` for the countdown); host can also press Play again or Lobby now (`backToLobby`) · the old host-only "Lobby settings" view was client-side, leaving other players stuck on "Waiting for host".
+- Clashing or empty names get a fresh random callsign from a shared list (`shared/names.ts`, picked with `ctx.random`) instead of "Name 2" · requested: nobody should look alike.
+- Host can kick (`kickPlayer`); kicked humans are stored in a private `kicked` table so they can't rejoin that room, and get a `kick_ev` notice · requested.
+- Teams: `room.teams`, `player.team` (1 red, 2 blue), balanced on join, `switchTeam` / `movePlayerTeam`; red spawns on the left half, blue on the right; MAX_PLAYERS raised to 8 for 4v4 · requested 1v1/2v2/4v4.
+- Friendly fire is a rule, on by default; teamkills give no kill credit and cost 50 points · requested ("teammate damage should register").
+- Team colours replace personal colours in team matches (red #FF4D5E, blue #3D8BFF) with an ally chevron over teammates · "easily identifiable".
+- Analog jetpack: `MoveInput.thrustAmount` (0–1), vertical damping while thrusting (applied after gravity so ~60 % power is an exact hover), touch stick maps to power with a wide hover band · the binary jet could only climb or fall, unlike Mini Militia.
+- Floating grenades rule: zero gravity and a 0.99-per-tick drag in the same deterministic simulation (`grenade.zeroG`) · requested as an option; normal grenades are unchanged.
+- Radar: minimap reveals enemies only for 3 s after they fire; edge arrows only for off-screen enemies that fired · shows where shots come from without making hiding pointless or covering visible enemies.
+- Menu and fullscreen buttons moved beside the timer and layered above the touch layer · they sat in the aim-stick zone and couldn't be tapped.
+- Touch layout enabled from the start on touch devices · previously only after the first touch, so the weapon box overlapped the aim stick.
+- Netcode: snapshots stamped with the sender's clock (`pstate.sentMs`), per-player adaptive interpolation delay (`LagEstimator`), movement validated on the client timeline with a 350 ms time-debt cap, lag-compensated hit claims from a 16-sample position history (`viewMs` per claim; cover still wins) · a fixed 100 ms delay and server-clock movement checks only work on low-latency links; at ~250 ms they caused constant extrapolation snaps and rejected moves.
+- The latency e2e test simulates ~250 ms RTT with jitter by wrapping WebSocket in the browser (copying send buffers, since the SDK reuses them) · Chromium's network throttling doesn't apply to WebSockets.
+- Ping stays ~250 ms because Maincloud runs in Virginia, USA (measured TCP connect ~250 ms from here); no code change can remove that · reducing it needs a SpacetimeDB server near the players (self-hosting costs money, so it wasn't done).

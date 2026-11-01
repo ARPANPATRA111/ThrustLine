@@ -1,6 +1,6 @@
 # THRUSTLINE
 
-A side-view jetpack free-for-all for 1–6 players, playable in the browser on phones and laptops.
+A side-view jetpack shooter (free-for-all or red vs blue teams) for 1–8 players, playable in the browser on phones and laptops.
 Riggers, jetpack contractors, fight over **RIG-7**, an abandoned sky refinery above an acid sea.
 
 **Play:** https://thrustline-drab.vercel.app · **Database:** SpacetimeDB Maincloud, `thrustline-zhtm`
@@ -31,7 +31,7 @@ and FPS are always shown under the timer; everyone's ping is on the mini leaderb
 | Action | Keyboard & mouse | Touch (landscape) |
 | --- | --- | --- |
 | Move | A / D | Left stick (rests bottom-left; slides to wherever your left thumb lands) |
-| Jetpack (tap = hop, hold = fly) | W or Space | Push the left stick up |
+| Jetpack (tap = hop, hold = fly) | W or Space | Push the left stick up: analog. A gentle push hovers (you can drift sideways at one height), further climbs |
 | Drop through a platform | S | Pull the left stick firmly straight down |
 | Aim | Mouse | Right stick direction |
 | Fire | Left click (hold for AR) | Push the right stick past ~55 % (keeps firing while held) |
@@ -66,9 +66,35 @@ Touch buttons sit on an arc around the aim stick and only appear when the mode u
 | Pickups | Crates on or off |
 | Acid hazard | The pit burns, or is harmless |
 | Final-minute Frenzy | On or off |
+| Match type | Free-for-all, or Red vs Blue teams (1v1, 2v2 … 4v4; up to 8 players) |
+| Friendly fire | Teams only, on by default: teammates' hits count (a teamkill costs 50) |
+| Floating grenades | Zero-g: grenades drift where you throw them and slow to a stop |
 
-Everyone in the room sees the settings; only the host can change them (also between rounds, via
-**Lobby settings** on the round-over screen). The server enforces every rule.
+Everyone in the room sees the settings; only the host can change them. The server enforces every
+rule. The host can also **kick** a player (✕ on their row; they can't rejoin that room) and move
+players between teams (⇄). In a team match each player can press **Switch team**.
+
+After a round, everyone sees the results, then the whole room returns to the lobby automatically
+after 12 seconds (the host can press **Play again** or **Lobby now** sooner).
+
+### Teams
+
+Red vs Blue: soldiers, name tags, the minimap and the kill feed use the team colour, and teammates
+carry a small chevron above their name. The score bar under the timer shows the two team totals;
+the team with the higher total wins.
+
+### Radar
+
+The minimap (top left) always shows you and your teammates. An enemy appears on it only for a few
+seconds after they fire, so hiding works until you shoot. When an enemy who is **off-screen** fires,
+an arrow at the screen edge points toward them; enemies already on screen get no arrow.
+
+### Ping
+
+The game server is SpacetimeDB Maincloud, which runs in Virginia, USA. From India the network round
+trip alone is about 230–250 ms, so that is the ping you will see. The netcode is built to stay smooth
+and fair at that latency (see Architecture). A lower ping would need a SpacetimeDB server closer to
+the players (self-hosted on a VPS in the region); the client only needs `VITE_STDB_URI` changed.
 
 ### Weapons
 
@@ -156,7 +182,8 @@ The SpacetimeDB module is the referee: it validates movement (no teleports, no w
 claims with tolerances that favour the shooter, and owns everything that decides the match (HP, kills,
 score, ammo, pickups, grenades, spawns, the clock). There is no server tick: respawns, round end,
 grenade fuses and pickup timers are one-shot scheduled reducers. Clients subscribe only to their room;
-other players are drawn 100 ms in the past and interpolated, and transient effects (shots, hits, kills,
+other players are interpolated on the sender's own timeline, drawn just far enough in the past
+(adaptively, from measured lag and jitter) that there is always real data to show, and transient effects (shots, hits, kills,
 explosions) arrive through event tables. Grenades follow a deterministic simulation that server and
 clients run on the same stored inputs, so they explode exactly where they are drawn.
 

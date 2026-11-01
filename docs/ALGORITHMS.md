@@ -103,6 +103,33 @@ most 100 ms, then hold.
 `serverNow()` comes from clock sync ([client/src/net/timesync.ts](../client/src/net/timesync.ts) `onPong`, line 32):
 `RTT = now − sent`, `offset = serverTime − (sent + RTT/2)`, using the median of the last 5 pings.
 
+### Adaptive delay (why 100 ms was not enough)
+
+Every sync now carries `t`, the time the state was simulated on the sender's clock (its estimate of
+server time). The server stores it as `pstate.sentMs`, and receivers stamp snapshots with it, so
+the spacing between snapshots is exactly the sender's 50 ms even when packets arrive in bursts.
+On a 250 ms connection a snapshot is ~120–250 ms old when it arrives, so a fixed 100 ms delay meant
+the client was almost always extrapolating, then snapping back. Now each remote player has a
+`LagEstimator` ([client/src/net/interp.ts](../client/src/net/interp.ts)): it measures
+`lag = serverNow − sentMs` for every arrival, keeps a running mean and jitter, and draws that player
+`mean + 2 × jitter + 35 ms` in the past. The delay grows quickly and shrinks slowly, so the drawn
+timeline never jumps.
+
+### Movement checks on the client's timeline
+
+Bunched packets used to cause snap-backs: two syncs sent 50 ms apart could arrive 5 ms apart, and
+the server compared the distance moved against its own 5 ms. Now the movement check in `sync` uses
+the time between the client's own timestamps. To stop a client from claiming extra time (a speed
+hack), the total extra time it may claim over the server's clock is capped at 350 ms (`timeDebtMs`).
+
+### Lag compensation
+
+The server keeps the last 16 accepted positions of each player with their timestamps
+(`pmeta.histT/histX/histY`). Each hit claim says when the shooter's view of the target was from
+(`viewMs`, the render time of that target). The ray/range check accepts the target's position at
+that time (interpolated from history, up to 700 ms back) as well as nearby samples. Line of sight to
+the target's **current** position is still required, so ducking behind cover always protects you.
+
 ## 6. Spawn selection
 
 [server/src/shared/spawn.ts](../server/src/shared/spawn.ts) `pickSpawn` (line 16)
@@ -132,6 +159,15 @@ fixed 120 Hz steps of gravity, axis-separated movement, bounces with restitution
 So the explosion happens exactly where everyone saw the grenade, without streaming its position.
 Damage falls linearly from 90 at the centre to 0 at 150 px, needs line of sight, and is halved on the
 thrower. Each client applies the knockback to its own soldier (it owns its movement).
+
+## 7b. Radar and off-screen arrows
+
+[client/src/render/radar.ts](../client/src/render/radar.ts). Each frame the game lists every living
+player with "me / ally / enemy" and how long ago they last fired (shots, knife swings, grenades).
+The minimap draws you and allies always, enemies only for 3 s after they fire. For enemies outside
+the camera view that fired in the last 2.2 s, an arrow is placed where the line from the screen
+centre toward them crosses a rectangle inset from the screen edges, rotated to point at them and
+fading with time. Enemies inside the view never get an arrow.
 
 ## 8. CPU players
 

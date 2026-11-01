@@ -9,11 +9,12 @@ const contexts: BrowserContext[] = [];
 test.afterEach(async () => {
   for (const c of contexts.splice(0)) await c.close();
 });
-test.skip(!!process.env.BASE_URL?.startsWith('https'), 'local only');
+// Against production the real network supplies the latency (no simulated delay).
+const REAL = !!process.env.BASE_URL?.startsWith('https');
 test.setTimeout(150_000);
 
-const ONE_WAY_MS = 125;
-const JITTER_MS = 60;
+const ONE_WAY_MS = REAL ? 0 : 125;
+const JITTER_MS = REAL ? 0 : 60;
 
 /** Replace WebSocket with a version that delays both directions (in order) by one-way + jitter. */
 function laggyWebSocket({ oneWay, jitter }: { oneWay: number; jitter: number }) {

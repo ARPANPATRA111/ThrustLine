@@ -21,6 +21,6 @@ Where THRUSTLINE meets each lab requirement. Paths are relative to the repo root
 | Collectibles | Health packs (+50 HP), ammo crates (refill reserve), grenade crates (+1 frag); respawn 20 s after pickup | `collectPickups`, `restorePickup` in [index.ts](../server/src/index.ts) |
 | Hazard | Acid pit in the middle of the map: 30 HP per second while you're in it | step 4 of `sync` in [index.ts](../server/src/index.ts) |
 | Restart | Host's **Play again** on the round-over screen resets all stats and starts a new round in the same room | `startRound` in [index.ts](../server/src/index.ts); `#btn-again` |
-| Multiplayer | 2–6 players per room by 4-letter code or one-tap invite link, real-time over SpacetimeDB; live ping shown per player; CPU players for solo play | [server/src/index.ts](../server/src/index.ts); [client/src/game/bot.ts](../client/src/game/bot.ts) |
+| Multiplayer | 2–8 players per room (free-for-all or red vs blue teams) by 4-letter code or one-tap invite link, real-time over SpacetimeDB; live ping shown per player; CPU players for solo play | [server/src/index.ts](../server/src/index.ts); [client/src/game/bot.ts](../client/src/game/bot.ts) |
 
 Screenshots: [docs/screenshots/](screenshots/) (home, lobby, gameplay, round end, mobile).
