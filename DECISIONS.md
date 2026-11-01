@@ -52,3 +52,24 @@ Every deviation from the build brief, and every non-obvious choice, one line eac
 - Bots run in the browser tab that adds them; each opens its own SpacetimeDB connection with a fresh identity and plays through `joinRoom`/`sync` · the server validates bots exactly like humans and no server tick is needed.
 - Only the host sees "+ Add CPU" / "− Remove CPU" in the lobby · one owner per bot; closing that tab disconnects its bots and the server cleans them up.
 - Bot brain: nearest visible enemy, aim error that shrinks with time in view, 0.3 s reaction delay, range keeping per weapon, wall hopping, acid look-ahead and escape · plain heuristics that are easy to explain and tune.
+
+## Round 2: playtest feedback (bugs, rules, mobile, UI)
+
+- Bots hosted in a tab are drawn from their own simulation, not from interpolated server rows · they were drawn ~220 ms in the past (100 ms buffer + round trip) while shooting from the present, so shots seemed to come through walls.
+- CPU brain rewritten with Easy/Normal/Hard presets (sight range, perception delay, reaction time, aim error, turn speed, burst fire), spreads targets across players, and hunts your last known position · the old bot aimed at the exact live position every frame and felt like an aimbot. Measured time to kill a stationary player at close range: Easy ~4–10 s, Normal ~4–20 s, Hard ~2–4 s.
+- A hit claim now needs a clear line of sight to the target's current server position (range and ray may still match the previous one) · being shot just after reaching cover felt like bullets passing through walls.
+- Touch drop-through needs a firm, mostly vertical pull (> 75 % and twice as vertical as horizontal) · the old 60 % threshold dropped you through platforms when moving diagonally down.
+- Exhaustive sweep tests added (DDA vs brute force over 4000 random rays; hop/fly/release from every surface) · they confirmed the shared physics and raycast never let bullets or players through solid tiles, which pointed to the netcode/visual causes above.
+- Room house rules stored as one `rules` object column on `room` (infinite fuel, infinite ammo, pickups, acid, Frenzy, max HP, respawn delay, CPU skill), edited with `updateRoomSettings` · one place for everything the host controls, validated server-side.
+- New Snipers mode (sniper + knife; health and ammo pickups) · the host asked for more match types; it reuses the existing weapon code via `effectivePrimary`.
+- Infinite ammo also makes Arms grenades unlimited · players expect "infinite ammo" to cover grenades.
+- `player.pingMs`, reported through the existing `ping` reducer (`rttMs` argument), shown in the HUD chip, mini leaderboard and scoreboard · lets players see who has a latency disadvantage.
+- Invite links (`?room=CODE`) join the room straight after the start tap, with the saved or a random callsign; the server suffixes duplicate names in a room ("Ace 2") · the start tap is still needed because browsers block audio until a gesture.
+- The grenade key/button throws in Boom too, and touch buttons hide when the mode doesn't use them · the grenade button did nothing in Boom.
+- Phones zoom in: view height `clamp(screenHeight × 1.08, 420, 680)` world px · soldiers were tiny on a 390 px tall phone.
+- Every screen is landscape-only on touch devices (rotate prompt in portrait) and all menus have compact landscape layouts · requested by the developer.
+- UI redesign: OFL fonts (Russo One, Chakra Petch) from npm, inline SVG icons, live map drifting behind menus at 30 fps, visual How to Play · the developer allowed adding assets; fonts are bundled locally (no third-party CDN) and everything else is still drawn in code.
+- Map art upgraded (gradient metal, neon walkable edges, lit windows, see-through mesh catwalks) · makes solid walls and pass-through platforms visibly different.
+- Tapping start on a phone also requests fullscreen where supported · more screen for the game; failures are ignored.
+- Move rejections are now logged in every room (other rejections only in dev rooms) · rare, and they help diagnose "snapped back" reports.
+- Publishing this schema change to Maincloud used `--delete-data=always` · only room/match data is lost, which is disposable.

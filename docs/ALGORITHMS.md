@@ -5,7 +5,7 @@ to the repo root.
 
 ## 1. Fixed-timestep game loop
 
-[client/src/game/game.ts](../client/src/game/game.ts) `frame()` (line 502)
+[client/src/game/game.ts](../client/src/game/game.ts) `frame()` (line 525)
 
 Screens refresh at different rates (60, 90, 120 Hz) and frames take uneven time, but physics must
 behave the same everywhere. So the loop keeps an **accumulator**:
@@ -25,7 +25,7 @@ Frame time is capped at 0.1 s so a stalled tab doesn't fast-forward.
 
 ## 2. AABB vs tiles, with one-way platforms
 
-[server/src/shared/physics.ts](../server/src/shared/physics.ts) `stepPlayer` (line 77), `moveX` (131), `moveY` (166)
+[server/src/shared/physics.ts](../server/src/shared/physics.ts) `stepPlayer` (line 79), `moveX` (133), `moveY` (168)
 
 The player is an axis-aligned box (24 × 48 px; position = centre of the feet). Each step:
 
@@ -58,12 +58,12 @@ distance. It visits only the cells the ray actually crosses, so it is exact and 
 For each slab compute the ray distances where it enters and leaves; the ray hits the box if the
 latest entry comes before the earliest exit (and before the wall distance).
 
-The client fires each pellet ([client/src/game/actor.ts](../client/src/game/actor.ts) `fire`, line 230):
+The client fires each pellet ([client/src/game/actor.ts](../client/src/game/actor.ts) `fire`, line 240):
 DDA for the wall, slab test against every other player, keep the nearest hit, draw the tracer to it.
 
 ## 4. Hit validation ("favour the shooter")
 
-[server/src/index.ts](../server/src/index.ts) `handleShot` (line 818) and [server/src/shared/validate.ts](../server/src/shared/validate.ts)
+[server/src/index.ts](../server/src/index.ts) `handleShot` (line 866) and [server/src/shared/validate.ts](../server/src/shared/validate.ts)
 
 The shooter's client decides what it hit, because it saw the target where the target was drawn
 (100 ms in the past). The server accepts the claim if it's *plausible*, with tolerances for latency:
@@ -72,15 +72,16 @@ The shooter's client decides what it hit, because it saw the target where the ta
   `0.85 / rate` seconds have passed since the last shot (a token bucket allows a short burst when
   two shots arrive in one packet);
 - the shot origin is within 48 px of the shooter's current or previous server position;
-- for each claimed target: same room, alive, not spawn-protected; its current or previous position is
-  within range + 64 px; a DDA raycast from the origin to it is clear (no shooting through walls); and
-  the claimed ray passes within the target's half-diagonal + 40 px (`pointToRayDistance`).
+- for each claimed target: same room, alive, not spawn-protected; a clear DDA raycast to its **current**
+  server position (cover wins: once you are behind a wall you can't be hit); its current or previous
+  position within range + 64 px; and the claim's own ray angle passing within the target's
+  half-diagonal + 40 px (`pointToRayDistance`).
 
 Damage always comes from the **server's** weapon table and the **server's** distance (shotgun falloff,
 at most 7 pellets), times the Frenzy multiplier. Hit markers and damage numbers appear only when the
 server's `hit_ev` arrives, so you never see a hit the server refused.
 
-Movement is validated the same way in `sync` (line 655): inside the map, not overlapping a solid
+Movement is validated the same way in `sync` (line 702): inside the map, not overlapping a solid
 tile, and no farther than `1400 × dt × 1.3 + 24` px from the last accepted position. A rejected move
 increments `player.correction`; the client sees that and snaps back.
 
@@ -126,7 +127,7 @@ fixed 120 Hz steps of gravity, axis-separated movement, bounces with restitution
 - The client precomputes the whole flight path once and draws the grenade at the path point for
   `serverNow()` ([game.ts](../client/src/game/game.ts) `grenadeInsert`).
 - The scheduled `detonate` reducer runs 300 steps (2.5 s × 120 Hz) and explodes at the result
-  ([index.ts](../server/src/index.ts) line 942).
+  ([index.ts](../server/src/index.ts) line 995).
 
 So the explosion happens exactly where everyone saw the grenade, without streaming its position.
 Damage falls linearly from 90 at the centre to 0 at 150 px, needs line of sight, and is halved on the
@@ -134,11 +135,22 @@ thrower. Each client applies the knockback to its own soldier (it owns its movem
 
 ## 8. CPU players
 
-[client/src/game/bot.ts](../client/src/game/bot.ts) `BotBrain.think` (line 40)
+[client/src/game/bot.ts](../client/src/game/bot.ts) `BotBrain.think` (line 66)
 
 Each bot is a real client: its own SpacetimeDB connection and identity, opened from the host's tab.
 It runs the same `Actor` code as the local player and sends the same `sync` calls, so the server
-validates it like anyone else. Its brain is a few heuristics evaluated every step: target the nearest
-enemy (preferring visible ones), aim with an error that shrinks the longer the target stays in view,
-wait a 0.3 s reaction time before firing, keep a weapon-specific distance, thrust over walls and
-toward targets above, look ahead for acid and fly over it, and hop when stuck.
+validates it like anyone else. The host draws its bots from their own simulation (no network delay).
+
+The brain is a set of human-like limits, tuned per difficulty (Easy / Normal / Hard in the lobby):
+
+- **Sight:** it only notices enemies within its sight range (600–950 px) and in line of sight.
+- **Perception delay:** it re-reads the target's position only every 0.15–0.45 s and aims at that
+  remembered spot, so moving players are hard to hit.
+- **Reaction time:** 0.3–0.8 s after spotting you before it fires.
+- **Aim error:** a wandering angular offset (0.07–0.26 rad) that shrinks a little while it keeps you in view.
+- **Turn speed:** the aim turns at a limited rate, like a thumb or a mouse hand.
+- **Burst fire:** it fires in bursts with pauses; semi-auto weapons are tapped at a human rate.
+- **Target choice:** nearer enemies are likelier, with randomness and a penalty for players other bots
+  already chase, so bots don't all gang up on the human.
+- **Movement:** keeps a weapon-specific distance, strafes and hops, flies over walls and acid, hunts
+  your last known position for a few seconds after losing you, then patrols between spawn points.

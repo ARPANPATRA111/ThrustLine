@@ -5,8 +5,10 @@ Riggers, jetpack contractors, fight over **RIG-7**, an abandoned sky refinery ab
 
 **Play:** https://thrustline-drab.vercel.app · **Database:** SpacetimeDB Maincloud, `thrustline-zhtm`
 
-Open the link, type a nickname, create a room and share its 4-letter code (or the link). No accounts:
-closing the tab removes you. Playing alone? Press **+ Add CPU** in the lobby to add computer opponents.
+Open the link and create a room. Press **Share** (or **Copy invite**) in the lobby and send the link to
+your group: anyone who opens it lands straight in your room with an automatic callsign (a number is
+added if two people pick the same name). No accounts: closing the tab removes you. Playing alone?
+Press **Add CPU** in the lobby.
 
 ![Gameplay](docs/screenshots/gameplay.png)
 
@@ -20,35 +22,53 @@ Most score when the timer runs out wins.
 | Kill a **bounty** target (a player on a 3-kill streak, glowing gold with a crown) | +50 extra |
 | Die to acid or your own grenade | −50 |
 
-Leaderboard order: score, then kills, then fewer deaths. HP is 100 with no regeneration; you respawn
-4 s after dying with 1.5 s of spawn protection (a bubble; it ends early if you attack).
+Leaderboard order: score, then kills, then fewer deaths. HP has no regeneration; you respawn after the
+room's respawn delay with 1.5 s of spawn protection (a bubble; it ends early if you attack). Your ping
+and FPS are always shown under the timer; everyone's ping is on the mini leaderboard and scoreboard.
 
 ### Controls
 
 | Action | Keyboard & mouse | Touch (landscape) |
 | --- | --- | --- |
-| Move | A / D | Left stick (appears where your thumb lands, left 40 % of screen) |
-| Thrust (tap = hop, hold = fly) | W or Space | Push the left stick up |
-| Drop through a platform | S | Push the left stick down |
+| Move | A / D | Left stick (rests bottom-left; slides to wherever your left thumb lands) |
+| Jetpack (tap = hop, hold = fly) | W or Space | Push the left stick up |
+| Drop through a platform | S | Pull the left stick firmly straight down |
 | Aim | Mouse | Right stick direction |
-| Fire | Left click (hold for AR) | Push the right stick past 60 % |
-| Knife | Right click or F | KNIFE button |
-| Grenade | G | NADE button |
-| Swap weapon | Q | SWAP button |
-| Reload | R | RELOAD button |
+| Fire | Left click (hold for AR) | Push the right stick past ~55 % (keeps firing while held) |
+| Knife | Right click or F | Knife button |
+| Grenade | G | Grenade button (Arms and Boom) |
+| Swap weapon | Q | Swap button |
+| Reload | R | Reload button |
 | Scoreboard | Hold Tab | Tap the mini leaderboard |
-| Menu / debug overlay | Esc / F3 | ≡ button / Settings |
+| Menu / detailed stats | Esc / F3 | ≡ button / Settings |
+
+Touch buttons sit on an arc around the aim stick and only appear when the mode uses them.
 
 ### Modes (host chooses in the lobby)
 
 | Mode | Loadout | Pickups |
 | --- | --- | --- |
 | **Arms** (default) | Pistol, one primary (AR, shotgun or sniper, picked on the respawn screen), knife, 2 frags | Health, ammo, grenade |
-| **Blades** | Knife only, +15 % run speed | Health |
-| **Boom** | Unlimited frags (1 s cooldown, max 2 live), knife backup | Health |
+| **Blades** (melee only) | Knife only, +15 % run speed | Health |
+| **Boom** (grenades only) | Unlimited frags (1 s cooldown, max 2 live), knife backup | Health |
+| **Snipers** | Sniper rifle and knife | Health, ammo |
 
-Round length: 3, 5 or 8 minutes (rooms opened with `?dev=1` also offer 30 s). The host's **Play again**
-resets stats and starts a new round in the same room.
+### House rules (host sets them in the lobby)
+
+| Setting | Options |
+| --- | --- |
+| Round length | 2, 3, 5, 8 or 10 minutes (30 s in `?dev=1` rooms) |
+| Health | 50, 100, 150 or 200 HP |
+| Respawn delay | 2, 4 or 6 s |
+| CPU skill | Easy, Normal, Hard |
+| Infinite jetpack | Fuel never runs out |
+| Infinite ammo | No reloading; unlimited grenades in Arms |
+| Pickups | Crates on or off |
+| Acid hazard | The pit burns, or is harmless |
+| Final-minute Frenzy | On or off |
+
+Everyone in the room sees the settings; only the host can change them (also between rounds, via
+**Lobby settings** on the round-over screen). The server enforces every rule.
 
 ### Weapons
 
@@ -61,16 +81,20 @@ resets stats and starts a new round in the same room.
 | Knife | 55 | 2/s | — | Short lunge |
 | Frag | up to 90 | — | 2 per life | 2.5 s fuse, bounces, knockback, half damage to yourself |
 
+Solid metal (glowing cyan edges) blocks bullets. The see-through mesh catwalks (yellow top rail) are
+one-way platforms: you can jump up through them and bullets pass through them.
+
 ## What makes it THRUSTLINE (customisation)
 
 - **Jetpack fuel:** 100 fuel, ~2.6 s of flight, refills after 0.4 s on the ground. Tap for a hop, hold to fly.
 - **Blast-jumping:** shotgun recoil (520) and grenade knockback (650) push you; chain them with the jetpack to move fast.
 - **Bounty:** a 3-kill streak makes you glow gold and worth +50 to whoever stops you.
 - **Frenzy:** the last 60 s: damage ×1.5, fuel refills twice as fast, red edge tint, FRENZY banner, faster music.
-- **Modes:** Arms, Blades and Boom change the whole loadout.
+- **Modes and house rules:** four loadouts plus host-set health, respawn, fuel, ammo, pickups, acid and Frenzy.
 - **Acid hazard:** the pit in the middle burns 30 HP/s while you're in it. You can fly out.
 - **Smart spawns:** never within 200 px of where you died, preferring points far from living enemies.
-- **CPU players:** computer opponents that join as real clients and obey the same server rules.
+- **CPU players:** computer opponents with three difficulty levels and human limits (reaction time,
+  aim error, burst fire, delayed perception). They join as real clients and obey the same server rules.
 
 Every number lives in [server/src/shared/config.ts](server/src/shared/config.ts) and [server/src/shared/weapons.ts](server/src/shared/weapons.ts).
 
@@ -164,5 +188,6 @@ More detail: [docs/ALGORITHMS.md](docs/ALGORITHMS.md) · Lab requirements: [docs
 | Tests | Vitest + Playwright | Unit tests for the simulation; real multi-browser games end to end |
 | Hosting | Vercel + SpacetimeDB Maincloud | Static client on a CDN; managed database |
 
-All art and sound are generated in code at load: nothing is downloaded. The whole client is about
-230 KB of gzipped JavaScript.
+All art and sound are generated in code at load. The only bundled assets are two open-licence (OFL)
+fonts, Russo One and Chakra Petch, installed from npm and served with the app. The whole client is
+about 240 KB of gzipped JavaScript and CSS plus 37 KB of fonts.
