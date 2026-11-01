@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0B1020" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="description" content="THRUSTLINE: a jetpack free-for-all over the acid sea of RIG-7." />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>THRUSTLINE</title>
+  </head>
+  <body>
+    <div id="stage"></div>
+
+    <!-- Loading -->
+    <section id="scr-loading" class="screen center">
+      <h1 class="logo">THRUST<span>LINE</span></h1>
+      <p class="tag">RIG-7 · JETPACK FREE-FOR-ALL</p>
+      <div class="bar"><div id="load-bar"></div></div>
+      <p id="load-text" class="muted">Generating sprites…</p>
+      <button id="btn-tap" class="btn big hidden">Tap to start</button>
+    </section>
+
+    <!-- Home -->
+    <section id="scr-home" class="screen center hidden">
+      <h1 class="logo">THRUST<span>LINE</span></h1>
+      <p class="tag">RIG-7 · JETPACK FREE-FOR-ALL</p>
+      <div class="panel">
+        <label class="field">Nickname<input id="in-name" maxlength="16" autocomplete="off" spellcheck="false" /></label>
+        <button id="btn-create" class="btn big">Create room</button>
+        <div class="row">
+          <input id="in-code" class="code-in" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" />
+          <button id="btn-join" class="btn">Join room</button>
+        </div>
+        <div class="row">
+          <button id="btn-howto" class="btn ghost">How to play</button>
+          <button id="btn-settings" class="btn ghost">Settings</button>
+        </div>
+        <p id="conn-status" class="muted small"></p>
+      </div>
+    </section>
+
+    <!-- Lobby -->
+    <section id="scr-lobby" class="screen center hidden">
+      <p class="muted">ROOM CODE</p>
+      <div id="lobby-code" class="room-code">----</div>
+      <div class="row">
+        <button id="btn-copy" class="btn ghost">Copy link</button>
+        <button id="btn-share" class="btn ghost hidden">Share</button>
+      </div>
+      <div class="panel wide">
+        <ul id="lobby-players" class="plist"></ul>
+        <div class="row settings-row">
+          <label class="field inline">Mode
+            <select id="sel-mode">
+              <option value="0">Arms</option>
+              <option value="1">Blades</option>
+              <option value="2">Boom</option>
+            </select>
+          </label>
+          <label class="field inline">Round
+            <select id="sel-round"></select>
+          </label>
+        </div>
+        <div class="row">
+          <button id="btn-addbot" class="btn ghost">+ Add CPU</button>
+          <button id="btn-rmbot" class="btn ghost">− Remove CPU</button>
+        </div>
+        <div class="row">
+          <button id="btn-start" class="btn big">Start</button>
+          <button id="btn-leave" class="btn ghost">Leave</button>
+        </div>
+        <p id="lobby-wait" class="muted small hidden">Waiting for the host to start…</p>
+      </div>
+    </section>
+
+    <!-- In-game HUD -->
+    <section id="scr-game" class="screen hud hidden">
+      <div class="hud-tl">
+        <div class="meter"><div id="hp-fill" class="fill hp"></div><span id="hp-text">100</span></div>
+        <div class="meter fuel"><div id="fuel-fill" class="fill fuelc"></div></div>
+      </div>
+      <div class="hud-tc">
+        <div id="timer" class="timer">5:00</div>
+      </div>
+      <div class="hud-tr">
+        <ol id="mini-board" class="mini-board"></ol>
+        <ul id="killfeed" class="killfeed"></ul>
+      </div>
+      <div id="weapon-box" class="weapon-box">
+        <canvas id="weapon-icon" width="96" height="40"></canvas>
+        <div><span id="ammo-mag">12</span><span id="ammo-res" class="muted">/∞</span></div>
+        <div id="nade-count" class="nades"></div>
+        <div id="reload-tag" class="reload hidden">RELOADING</div>
+      </div>
+      <div id="crosshair" class="crosshair"></div>
+      <div id="hitmarker" class="hitmarker"></div>
+      <div id="vignette" class="vignette"></div>
+      <div id="frenzy-tint" class="frenzy-tint"></div>
+      <div id="dmg-arc" class="dmg-arc"></div>
+      <div id="banner" class="banner"></div>
+      <button id="btn-menu" class="icon-btn menu-btn" aria-label="Menu">≡</button>
+      <button id="btn-fullscreen" class="icon-btn fs-btn hidden" aria-label="Fullscreen">⛶</button>
+      <div id="touch" class="touch hidden">
+        <div id="stick-l" class="stick hidden"><div class="knob"></div></div>
+        <div id="stick-r" class="stick hidden"><div class="knob"></div></div>
+        <div id="touch-btns" class="touch-btns">
+          <button data-act="swap" class="tbtn">SWAP</button>
+          <button data-act="reload" class="tbtn">RELOAD</button>
+          <button data-act="grenade" class="tbtn">NADE</button>
+          <button data-act="melee" class="tbtn">KNIFE</button>
+        </div>
+      </div>
+      <div id="debug" class="debug hidden"></div>
+    </section>
+
+    <!-- Respawn overlay -->
+    <section id="scr-respawn" class="overlay center hidden">
+      <p id="killed-by" class="killed-by">Eliminated</p>
+      <div class="ring-wrap">
+        <svg viewBox="0 0 100 100" class="ring"><circle cx="50" cy="50" r="44" class="ring-bg"/><circle id="ring-fg" cx="50" cy="50" r="44" class="ring-fg"/></svg>
+        <span id="respawn-count">4</span>
+      </div>
+      <div id="primary-pick" class="row">
+        <button data-w="1" class="btn ghost pick">AR</button>
+        <button data-w="2" class="btn ghost pick">Shotgun</button>
+        <button data-w="3" class="btn ghost pick">Sniper</button>
+      </div>
+    </section>
+
+    <!-- Full scoreboard (Tab) and round end -->
+    <section id="scr-board" class="overlay center hidden">
+      <h2 id="board-title">SCOREBOARD</h2>
+      <table class="board"><thead><tr><th>#</th><th></th><th>Name</th><th>Score</th><th>K</th><th>D</th></tr></thead><tbody id="board-body"></tbody></table>
+      <div id="end-actions" class="row hidden">
+        <button id="btn-again" class="btn big">Play again</button>
+        <span id="wait-host" class="muted hidden">Waiting for host…</span>
+        <button id="btn-end-leave" class="btn ghost">Leave</button>
+      </div>
+    </section>
+
+    <!-- Menu -->
+    <section id="scr-menu" class="overlay center hidden">
+      <h2>MENU</h2>
+      <div class="panel">
+        <button id="btn-menu-resume" class="btn big">Resume</button>
+        <button id="btn-menu-settings" class="btn ghost">Settings</button>
+        <button id="btn-menu-leave" class="btn ghost">Leave room</button>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section id="scr-settings" class="overlay center hidden">
+      <h2>SETTINGS</h2>
+      <div class="panel">
+        <label class="field">Master volume<input id="set-master" type="range" min="0" max="1" step="0.05" /></label>
+        <label class="field">Music volume<input id="set-music" type="range" min="0" max="1" step="0.05" /></label>
+        <label class="field">SFX volume<input id="set-sfx" type="range" min="0" max="1" step="0.05" /></label>
+        <label class="field">Graphics quality
+          <select id="set-quality"><option value="auto">Auto</option><option value="high">High</option><option value="low">Low</option></select>
+        </label>
+        <label class="check"><input id="set-fps" type="checkbox" /> Show FPS / debug</label>
+        <label class="check"><input id="set-lefty" type="checkbox" /> Left-handed touch layout</label>
+        <button id="btn-settings-close" class="btn big">Done</button>
+      </div>
+    </section>
+
+    <!-- How to play -->
+    <section id="scr-howto" class="overlay center hidden">
+      <h2>HOW TO PLAY</h2>
+      <div class="panel wide howto">
+        <p>Free-for-all on RIG-7. Most score when the timer hits zero wins. Kill <b>+100</b>. Killing a gold <b>bounty</b> (3-kill streak) <b>+50</b>. Dying to acid or your own grenade <b>−50</b>.</p>
+        <p><b>Keyboard &amp; mouse:</b> A/D move · W or Space thrust (tap = hop, hold = fly) · S drop through platforms · mouse aims · click fires · right-click or F knife · G grenade · Q swap · R reload · Tab scoreboard · Esc menu.</p>
+        <p><b>Touch:</b> left thumb moves (push up to fly, down to drop), right thumb aims and fires when pushed far. Buttons: swap, reload, grenade, knife.</p>
+        <p><b>Modes:</b> Arms (guns), Blades (knives, +15% speed), Boom (unlimited grenades). Shotgun recoil and grenade blasts throw you around: chain them with the jetpack. The last minute is <b>FRENZY</b>: 1.5× damage and faster fuel. Stay out of the green acid.</p>
+        <button id="btn-howto-close" class="btn big">Got it</button>
+      </div>
+    </section>
+
+    <div id="ov-reconnect" class="notice hidden">Reconnecting…</div>
+    <div id="ov-rotate" class="rotate hidden"><div>↻</div><p>Rotate your phone to landscape</p></div>
+    <div id="toasts" class="toasts"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
