@@ -1,12 +1,16 @@
-// Publish the module to Maincloud under the database name in client/.env.production.
-// Usage: npm run publish:cloud            (add -- --delete-data to wipe an incompatible schema)
+// Publish the module to the production server named in client/.env.production.
+// VITE_STDB_URI decides where: https://maincloud.spacetimedb.com (SpacetimeDB's cloud, Virginia)
+// or https://<your-host> (a self-hosted SpacetimeDB, e.g. the Oracle Cloud server in India).
+// Usage: npm run publish:cloud            (add -- --delete-data=always after schema changes)
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 
 const env = readFileSync(new URL('../client/.env.production', import.meta.url), 'utf8');
 const db = /VITE_STDB_DB=(.+)/.exec(env)?.[1].trim();
-if (!db) throw new Error('VITE_STDB_DB missing from client/.env.production');
+const uri = /VITE_STDB_URI=(.+)/.exec(env)?.[1].trim();
+if (!db || !uri) throw new Error('VITE_STDB_DB and VITE_STDB_URI must be set in client/.env.production');
+const server = uri.includes('maincloud.spacetimedb.com') ? 'maincloud' : uri;
 const extra = process.argv.slice(2).join(' ');
-const cmd = `spacetime publish ${db} --server maincloud --module-path server --yes ${extra}`;
+const cmd = `spacetime publish ${db} --server ${server} --module-path server --yes ${extra}`;
 console.log(`> ${cmd}`);
 execSync(cmd, { stdio: 'inherit' });

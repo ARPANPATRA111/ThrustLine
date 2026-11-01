@@ -94,7 +94,9 @@ an arrow at the screen edge points toward them; enemies already on screen get no
 The game server is SpacetimeDB Maincloud, which runs in Virginia, USA. From India the network round
 trip alone is about 230–250 ms, so that is the ping you will see. The netcode is built to stay smooth
 and fair at that latency (see Architecture). A lower ping would need a SpacetimeDB server closer to
-the players (self-hosted on a VPS in the region); the client only needs `VITE_STDB_URI` changed.
+the players. **[deploy/oracle/](deploy/oracle/README.md)** sets one up for free on Oracle Cloud's Always Free tier in
+Hyderabad/Mumbai (measured ~25–40 ms from India vs ~250 ms to Maincloud and 87–235 ms via Cloudflare):
+one setup script on the server, then change `VITE_STDB_URI` and run `npm run deploy`.
 
 ### Weapons
 
@@ -199,7 +201,7 @@ tests/e2e/                 Playwright multi-client tests
 docs/                      ALGORITHMS.md, LAB_MAPPING.md, screenshots/
 ```
 
-More detail: [docs/ALGORITHMS.md](docs/ALGORITHMS.md) · Lab requirements: [docs/LAB_MAPPING.md](docs/LAB_MAPPING.md) · Deviations: [DECISIONS.md](DECISIONS.md)
+Full explanation for presenting and the viva: **[docs/GAME_GUIDE.md](docs/GAME_GUIDE.md)** · More detail: [docs/ALGORITHMS.md](docs/ALGORITHMS.md) · Lab requirements: [docs/LAB_MAPPING.md](docs/LAB_MAPPING.md) · Deviations: [DECISIONS.md](DECISIONS.md)
 
 ## Stack
 

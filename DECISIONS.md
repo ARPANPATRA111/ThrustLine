@@ -90,3 +90,10 @@ Every deviation from the build brief, and every non-obvious choice, one line eac
 - Netcode: snapshots stamped with the sender's clock (`pstate.sentMs`), per-player adaptive interpolation delay (`LagEstimator`), movement validated on the client timeline with a 350 ms time-debt cap, lag-compensated hit claims from a 16-sample position history (`viewMs` per claim; cover still wins) · a fixed 100 ms delay and server-clock movement checks only work on low-latency links; at ~250 ms they caused constant extrapolation snaps and rejected moves.
 - The latency e2e test simulates ~250 ms RTT with jitter by wrapping WebSocket in the browser (copying send buffers, since the SDK reuses them) · Chromium's network throttling doesn't apply to WebSockets.
 - Ping stays ~250 ms because Maincloud runs in Virginia, USA (measured TCP connect ~250 ms from here); no code change can remove that · reducing it needs a SpacetimeDB server near the players (self-hosting costs money, so it wasn't done).
+
+## Round 4: server location
+
+- Measured latency options from India before choosing: Maincloud (Virginia) ~245–305 ms; a Cloudflare Durable Object probe 87–235 ms (free-plan traffic from this ISP is served from Singapore / Hong Kong / Tokyo and the route changes per connection); AWS Mumbai ~67 ms; Oracle Cloud Mumbai ~38 ms; Oracle Cloud Hyderabad ~25 ms · decide on data, not assumptions. The probe Worker was deleted afterwards.
+- Chosen path: self-host the same SpacetimeDB module on Oracle Cloud Always Free in India (`deploy/oracle/`: one setup script with SpacetimeDB as a systemd service and Caddy for automatic HTTPS on `<ip>.sslip.io`) · ~10× lower ping, free, zero code changes; a Cloudflare rewrite would replace a tested backend for an inconsistent gain.
+- `scripts/publish-cloud.mjs` now publishes to whatever server `VITE_STDB_URI` names (Maincloud or a self-hosted URL) · switching servers is one config change plus `npm run deploy`.
+- `docs/GAME_GUIDE.md` added as the single explanation document for the presentation and viva.
