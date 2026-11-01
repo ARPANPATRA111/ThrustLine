@@ -1,0 +1,12 @@
+{
+  "name": "thrustline-server",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "spacetime build"
+  },
+  "dependencies": {
+    "spacetimedb": "^2.14.0"
+  }
+}
