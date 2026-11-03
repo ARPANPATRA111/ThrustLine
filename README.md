@@ -70,9 +70,11 @@ Touch buttons sit on an arc around the aim stick and only appear when the mode u
 | Friendly fire | Teams only, on by default: teammates' hits count (a teamkill costs 50) |
 | Floating grenades | Zero-g: grenades drift where you throw them and slow to a stop |
 
-Everyone in the room sees the settings; only the host can change them. The server enforces every
-rule. The host can also **kick** a player (✕ on their row; they can't rejoin that room) and move
-players between teams (⇄). In a team match each player can press **Switch team**.
+Everyone in the room sees the settings; only the host can change them. Every toggle starts **on**
+(infinite jetpack, infinite ammo, pickups, acid, Frenzy, floating grenades), so a fresh room is the
+fastest, most chaotic version; the host turns off whatever the group does not want. The server
+enforces every rule. The host can also **kick** a player (✕ on their row; they can't rejoin that
+room) and move players between teams (⇄). In a team match each player can press **Switch team**.
 
 After a round, everyone sees the results, then the whole room returns to the lobby automatically
 after 12 seconds (the host can press **Play again** or **Lobby now** sooner).
@@ -114,7 +116,7 @@ one-way platforms: you can jump up through them and bullets pass through them.
 
 ## What makes it THRUSTLINE (customisation)
 
-- **Jetpack fuel:** 100 fuel, ~2.6 s of flight, refills after 0.4 s on the ground. Tap for a hop, hold to fly.
+- **Jetpack fuel:** 100 fuel, ~2.6 s of flight, refills after 0.15 s on the ground (a full tank in ~1.7 s). Tap for a hop, hold to fly.
 - **Blast-jumping:** shotgun recoil (520) and grenade knockback (650) push you; chain them with the jetpack to move fast.
 - **Bounty:** a 3-kill streak makes you glow gold and worth +50 to whoever stops you.
 - **Frenzy:** the last 60 s: damage ×1.5, fuel refills twice as fast, red edge tint, FRENZY banner, faster music.

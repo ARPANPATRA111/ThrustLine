@@ -26,8 +26,8 @@ export const JET_ACCEL = 3000; // net 1200 upward once gravity is subtracted
 export const JET_MAX_UP = 420;
 export const FUEL_MAX = 100;
 export const FUEL_DRAIN = 38; // per second while thrusting (~2.6 s of flight)
-export const FUEL_REFILL = 30; // per second
-export const FUEL_REFILL_DELAY = 0.4; // seconds on the ground before refilling starts
+export const FUEL_REFILL = 60; // per second (full tank in ~1.7 s, so the action keeps moving)
+export const FUEL_REFILL_DELAY = 0.15; // seconds on the ground before refilling starts
 export const HOP_SPEED = 520;
 export const HOP_FUEL = 6;
 
@@ -92,8 +92,8 @@ export const BOT_EASY = 0;
 export const BOT_NORMAL = 1;
 export const BOT_HARD = 2;
 export const DEFAULT_RULES = {
-  infiniteFuel: false,
-  infiniteAmmo: false,
+  infiniteFuel: true,
+  infiniteAmmo: true,
   pickups: true,
   acid: true,
   frenzy: true,
@@ -103,7 +103,7 @@ export const DEFAULT_RULES = {
   /** Teams only: teammates can hurt each other. */
   friendlyFire: true,
   /** Grenades ignore gravity and drift where they are thrown (zero-g). */
-  floatingGrenades: false,
+  floatingGrenades: true,
 };
 
 // ---------- Grenades ----------

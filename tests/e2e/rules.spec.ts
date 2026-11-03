@@ -54,8 +54,17 @@ test('host rules are applied and enforced', async ({ browser }) => {
   await host.click('#mode-cards [data-mode="3"]');
   await host.click('#seg-round [data-v="30"]');
   await host.click('#seg-hp [data-v="200"]');
-  for (const rule of ['infiniteFuel', 'infiniteAmmo']) await host.click(`label.tog:has(input[data-rule="${rule}"])`);
-  for (const rule of ['acid', 'pickups']) await host.click(`label.tog:has(input[data-rule="${rule}"])`);
+  // Defaults are on for infinite fuel/ammo, acid and pickups, so set each rule to the state the
+  // test needs instead of assuming a default (a click toggles, it does not "enable").
+  const setRule = async (rule: string, on: boolean) => {
+    const box = guest.locator(`input[data-rule="${rule}"]`);
+    if ((await box.isChecked()) !== on) await host.click(`label.tog:has(input[data-rule="${rule}"])`);
+    await expect(box).toBeChecked({ checked: on });
+  };
+  await setRule('infiniteFuel', true);
+  await setRule('infiniteAmmo', true);
+  await setRule('acid', false);
+  await setRule('pickups', false);
   // The guest sees the same settings, read-only.
   await expect(guest.locator('#mode-cards [data-mode="3"]')).toHaveClass(/on/);
   await expect(guest.locator('#seg-hp [data-v="200"]')).toHaveClass(/on/);
@@ -129,4 +138,31 @@ test('host rules are applied and enforced', async ({ browser }) => {
   await host.evaluate(() => (window as any).__tl.game.controls.press('grenade')); // what the NADE touch button does
   await expect.poll(async () => (await g(host)).booms, { timeout: 5000 }).toBeGreaterThan(booms);
   console.log('Boom mode: grenade button throws');
+});
+
+// A burst of clicks used to merge into the same stale server snapshot: one edit was lost and the
+// next lobby render reverted the switch. The local draft must settle on the parity of the clicks.
+test('rapid house-rule toggles settle on one state', async ({ browser }) => {
+  const host = await openClient(browser, '?dev=1', 'Fast');
+  await host.click('#btn-create');
+  await host.waitForSelector('#scr-lobby:not(.hidden)');
+  const code = (await host.textContent('#lobby-code'))!.trim();
+  const guest = await openClient(browser, `?room=${code}&dev=1`, 'Slow');
+  await expect(host.locator('#lobby-players li.pl')).toHaveCount(2);
+
+  const rule = 'floatingGrenades';
+  const label = host.locator(`label.tog:has(input[data-rule="${rule}"])`);
+  const hostBox = host.locator(`input[data-rule="${rule}"]`);
+  const guestBox = guest.locator(`input[data-rule="${rule}"]`);
+  await expect(hostBox).toBeChecked(); // on by default
+
+  // Five clicks in one burst: odd -> off, and both clients must agree.
+  await label.click({ clickCount: 5, delay: 10 });
+  await expect(hostBox).not.toBeChecked();
+  await expect(guestBox).not.toBeChecked();
+
+  // Three more: back on.
+  await label.click({ clickCount: 3, delay: 10 });
+  await expect(hostBox).toBeChecked();
+  await expect(guestBox).toBeChecked();
 });

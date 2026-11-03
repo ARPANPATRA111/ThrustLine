@@ -167,7 +167,13 @@ export function makeAcid(rect: { x: number; y: number; w: number; h: number }): 
   return ts;
 }
 
-/** Three backdrop textures: far skyline, mid pipes/girders, near fog band. */
+/**
+ * Three backdrop textures: far skyline, mid pipes/girders, near fog band.
+ * Everything is generated once at load and tiles horizontally (offsets wrap at W). The art is
+ * deliberately layered: a deep sky with a moon and lit towers, a mid band of pipes/trusses and
+ * hanging lamps, then a soft acid-glow fog with a foreground railing. Kept in code so there is
+ * no image download and the palette can follow the map.
+ */
 export function makeParallaxTextures(): Texture[] {
   const W = 1024, H = 512;
   const mk = (draw: (g: CanvasRenderingContext2D) => void) => {
@@ -180,48 +186,232 @@ export function makeParallaxTextures(): Texture[] {
   // Deterministic pseudo-random so the backdrop looks the same every load.
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  /** Draw at x, and again shifted by -W when the shape crosses the right edge (seamless tile). */
+  const wrapped = (x: number, w: number, draw: (ox: number) => void) => {
+    draw(x);
+    if (x + w > W) draw(x - W);
+    if (x < 0) draw(x + W);
+  };
+  /** A soft radial bloom, used for the moon, lamps and acid haze. */
+  const glow = (g: CanvasRenderingContext2D, x: number, y: number, r: number, inner: string, outer: string) => {
+    const rad = g.createRadialGradient(x, y, 0, x, y, r);
+    rad.addColorStop(0, inner);
+    rad.addColorStop(1, outer);
+    g.fillStyle = rad;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+  };
 
   const far = mk((g) => {
+    // Sky: near-black overhead, indigo toward the horizon.
     const sky = g.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, '#0b1020');
-    sky.addColorStop(1, '#1b2340');
+    sky.addColorStop(0, '#05070f');
+    sky.addColorStop(0.55, '#0a1024');
+    sky.addColorStop(1, '#202748');
     g.fillStyle = sky;
     g.fillRect(0, 0, W, H);
-    for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(230,236,255,${0.2 + rnd() * 0.5})`; g.fillRect(rnd() * W, rnd() * H * 0.5, 1.5, 1.5); }
-    // Distant rig silhouettes.
-    g.fillStyle = '#141a33';
-    for (let x = 0; x < W; x += 90 + rnd() * 60) {
-      const w = 30 + rnd() * 40;
-      const h = 120 + rnd() * 200;
-      g.fillRect(x, H - h, w, h);
-      g.fillRect(x - 12, H - h, w + 24, 8);
-      g.fillRect(x + w / 2 - 2, H - h - 40, 4, 40);
-      g.fillStyle = 'rgba(255,90,90,0.8)';
-      g.fillRect(x + w / 2 - 2, H - h - 44, 4, 4);
-      g.fillStyle = '#141a33';
+
+    // Faint nebulae, duplicated so the wrap is invisible.
+    for (const [x, y, r, a] of [[180, 120, 190, 0.1], [700, 80, 230, 0.08], [960, 220, 160, 0.07]] as const) {
+      wrapped(x, r, (ox) => glow(g, ox, y, r, `rgba(70,110,255,${a})`, 'rgba(70,110,255,0)'));
     }
+
+    // Stars with a few brighter ones (deterministic positions/alpha).
+    for (let i = 0; i < 110; i++) {
+      const x = rnd() * W;
+      const y = rnd() * H * 0.62;
+      const s = rnd() < 0.12 ? 2.2 : 1.1;
+      g.fillStyle = `rgba(226,235,255,${0.15 + rnd() * 0.65})`;
+      g.fillRect(x, y, s, s);
+      if (s > 2) {
+        g.fillStyle = 'rgba(170,210,255,0.25)';
+        g.fillRect(x - 2, y + 0.5, 6, 0.8);
+        g.fillRect(x + 0.5, y - 2, 0.8, 6);
+      }
+    }
+
+    // Moon with a soft halo and a shadowed limb (single object, so no wrap needed).
+    glow(g, 812, 118, 96, 'rgba(170,200,255,0.20)', 'rgba(170,200,255,0)');
+    const moon = g.createRadialGradient(796, 102, 6, 812, 118, 46);
+    moon.addColorStop(0, '#e8efff');
+    moon.addColorStop(0.65, '#b9c8ea');
+    moon.addColorStop(1, '#7986b4');
+    g.fillStyle = moon;
+    g.beginPath();
+    g.arc(812, 118, 42, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = 'rgba(7,10,22,0.35)';
+    g.beginPath();
+    g.arc(826, 108, 38, 0, Math.PI * 2);
+    g.fill();
+
+    // Two distant rig layers (dark, then slightly lighter with lit windows).
+    const skyline = (base: number, color: string, minH: number, maxH: number, step: number, lit: number) => {
+      for (let x = -40; x < W + 40; x += step + rnd() * 34) {
+        const w = 26 + rnd() * 46;
+        const h = minH + rnd() * (maxH - minH);
+        const top = base - h;
+        wrapped(x, w, (ox) => {
+          g.fillStyle = color;
+          g.fillRect(ox, top, w, h);
+          // Roof structure and antenna.
+          g.fillRect(ox - 4, top, w + 8, 5);
+          g.fillRect(ox + w * 0.5 - 1.5, top - 26 - rnd() * 34, 3, 30);
+          // Lit windows: a sparse grid.
+          g.fillStyle = `rgba(255,205,120,${lit})`;
+          for (let wy = top + 12; wy < base - 8; wy += 14) {
+            for (let wx = ox + 6; wx < ox + w - 6; wx += 11) if (rnd() < 0.22) g.fillRect(wx, wy, 3, 4);
+          }
+          // Red aircraft beacon.
+          g.fillStyle = 'rgba(255,82,92,0.9)';
+          g.fillRect(ox + w * 0.5 - 2, top - 30 - rnd() * 32, 4, 4);
+        });
+      }
+    };
+    skyline(H - 30, '#0e1328', 90, 210, 78, 0.28);
+    skyline(H - 10, '#161c36', 40, 130, 96, 0.45);
+
+    // Horizon haze.
+    const haze = g.createLinearGradient(0, H - 90, 0, H);
+    haze.addColorStop(0, 'rgba(90,120,220,0)');
+    haze.addColorStop(1, 'rgba(120,160,255,0.12)');
+    g.fillStyle = haze;
+    g.fillRect(0, H - 90, W, 90);
   });
+
   const mid = mk((g) => {
-    g.strokeStyle = 'rgba(42,51,80,0.75)';
-    g.lineWidth = 10;
+    g.lineCap = 'round';
+    // Horizontal girders.
     for (let i = 0; i < 4; i++) {
-      const y = 120 + i * 90 + rnd() * 30;
-      g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
+      const y = 96 + i * 104;
+      g.fillStyle = i % 2 ? 'rgba(34,42,70,0.62)' : 'rgba(42,52,84,0.7)';
+      g.fillRect(0, y, W, i % 2 ? 7 : 10);
+      g.fillStyle = 'rgba(90,110,170,0.18)';
+      g.fillRect(0, y, W, 2);
+      // Rivet line.
+      g.fillStyle = 'rgba(10,14,28,0.5)';
+      for (let x = 0; x < W; x += 24) g.fillRect(x, y + 4, 3, 2);
     }
-    g.lineWidth = 4;
-    g.strokeStyle = 'rgba(42,51,80,0.6)';
-    for (let x = 0; x < W; x += 128) {
-      g.beginPath(); g.moveTo(x, 100); g.lineTo(x, H); g.stroke();
-      g.beginPath(); g.moveTo(x, 100); g.lineTo(x + 128, H); g.stroke();
+
+    // Vertical columns with crossed bracing. Columns at fixed boundaries tile exactly.
+    for (let x = 0; x <= W; x += 256) {
+      g.fillStyle = 'rgba(30,38,66,0.8)';
+      g.fillRect(x - 7, 60, 14, H - 60);
+      g.fillStyle = 'rgba(90,110,170,0.16)';
+      g.fillRect(x - 7, 60, 3, H - 60);
+      g.strokeStyle = 'rgba(52,66,108,0.55)';
+      g.lineWidth = 5;
+      for (let y = 104; y < H - 40; y += 128) {
+        g.beginPath();
+        g.moveTo(x, y);
+        g.lineTo(x + 256, y + 128);
+        g.moveTo(x + 256, y);
+        g.lineTo(x, y + 128);
+        g.stroke();
+      }
+    }
+
+    // Pipes with flange rings, plus a warning-striped service pipe.
+    const pipe = (y: number, thick: number, color: string) => {
+      g.strokeStyle = color;
+      g.lineWidth = thick;
+      g.beginPath();
+      g.moveTo(0, y);
+      g.lineTo(W, y);
+      g.stroke();
+      g.fillStyle = 'rgba(12,17,34,0.55)';
+      for (let x = 30; x < W; x += 96) g.fillRect(x, y - thick / 2 - 2, 7, thick + 4);
+      g.fillStyle = 'rgba(140,170,230,0.18)';
+      g.fillRect(0, y - thick / 2, W, 1.5);
+    };
+    pipe(150, 12, 'rgba(38,48,80,0.75)');
+    pipe(330, 18, 'rgba(34,44,74,0.8)');
+    pipe(438, 9, 'rgba(44,56,92,0.7)');
+
+    // A cable span with hanging work lamps; ends sit on the columns so the tile is seamless.
+    for (let x = 0; x < W; x += 256) {
+      const sag = 42;
+      g.strokeStyle = 'rgba(18,24,44,0.85)';
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(x, 168);
+      g.quadraticCurveTo(x + 128, 168 + sag * 2, x + 256, 168);
+      g.stroke();
+      for (const t of [0.28, 0.5, 0.72]) {
+        const lx = x + 256 * t;
+        const ly = 168 + sag * 2 * (2 * t * (1 - t));
+        g.strokeStyle = 'rgba(18,24,44,0.85)';
+        g.beginPath();
+        g.moveTo(lx, ly);
+        g.lineTo(lx, ly + 16);
+        g.stroke();
+        glow(g, lx, ly + 22, 34, 'rgba(255,196,110,0.28)', 'rgba(255,196,110,0)');
+        g.fillStyle = '#ffd28a';
+        g.beginPath();
+        g.arc(lx, ly + 18, 3.2, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+
+    // Warning chevrons on the lowest service pipe.
+    g.fillStyle = 'rgba(255,196,90,0.35)';
+    for (let x = 0; x < W; x += 48) {
+      g.beginPath();
+      g.moveTo(x, 449);
+      g.lineTo(x + 11, 449);
+      g.lineTo(x + 18, 455);
+      g.lineTo(x + 11, 461);
+      g.lineTo(x, 461);
+      g.lineTo(x + 7, 455);
+      g.closePath();
+      g.fill();
+    }
+
+    // Sparse hanging cables, drawn full-width so they tile.
+    g.strokeStyle = 'rgba(14,20,38,0.6)';
+    g.lineWidth = 1.5;
+    for (const y of [58, 76, 94]) {
+      g.beginPath();
+      g.moveTo(0, y);
+      g.bezierCurveTo(W * 0.3, y + 16, W * 0.7, y - 12, W, y);
+      g.stroke();
     }
   });
+
   const near = mk((g) => {
+    // Fog: cyan at the top, acid green near the floor.
     const fog = g.createLinearGradient(0, 0, 0, H);
-    fog.addColorStop(0, 'rgba(120,140,255,0)');
-    fog.addColorStop(0.7, 'rgba(120,140,255,0.06)');
-    fog.addColorStop(1, 'rgba(124,255,79,0.12)');
+    fog.addColorStop(0, 'rgba(90,120,220,0)');
+    fog.addColorStop(0.68, 'rgba(90,150,220,0.05)');
+    fog.addColorStop(0.9, 'rgba(90,220,190,0.10)');
+    fog.addColorStop(1, 'rgba(124,255,79,0.18)');
     g.fillStyle = fog;
     g.fillRect(0, 0, W, H);
+
+    // Drifting dust motes for depth.
+    for (let i = 0; i < 46; i++) {
+      const x = rnd() * W;
+      const y = H * 0.45 + rnd() * H * 0.5;
+      const r = 0.6 + rnd() * 1.5;
+      g.fillStyle = `rgba(180,240,230,${0.05 + rnd() * 0.1})`;
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+    }
+
+    // Foreground railing: dark posts with a lit top rail, seamless at the tile boundary.
+    g.fillStyle = 'rgba(5,9,20,0.55)';
+    g.fillRect(0, H - 74, W, 74);
+    g.fillStyle = 'rgba(120,150,220,0.10)';
+    g.fillRect(0, H - 74, W, 2);
+    for (let x = 0; x <= W; x += 64) {
+      g.fillStyle = 'rgba(5,9,20,0.7)';
+      g.fillRect(x - 2, H - 74, 4, 56);
+      g.fillStyle = 'rgba(140,170,230,0.10)';
+      g.fillRect(x - 2, H - 74, 1.5, 56);
+    }
+    g.fillStyle = 'rgba(5,9,20,0.75)';
+    g.fillRect(0, H - 20, W, 20);
   });
+
   return [far, mid, near];
 }

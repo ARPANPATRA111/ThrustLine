@@ -25,6 +25,15 @@ export class LobbyView {
   private host = false;
   private segs = new Map<string, string>();
   private players: Player[] = [];
+  /**
+   * Local copy of the settings. Rapid clicks used to merge into the last server snapshot, so
+   * two clicks in the same round trip clobbered each other and the next render reverted the
+   * checkbox. The draft is the source of truth for the controls while an edit is in flight.
+   */
+  private draft: { mode: number; roundSec: number; teams: boolean; rules: Rules } | null = null;
+  private pending = false;
+  private pendingAt = 0;
+  private roomId = '';
 
   constructor(private act: LobbyActions) {
     $('mode-cards').querySelectorAll<HTMLButtonElement>('.mode').forEach((b) => {
@@ -45,12 +54,37 @@ export class LobbyView {
     });
   }
 
+  private fromRoom(room: Room): { mode: number; roundSec: number; teams: boolean; rules: Rules } {
+    return { mode: room.mode, roundSec: room.roundSec, teams: room.teams, rules: { ...room.rules } };
+  }
+
+  /** Does the server row now carry everything we last asked for? */
+  private matches(room: Room): boolean {
+    const d = this.draft;
+    if (!d) return true;
+    if (d.mode !== room.mode || d.roundSec !== room.roundSec || d.teams !== room.teams) return false;
+    for (const k of Object.keys(d.rules) as (keyof Rules)[]) if (d.rules[k] !== room.rules[k]) return false;
+    return true;
+  }
+
   /** Apply a partial change to the current settings and send it (host only). */
   private change(c: { mode?: number; roundSec?: number; teams?: boolean; rules?: Partial<Rules> }): void {
     const r = this.room;
     if (!r || !this.host) return;
+    const base = this.draft ?? this.fromRoom(r);
+    this.draft = {
+      mode: c.mode ?? base.mode,
+      roundSec: c.roundSec ?? base.roundSec,
+      teams: c.teams ?? base.teams,
+      rules: { ...base.rules, ...c.rules },
+    };
+    this.pending = true;
+    this.pendingAt = performance.now();
     this.act.click();
-    this.act.send(c.mode ?? r.mode, c.roundSec ?? r.roundSec, c.teams ?? r.teams, { ...r.rules, ...c.rules });
+    // Paint immediately from the draft so a second fast click merges with the first instead
+    // of reading the stale server row.
+    if (this.room) this.paint(this.room, this.draft, this.host);
+    this.act.send(this.draft.mode, this.draft.roundSec, this.draft.teams, this.draft.rules);
   }
 
   /** Build a segmented control once per option list; then just move the highlight. */
@@ -72,7 +106,7 @@ export class LobbyView {
     const host = isHostRow ? `<img class="crown" src="${crownURL}" width="18" height="12" alt="host">` : '';
     const you = key === myKey ? '<span class="you-tag">YOU</span>' : '';
     const cpu = p.isBot ? '<span class="cpu-tag">CPU</span>' : '';
-    const ping = !p.isBot && p.pingMs ? `<span class="ping-tag">${p.pingMs} ms</span>` : '';
+    const ping = !p.isBot ? `<span class="ping-tag" data-ping="${key}"></span>` : '';
     const color = playerCss(p.colorIdx, room.teams ? p.team : 0);
     const initial = escapeHtml(p.name.replace(/^CPU /, '').charAt(0).toUpperCase() || '?');
     // Host tools: move to the other team, remove from the room (not on your own row).
@@ -85,7 +119,39 @@ export class LobbyView {
     return `<li class="pl${team}"><span class="avatar" style="background:${color};color:${color}"><span style="color:#071022">${initial}</span></span><span class="pname">${escapeHtml(p.name)}</span><span class="tag">${cpu}${you}${ping}${host}${tools}</span></li>`;
   }
 
+  /** Update just the ping text; the row markup (and its entry animation) stays untouched. */
+  private paintPings(players: Player[]): void {
+    for (const el of document.querySelectorAll<HTMLElement>('#lobby-players .ping-tag[data-ping]')) {
+      const p = players.find((q) => q.identity.toHexString() === el.dataset.ping);
+      const text = p && p.pingMs ? `${p.pingMs} ms` : '';
+      if (el.textContent !== text) el.textContent = text;
+    }
+  }
+
+  /** Paint the controls from a settings snapshot (the server row, or the local draft). */
+  private paint(room: Room, d: { mode: number; roundSec: number; teams: boolean; rules: Rules }, isHost: boolean): void {
+    $('mode-cards').classList.toggle('locked', !isHost);
+    $('mode-cards').querySelectorAll<HTMLButtonElement>('.mode').forEach((b) => b.classList.toggle('on', Number(b.dataset.mode) === d.mode));
+    this.seg('seg-teams', [{ v: 0, label: 'Free-for-all' }, { v: 1, label: 'Red vs Blue' }], d.teams ? 1 : 0, (v) => this.change({ teams: v === 1 }));
+    const rounds = room.dev ? [C.DEV_ROUND_SEC, ...C.ROUND_LENGTHS_SEC] : C.ROUND_LENGTHS_SEC;
+    this.seg('seg-round', rounds.map((v) => ({ v, label: roundLabel(v) })), d.roundSec, (v) => this.change({ roundSec: v }));
+    this.seg('seg-hp', C.HP_OPTIONS.map((v) => ({ v, label: `${v}` })), d.rules.maxHp, (v) => this.change({ rules: { maxHp: v } }));
+    this.seg('seg-respawn', C.RESPAWN_OPTIONS.map((v) => ({ v, label: `${v}s` })), d.rules.respawnSec, (v) => this.change({ rules: { respawnSec: v } }));
+    this.seg('seg-bot', SKILL_LABELS.map((label, v) => ({ v, label })), d.rules.botSkill, (v) => this.change({ rules: { botSkill: v } }));
+    document.querySelectorAll<HTMLInputElement>('#room-settings [data-rule]').forEach((el) => {
+      el.checked = Boolean(d.rules[el.dataset.rule as keyof Rules]);
+      el.disabled = !isHost;
+    });
+    $('tog-ff').classList.toggle('hidden', !d.teams);
+  }
+
   render(room: Room, players: Player[], myKey: string, isHost: boolean, crownURL: string): void {
+    const id = room.id.toString();
+    if (id !== this.roomId) {
+      this.roomId = id;
+      this.draft = null;
+      this.pending = false;
+    }
     this.room = room;
     this.host = isHost;
     this.players = players;
@@ -111,21 +177,16 @@ export class LobbyView {
       list.innerHTML = html;
       list.dataset.html = html;
     }
+    this.paintPings(players);
 
     // Settings (read-only for everyone but the host).
     $('host-note').textContent = isHost ? 'You are the host' : 'Host controls';
-    $('mode-cards').classList.toggle('locked', !isHost);
-    $('mode-cards').querySelectorAll<HTMLButtonElement>('.mode').forEach((b) => b.classList.toggle('on', Number(b.dataset.mode) === room.mode));
-    this.seg('seg-teams', [{ v: 0, label: 'Free-for-all' }, { v: 1, label: 'Red vs Blue' }], room.teams ? 1 : 0, (v) => this.change({ teams: v === 1 }));
-    const rounds = room.dev ? [C.DEV_ROUND_SEC, ...C.ROUND_LENGTHS_SEC] : C.ROUND_LENGTHS_SEC;
-    this.seg('seg-round', rounds.map((v) => ({ v, label: roundLabel(v) })), room.roundSec, (v) => this.change({ roundSec: v }));
-    this.seg('seg-hp', C.HP_OPTIONS.map((v) => ({ v, label: `${v}` })), room.rules.maxHp, (v) => this.change({ rules: { maxHp: v } }));
-    this.seg('seg-respawn', C.RESPAWN_OPTIONS.map((v) => ({ v, label: `${v}s` })), room.rules.respawnSec, (v) => this.change({ rules: { respawnSec: v } }));
-    this.seg('seg-bot', SKILL_LABELS.map((label, v) => ({ v, label })), room.rules.botSkill, (v) => this.change({ rules: { botSkill: v } }));
-    document.querySelectorAll<HTMLInputElement>('#room-settings [data-rule]').forEach((el) => {
-      el.checked = Boolean(room.rules[el.dataset.rule as keyof Rules]);
-      el.disabled = !isHost;
-    });
-    $('tog-ff').classList.toggle('hidden', !room.teams);
+    // Once the server row carries the last edit, drop the draft. A send that never lands (a
+    // rejected/offline call) is abandoned after 4 s so the controls cannot stay stuck.
+    if (this.pending && (this.matches(room) || performance.now() - this.pendingAt > 4000)) {
+      this.pending = false;
+    }
+    if (!this.pending || !this.draft) this.draft = this.fromRoom(room);
+    this.paint(room, this.draft, isHost);
   }
 }

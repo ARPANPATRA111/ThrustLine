@@ -97,3 +97,17 @@ Every deviation from the build brief, and every non-obvious choice, one line eac
 - Chosen path: self-host the same SpacetimeDB module on Oracle Cloud Always Free in India (`deploy/oracle/`: one setup script with SpacetimeDB as a systemd service and Caddy for automatic HTTPS on `<ip>.sslip.io`) · ~10× lower ping, free, zero code changes; a Cloudflare rewrite would replace a tested backend for an inconsistent gain.
 - `scripts/publish-cloud.mjs` now publishes to whatever server `VITE_STDB_URI` names (Maincloud or a self-hosted URL) · switching servers is one config change plus `npm run deploy`.
 - `docs/GAME_GUIDE.md` added as the single explanation document for the presentation and viva.
+
+## Round 5: submission polish (defaults, feel, rendering, hardening)
+
+- Every house-rule toggle now defaults on (infinite jetpack/ammo, pickups, acid, Frenzy, floating grenades) · the requested fast, chaotic default; a fresh room needs no setup.
+- Jetpack refills at 60/s after 0.15 s on the ground (was 30/s after 0.4 s) · ~1.7 s from empty to full instead of ~3.3 s, so a normal match keeps moving.
+- `route()` is coalesced to one call per animation frame and the scoreboard only rewrites its table when the markup changes · player rows update ~20×/s (HP, ammo, ping), which used to rerun the router and replay lobby entry animations dozens of times a second.
+- Lobby pings are updated in place instead of replacing the player-list HTML · a ping change no longer replays `@keyframes rise` on every row.
+- The lobby keeps a local draft of settings and sends the full draft on every click · rapid clicks previously merged into the last server snapshot (lost update) and the next render reset the checkbox; the draft is discarded once the server row matches or after 4 s.
+- The network chip and the F3 panel are compacted on short screens; on touch the panel is one line (FPS · RTT · quality) · the six-line block covered the play area on phones.
+- `takeSync` sends a queued action after the 25 ms minimum gap instead of waiting for the next 50 ms tick · removes up to 50 ms from every shot, knife and throw; the local raycast also shows a provisional hit marker while the authoritative `hit_ev` is in flight.
+- Parallax backdrop rebuilt with a moon, nebulae, lit towers, trusses, pipes, hanging lamps and foreground fog/railing, all still generated in code and tiled seamlessly · the old three-layer version looked flat and obviously procedural.
+- Server rejects non-finite `sync` values (position, velocity, aim, melee/throw angles), malformed shots, more than 8 hit claims per shot and tracer arrays over 42 floats; `ping` ignores a non-finite `clientMs` · defensive validation for a client that sends NaN or oversized arrays.
+- Vercel now sends CSP, `nosniff`, referrer and permissions headers · all scripts and assets are first-party. `script-src` must include `'unsafe-eval'`: PixiJS v8 feature-detects its renderer with `eval`, and a policy without it fails at boot (caught by the production smoke test); the rest of the policy still limits sources, frames and objects.
+- The ping readout stays a real measurement · the 250 ms is the physical round trip to Virginia; shortening the display would misrepresent it. The honest levers are local hit feedback, immediate action sends and a closer server (`deploy/oracle/`), not a divided number.

@@ -520,6 +520,10 @@ export class Game implements WorldView {
       empty: () => this.audio.play('empty', 0.7),
       reload: () => this.audio.play('reload', 0.7),
       shake: (n) => this.camera.shake(n),
+      hit: (x, y) => {
+        // Provisional marker from our own raycast (the authoritative hit_ev follows).
+        this.hud.hit((x - this.camera.left) * this.camera.zoom, (y - this.camera.top) * this.camera.zoom, false);
+      },
     };
   }
 
@@ -752,8 +756,12 @@ export class Game implements WorldView {
       const players = this.allPlayers();
       this.hud.setMiniBoard(rankPlayers(players), this.net.myKey, this.teams);
       if (this.debug) {
-        this.hud.setDebug(
-          `FPS ${this.fps.toFixed(0)}\nRTT ${this.time.rtt.toFixed(0)} ms\nRenderer ${this.app.renderer.name}\nPlayers ${players.length}\nQuality ${this.quality} (step ${this.qualityStep})\nParticles cap ${this.particles.cap}`,
+        // On phones the detailed panel is one compact line: the three numbers that matter
+        // (frame rate, round trip, quality step) without covering the play area.
+        const compact = document.body.classList.contains('touch-mode');
+        this.hud.setDebug(compact
+          ? `${this.fps.toFixed(0)} FPS · ${this.time.rtt.toFixed(0)} ms · ${this.quality}${this.qualityStep ? ` ${this.qualityStep}` : ''}`
+          : `FPS ${this.fps.toFixed(0)}\nRTT ${this.time.rtt.toFixed(0)} ms\nRenderer ${this.app.renderer.name}\nPlayers ${players.length}\nQuality ${this.quality} (step ${this.qualityStep})\nParticles cap ${this.particles.cap}`,
         );
       } else this.hud.setDebug(null);
     }

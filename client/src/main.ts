@@ -170,7 +170,7 @@ async function boot(): Promise<void> {
     pong: (e) => time.onPong(e.clientMs, e.serverMicros),
     roomChanged: (r) => {
       if (r && r.id === myRoomId) game.setRoom(r);
-      route();
+      queueRoute();
     },
     playerUpsert: (p, old) => {
       const mine = p.identity.toHexString() === net.myKey;
@@ -179,7 +179,7 @@ async function boot(): Promise<void> {
         if (old && old.alive && !p.alive) game.killedBy = game.killedBy || 'Eliminated';
       }
       if (p.roomId === myRoomId) game.playerUpsert(p);
-      route();
+      queueRoute();
     },
     playerDelete: (p) => {
       if (p.identity.toHexString() === net.myKey) {
@@ -190,7 +190,7 @@ async function boot(): Promise<void> {
         const bot = game.bots.get(p.identity.toHexString());
         if (bot) game.bots.remove(bot);
       }
-      route();
+      queueRoute();
     },
     pstateUpsert: (s) => { if (s.roomId === myRoomId) game.pstateUpsert(s); },
     pickupUpsert: (p) => { if (p.roomId === myRoomId) game.pickupUpsert(p); },
@@ -209,6 +209,7 @@ async function boot(): Promise<void> {
 
   function enterRoom(roomId: bigint): void {
     game.clear();
+    boardHtml = '';
     myRoomId = roomId;
     net.subscribeRoom(roomId);
     const r = myRoom();
@@ -219,6 +220,7 @@ async function boot(): Promise<void> {
     if (callServer) void net.conn?.reducers.leaveRoom({}).catch(() => {});
     Net.savedRoom = null;
     myRoomId = null;
+    boardHtml = '';
     net.subscribeRoom(null);
     game.clear();
     menuOpen = false;
@@ -226,7 +228,7 @@ async function boot(): Promise<void> {
     void wakeLock?.release().catch(() => {});
     wakeLock = null;
     if (INVITE) history.replaceState(null, '', location.pathname + (DEV ? '?dev=1' : ''));
-    route();
+    queueRoute();
   }
 
   async function rejoinSaved(): Promise<void> {
@@ -236,11 +238,27 @@ async function boot(): Promise<void> {
       await net.conn.reducers.joinRoom({ code, name: nameValue(), bot: false });
     } catch {
       Net.savedRoom = null;
-      route();
+      queueRoute();
     }
   }
 
   // ---------------------------------------------------------------- router
+  /**
+   * A player row changes on almost every sync (HP, ammo, ping…), so routing per event used to
+   * rebuild the lobby/scoreboard dozens of times a second and replay entry animations. Coalesce
+   * all of those events into at most one route per animation frame.
+   */
+  let routeQueued = false;
+  function queueRoute(): void {
+    if (routeQueued) return;
+    routeQueued = true;
+    requestAnimationFrame(() => {
+      routeQueued = false;
+      route();
+    });
+  }
+  /** Last scoreboard markup, so score updates redraw the table only when a value changed. */
+  let boardHtml = '';
   function route(): void {
     if (!$('btn-tap').classList.contains('hidden') || !net.conn || !$('scr-loading').classList.contains('hidden')) return;
     const room = myRoom();
@@ -333,12 +351,16 @@ async function boot(): Promise<void> {
     } else if (ended && ranked[0]) {
       $('winner-name').textContent = ranked[0].identity.toHexString() === net.myKey ? 'YOU WIN!' : `${ranked[0].name} wins`;
     }
-    $('board-body').innerHTML = ranked.map((p, i) => {
+    const boardRows = ranked.map((p, i) => {
       const me = p.identity.toHexString() === net.myKey ? ' class="me"' : '';
       const ping = p.isBot ? '<span class="cpu-tag">CPU</span>' : p.pingMs ? `<span class="ping ${pingClass(p.pingMs)}">${p.pingMs}</span>` : '–';
       const rank = teams ? ranked.filter((q, j) => j <= i && q.team === p.team).length : i + 1;
       return `<tr${me}><td><span class="rank r${rank}">${rank}</span></td><td><span class="pn"><span class="avatar" style="width:12px;height:12px;border-radius:4px;background:${playerCss(p.colorIdx, teams ? p.team : 0)};color:${playerCss(p.colorIdx, teams ? p.team : 0)}"></span>${escapeHtml(p.name)}</span></td><td class="num">${p.score}</td><td class="num">${p.kills}</td><td class="num">${p.deaths}</td><td class="num">${ping}</td></tr>`;
     }).join('');
+    if (boardRows !== boardHtml) {
+      $('board-body').innerHTML = boardRows;
+      boardHtml = boardRows;
+    }
     $('end-actions').classList.toggle('hidden', !ended);
     $('btn-again').classList.toggle('hidden', !isHost());
     $('btn-to-lobby').classList.toggle('hidden', !isHost());
@@ -353,10 +375,10 @@ async function boot(): Promise<void> {
     $('lobby-countdown').textContent = `Everyone returns to the lobby in ${left} s`;
   }
   setInterval(updateCountdown, 250);
-  input.onScoreboard = (show) => { boardHeld = show; route(); };
-  $('mini-board').addEventListener('click', () => { boardHeld = !boardHeld; route(); });
+  input.onScoreboard = (show) => { boardHeld = show; queueRoute(); };
+  $('mini-board').addEventListener('click', () => { boardHeld = !boardHeld; queueRoute(); });
   $('scr-board').addEventListener('click', (e) => {
-    if (boardHeld && !(e.target as HTMLElement).closest('button')) { boardHeld = false; route(); }
+    if (boardHeld && !(e.target as HTMLElement).closest('button')) { boardHeld = false; queueRoute(); }
   });
 
   // ---------------------------------------------------------------- menu & settings
@@ -364,7 +386,7 @@ async function boot(): Promise<void> {
     menuOpen = open;
     showOverlay('scr-menu', open);
     if (open) input.reset();
-    route();
+    queueRoute();
   };
   input.onMenu = () => openMenu(!menuOpen);
   input.onDebug = () => {
@@ -463,9 +485,9 @@ async function boot(): Promise<void> {
     if (!room) return;
     audio.play('click');
     try { await game.bots.add(room.code); } catch (e) { toast(errorText(e)); }
-    route();
+    queueRoute();
   });
-  $('btn-rmbot').addEventListener('click', () => { game.bots.removeOne(); route(); });
+  $('btn-rmbot').addEventListener('click', () => { game.bots.removeOne(); queueRoute(); });
 
   // ---------------------------------------------------------------- mobile niceties
   $('btn-fullscreen').addEventListener('click', async () => {
@@ -511,11 +533,11 @@ async function boot(): Promise<void> {
     if (isIOS && !standalone && isTouchDevice) toast('Tip: Share → Add to Home Screen for fullscreen', 'info');
     if (INVITE && Net.savedRoom !== INVITE) {
       // Invite link: join straight away with the saved callsign (or a fresh random one).
-      if (!(await join(INVITE))) route();
+      if (!(await join(INVITE))) queueRoute();
     } else {
       await rejoinSaved();
     }
-    route();
+    queueRoute();
   });
 }
 

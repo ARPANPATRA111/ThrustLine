@@ -50,6 +50,12 @@ export interface FxSink {
   empty(): void;
   reload(): void;
   shake(amount: number): void;
+  /**
+   * The local shot's own raycast found these targets. Show a provisional hit marker now; the
+   * server's `hit_ev` (which carries the damage number and the kill flag) still arrives one
+   * round trip later. Optional so bots can keep a silent sink.
+   */
+  hit?(x: number, y: number): void;
 }
 
 /** The room's house rules as the simulation needs them. */
@@ -304,6 +310,9 @@ export class Actor {
 
     const hits = [...hitCount.values()].map((e) => ({ target: e.t.id, pellets: e.pellets, angle: e.angleSum / e.pellets, viewMs: e.t.viewMs }));
     this.shots.push({ weapon: wid, ox: startX, oy: startY, angle: this.aim, ends, hits });
+    // Instant local feedback: at 250 ms the server's confirmation is a visible pause. The
+    // damage number still waits for the authoritative event.
+    for (const e of hitCount.values()) this.fx?.hit?.(e.t.x, e.t.y - C.PLAYER_H / 2);
     if (def.recoil > 0) applyImpulse(this.body, -Math.cos(this.aim) * def.recoil, -Math.sin(this.aim) * def.recoil);
     this.fx?.shot(wid, startX, startY, ends, wallHits, this.colorIdx);
     this.fx?.shake(def.shake);
@@ -365,7 +374,10 @@ export class Actor {
       Math.abs(this.aim - this.lastSentAim) > 0.01 || input.fire || nowMs < this.activeUntilMs;
     const pending = this.shots.length > 0 || this.meleeAngle !== undefined || this.throwAngle !== undefined || this.wantReload;
     const interval = moving || pending ? C.SYNC_INTERVAL_MS : C.SYNC_IDLE_INTERVAL_MS;
-    if (nowMs - this.lastSyncMs < interval) return null;
+    // An action waiting in the queue does not wait for the next 50 ms tick: send it as soon as
+    // the minimum gap allows. This removes up to 50 ms from every shot/knife/throw at 250 ms.
+    const gap = pending ? C.SYNC_MIN_GAP_MS : interval;
+    if (nowMs - this.lastSyncMs < gap) return null;
     this.lastSyncMs = nowMs;
     this.lastSentX = b.x;
     this.lastSentY = b.y;

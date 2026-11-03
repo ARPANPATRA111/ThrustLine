@@ -228,7 +228,8 @@ keyboard: full). Upward force = 3000 × power px/s². Gravity is 1800, so power 
 exactly cancels gravity: hover. While the jets fire, vertical speed is also damped
 (`vy −= vy × 2.5 × dt`, applied after gravity so hover is exact), which makes hovering and flying
 sideways at one height easy to hold. A tap on the ground is a hop (−520 px/s, 6 fuel). Fuel: 100,
-drains while flying (scaled by power), refills 30/s after 0.4 s on the ground.
+drains while flying (scaled by power), refills 60/s after 0.15 s on the ground (about 1.7 s from
+empty to full).
 
 **Impulses**: shotgun recoil (520), knife lunge (220) and grenade knockback (up to 650) push the
 player ("blast-jumping"), capped at 1000 px/s sideways.
@@ -413,7 +414,8 @@ Boom (unlimited frags, max 2 live, knife backup), Snipers (sniper + knife).
 
 **House rules (host)**: round 2/3/5/8/10 min; health 50/100/150/200; respawn 2/4/6 s; CPU skill;
 infinite jetpack; infinite ammo; pickups on/off; acid on/off; Frenzy on/off; free-for-all or
-red vs blue; friendly fire (teams only, on by default); floating grenades.
+red vs blue; friendly fire (teams only); floating grenades. Every toggle starts **on**, so a fresh
+room is the fastest, most chaotic version; the host turns off what the group does not want.
 
 **Scoring**: kill +100; killing a bounty (3-kill streak, glowing gold with a crown) +50 extra;
 dying to acid or your own grenade −50; killing a teammate (friendly fire) −50 and no kill credit.

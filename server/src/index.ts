@@ -833,6 +833,7 @@ export const choosePrimary = spacetimedb.reducer({ weapon: t.u8() }, (ctx, { wea
 
 /** Clock-sync ping. The client also reports its last measured round trip, which everyone can see. */
 export const ping = spacetimedb.reducer({ clientMs: t.f64(), rttMs: t.u16() }, (ctx, { clientMs, rttMs }) => {
+  if (!Number.isFinite(clientMs)) return;
   ctx.db.pongEv.insert({ to: ctx.sender, clientMs, serverMicros: nowMicros(ctx) });
   const p = ctx.db.player.identity.find(ctx.sender);
   if (p && rttMs > 0 && Math.abs(p.pingMs - rttMs) >= 3) ctx.db.player.identity.update({ ...p, pingMs: Math.min(rttMs, 9999) });
@@ -874,8 +875,22 @@ const ShotIn = t.object('ShotIn', {
 });
 type ShotRow = Infer<typeof ShotIn>;
 
+/** Reject NaN/Infinity and absurd arrays before any of it reaches physics or a broadcast table. */
+function finiteShot(s: ShotRow): boolean {
+  if (!Number.isFinite(s.ox) || !Number.isFinite(s.oy) || !Number.isFinite(s.angle)) return false;
+  if (s.ends.length > MAX_ENDS_FLOATS || s.ends.length % 2 !== 0) return false;
+  if (s.hits.length > MAX_HITS_PER_SHOT) return false;
+  for (const n of s.ends) if (!Number.isFinite(n)) return false;
+  for (const h of s.hits) if (!Number.isFinite(h.angle) || !Number.isFinite(h.viewMs)) return false;
+  return true;
+}
+
 const MAX_SHOTS_PER_SYNC = 4;
+/** There can be at most MAX_PLAYERS - 1 targets; more claims than that are not honest. */
+const MAX_HITS_PER_SHOT = 8;
 const MAX_TRACER_FLOATS = 14;
+/** Upper bound on the untrusted tracer array before it is parsed/relayed (9 shotgun pellets = 18). */
+const MAX_ENDS_FLOATS = 42;
 /** Fire-rate "burst allowance": a token bucket that forgives shots bundled into one sync. */
 const FIRE_BURST_MICROS = 200_000n;
 /** Below this gap a sync is treated as a duplicate burst and its movement is not applied. */
@@ -913,6 +928,14 @@ export const sync = spacetimedb.reducer(
     const p: PlayerRow = { ...me };
     const meta: MetaRow = { ...meta0, lastFire: [...meta0.lastFire], histT: [...meta0.histT], histX: [...meta0.histX], histY: [...meta0.histY] };
     const fmul = frenzyMul(r, now);
+
+    // ---- 1b. Untrusted numbers must be finite (NaN would poison pstate, events and grenades) ----
+    if (!Number.isFinite(a.x) || !Number.isFinite(a.y) || !Number.isFinite(a.vx) || !Number.isFinite(a.vy) || !Number.isFinite(a.aim)) {
+      return rejected(r, 'sync: non-finite movement');
+    }
+    if (a.melee !== undefined && !Number.isFinite(a.melee)) return rejected(r, 'sync: non-finite melee angle');
+    if (a.throwG !== undefined && !Number.isFinite(a.throwG)) return rejected(r, 'sync: non-finite throw angle');
+    for (const s of a.shots) if (!finiteShot(s)) return rejected(r, 'sync: malformed shot');
 
     // ---- 2. Movement check, on the CLIENT's timeline ----
     // Packets bunch up on real networks (two syncs sent 50 ms apart can arrive 5 ms apart), so
@@ -1112,7 +1135,7 @@ function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x:
 
   const nowMs_ = Number(now) / 1000;
   const seen = new Set<string>();
-  for (const claim of shot.hits) {
+  for (const claim of shot.hits.slice(0, MAX_HITS_PER_SHOT)) {
     const key = claim.target.toHexString();
     if (seen.has(key)) continue;
     seen.add(key);
