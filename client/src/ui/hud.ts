@@ -139,15 +139,28 @@ export class Hud {
     this.crosshair.style.transform = `translate(${x}px, ${y}px)`;
   }
 
-  /** Mini leaderboard: top 3 plus you, with everyone's ping. */
+  /**
+   * Mini leaderboard: player count, the current leader, the top four and (when outside it)
+   * your own row. The count also makes departures obvious at a glance.
+   */
   setMiniBoard(ranked: Player[], meKey: string, teams = false): void {
     const rows: string[] = [];
     const myIdx = ranked.findIndex((p) => p.identity.toHexString() === meKey);
+    const leader = ranked[0];
+    const count = `${ranked.length} PLAYER${ranked.length === 1 ? '' : 'S'}`;
+    rows.push(
+      `<li class="mb-head"><span class="mb-count">${count}</span>` +
+      (leader
+        ? `<span class="mb-lead" title="${escapeHtml(leader.name)} leads with ${leader.score}"><svg class="ic"><use href="#i-crown" /></svg><b>${escapeHtml(leader.name)}</b><span>${leader.score}</span></span>`
+        : '') +
+      '</li>',
+    );
     ranked.forEach((p, i) => {
-      if (i < 3 || i === myIdx) {
-        const me = i === myIdx ? ' class="me"' : '';
+      if (i < 4 || i === myIdx) {
+        const me = i === myIdx ? ' me' : '';
+        const lead = i === 0 ? ' lead' : '';
         const ping = p.isBot ? 'CPU' : p.pingMs ? `${p.pingMs}ms` : '';
-        rows.push(`<li${me}><span>${i + 1}</span><span class="dot" style="background:${playerCss(p.colorIdx, teams ? p.team : 0)}"></span><span>${escapeHtml(p.name)}</span><span class="sc">${p.score}</span><span class="pg">${ping}</span></li>`);
+        rows.push(`<li class="mb-row${me}${lead}"><span class="rk">${i + 1}</span><span class="dot" style="background:${playerCss(p.colorIdx, teams ? p.team : 0)}"></span><span class="nm">${escapeHtml(p.name)}</span><span class="sc">${p.score}</span><span class="pg">${ping}</span></li>`);
       }
     });
     const html = rows.join('');

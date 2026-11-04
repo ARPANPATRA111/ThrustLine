@@ -13,6 +13,7 @@ import { Net, errorText } from './net/connection';
 import { TimeSync } from './net/timesync';
 import { buildAtlas } from './render/atlas';
 import { installFont } from './render/font';
+import { stickerDataURL } from './render/stickers';
 import { TEAM_CSS, TEAM_NAMES, playerCss } from './render/soldier';
 import { Audio } from './audio/audio';
 import { Game } from './game/game';
@@ -128,6 +129,8 @@ async function boot(): Promise<void> {
   let myRoomId: bigint | null = null;
   let boardHeld = false;
   let menuOpen = false;
+  /** The emote picker opens once each time the local player dies. */
+  let wasDead = false;
   /** Primary weapon picked on the death screen, shown immediately while the server confirms. */
   let pendingPrimary: number | null = null;
   let wakeLock: { release(): Promise<void> } | null = null;
@@ -145,11 +148,25 @@ async function boot(): Promise<void> {
 
   // ---------------------------------------------------------------- emotes
   const emoteBar = $('emote-bar');
-  emoteBar.innerHTML = C.EMOTES.map((e, i) => `<button type="button" data-emote="${i}" role="menuitem" aria-label="Emote ${i + 1}">${e}</button>`).join('');
+  const emoteDock = $('emote-dock');
+  emoteBar.innerHTML = C.EMOTES.map((label, i) => {
+    const text = escapeHtml(label);
+    return `<button type="button" data-emote="${i}" role="menuitem" aria-label="${text}" title="${text}"><img src="${stickerDataURL(i)}" alt="" draggable="false"></button>`;
+  }).join('');
   const setEmoteOpen = (open: boolean): void => {
     emoteBar.classList.toggle('hidden', !open);
     $('btn-emote').classList.toggle('on', open);
   };
+  /** The emote button lives beside the mini leaderboard, wherever that ends up on this screen. */
+  function placeEmoteDock(): void {
+    if (emoteDock.classList.contains('hidden') || $('scr-game').classList.contains('hidden')) return;
+    const r = $('mini-board').getBoundingClientRect();
+    if (r.width < 10) return;
+    emoteDock.style.top = `${Math.round(r.top)}px`;
+    emoteDock.style.right = `${Math.max(8, Math.round(window.innerWidth - r.left + 8))}px`;
+  }
+  window.addEventListener('resize', placeEmoteDock);
+  new ResizeObserver(placeEmoteDock).observe($('mini-board'));
   const sendEmote = (index: number): void => {
     if (myRoom()?.state !== 1) return;
     audio.play('click');
@@ -300,6 +317,7 @@ async function boot(): Promise<void> {
       input.enabled = false;
       setEmoteOpen(false);
       $('emote-dock').classList.add('hidden');
+      wasDead = false;
       checkRotate();
       return;
     }
@@ -312,6 +330,7 @@ async function boot(): Promise<void> {
       for (const id of ['scr-respawn', 'scr-board']) showOverlay(id, false);
       setEmoteOpen(false);
       $('emote-dock').classList.add('hidden');
+      wasDead = false;
       renderLobby(room);
       checkRotate();
       return;
@@ -329,10 +348,15 @@ async function boot(): Promise<void> {
     // Emotes are for the match only; the dock stays above the respawn overlay while dead.
     $('emote-dock').classList.toggle('hidden', ended || menuOpen);
     if (ended || menuOpen) setEmoteOpen(false);
+    // Dying opens the sticker picker once, so the player can react while waiting to respawn.
+    else if (dead && !wasDead) setEmoteOpen(true);
+    else if (!dead && wasDead) setEmoteOpen(false);
+    wasDead = dead;
     if (dead) renderRespawn(me, room);
     else game.killedBy = '';
     showOverlay('scr-board', ended || boardHeld);
     if (ended || boardHeld) renderBoard(ended);
+    placeEmoteDock();
     checkRotate();
   }
 

@@ -34,12 +34,12 @@ and FPS are always shown under the timer; everyone's ping is on the mini leaderb
 | Jetpack (tap = hop, hold = fly) | W or Space | Push the left stick up: analog. A gentle push hovers (you can drift sideways at one height), further climbs |
 | Drop through a platform | S | Pull the left stick firmly straight down |
 | Aim | Mouse | Right stick direction |
-| Fire | Left click (hold for AR) | Push the right stick past ~55 % (keeps firing while held) |
-| Knife | Right click or F | Knife button |
+| Fire | Left click or E (hold for AR) | Push the right stick past ~55 % (keeps firing while held) |
+| Knife | Right click or R | Knife button |
 | Grenade | G | Grenade button (Arms and Boom) |
-| Swap weapon | Q | Swap button |
-| Reload | R | Reload button |
-| Emote | E | Emote button (left edge) |
+| Swap weapon | F | Swap button |
+| Reload | T | Reload button |
+| Emote | Q | Emote button (beside the leaderboard) |
 | Scoreboard | Hold Tab | Tap the mini leaderboard |
 | Menu / detailed stats | Esc / F3 | ≡ button / Settings |
 
@@ -121,7 +121,7 @@ one-way platforms: you can jump up through them and bullets pass through them.
 - **Bounty:** a 3-kill streak makes you glow gold and worth +50 to whoever stops you.
 - **Frenzy:** the last 60 s: damage ×1.5, fuel refills twice as fast, red edge tint, FRENZY banner, faster music.
 - **Modes and house rules:** four loadouts plus host-set health, fuel, ammo, pickups, acid and Frenzy. Respawn is always 5 s.
-- **Emotes:** tap the smiley button (or press E) and pick one of six emotes. They float above you, follow you while you move, and stay at your death spot while you wait to respawn.
+- **Emotes:** press Q (or tap the button beside the leaderboard) and pick one of eight Hinglish stickers. They pop above you and follow you while you move; when you die the picker opens automatically and your sticker stays at the death spot while you wait to respawn.
 - **Acid hazard:** the pit in the middle burns 30 HP/s while you're in it. You can fly out.
 - **Smart spawns:** never within 200 px of where you died, preferring points far from living enemies.
 - **CPU players:** computer opponents with three difficulty levels and human limits (reaction time,

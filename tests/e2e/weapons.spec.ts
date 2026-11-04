@@ -107,10 +107,10 @@ test('every weapon works in Arms; Blades and Boom restrict loadouts', async ({ b
   expect((await st(a)).me.weapon).toBe(2);
   await a.waitForTimeout(1600); // spawn protection
   await expectHit(a, b, 150, click, 'shotgun');
-  await a.keyboard.press('KeyQ');
+  await a.keyboard.press('KeyF');
   await expect.poll(async () => (await st(a)).me.weapon).toBe(0);
   await expectHit(a, b, 192, click, 'pistol');
-  await expectHit(a, b, 40, async () => { await a.keyboard.press('KeyF'); }, 'knife');
+  await expectHit(a, b, 40, async () => { await a.keyboard.press('KeyR'); }, 'knife');
   const booms0 = (await st(a)).booms;
   await faceOff(a, b, 120);
   await aimAtVictim(a);
@@ -134,7 +134,7 @@ test('every weapon works in Arms; Blades and Boom restrict loadouts', async ({ b
   await waitAlive(a);
   expect((await st(a)).mode).toBe(1);
   expect((await st(a)).me.weapon).toBe(4);
-  await a.keyboard.press('KeyQ');
+  await a.keyboard.press('KeyF');
   await a.waitForTimeout(200);
   expect((await st(a)).me.weapon, 'Blades has no other weapon').toBe(4);
   await a.waitForTimeout(1400);
@@ -157,7 +157,7 @@ test('every weapon works in Arms; Blades and Boom restrict loadouts', async ({ b
   await click();
   await expect.poll(async () => (await st(a)).booms, { timeout: 5000 }).toBeGreaterThan(booms1);
   console.log('boom mode frag: exploded');
-  await a.keyboard.press('KeyQ');
+  await a.keyboard.press('KeyF');
   await expect.poll(async () => (await st(a)).me.weapon).toBe(4); // knife backup
   await waitRoundEnd(pages);
 });

@@ -191,6 +191,11 @@
       <div id="frenzy-tint" class="frenzy-tint"></div>
       <div id="dmg-arc" class="dmg-arc"></div>
       <div id="banner" class="banner"></div>
+      <!-- Desktop-only cheat sheet: tiny, in the bottom-left corner, never over the play area. -->
+      <div id="key-hints" class="key-hints" aria-hidden="true">
+        <div class="kh-row"><kbd>WASD</kbd> move <kbd>Space</kbd> jet <kbd>LMB</kbd> fire <kbd>RMB</kbd> knife</div>
+        <div class="kh-row"><kbd>Q</kbd> emote <kbd>E</kbd> fire <kbd>R</kbd> knife <kbd>G</kbd> nade <kbd>F</kbd> swap <kbd>T</kbd> reload</div>
+      </div>
       <div id="touch" class="touch hidden">
         <div id="stick-l" class="stick stick-l"><div class="ring"></div><div class="knob"><svg class="ic"><use href="#i-jet" /></svg></div></div>
         <div id="stick-r" class="stick stick-r"><div class="ring"></div><div class="knob"><svg class="ic"><use href="#i-scope" /></svg></div></div>
@@ -281,9 +286,10 @@
             <div class="ctl-card">
               <h3>Keyboard &amp; mouse</h3>
               <div class="keys">
-                <div class="kgroup"><div class="krow"><kbd>W</kbd></div><div class="krow"><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div><small>Move · W fly · S drop</small></div>
+                <div class="kgroup"><div class="krow"><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div><small>Move · W fly · S drop</small></div>
                 <div class="kgroup"><div class="mouse"><span class="lmb"></span><span class="rmb"></span></div><small>Aim · Left fire · Right knife</small></div>
-                <div class="kgroup"><div class="krow"><kbd>G</kbd><kbd>Q</kbd><kbd>R</kbd><kbd>E</kbd></div><small>Grenade · Swap · Reload · Emote</small></div>
+                <div class="kgroup"><div class="krow"><kbd>E</kbd><kbd>R</kbd></div><small>Fire · Knife</small></div>
+                <div class="kgroup"><div class="krow"><kbd>Q</kbd><kbd>G</kbd><kbd>F</kbd><kbd>T</kbd></div><small>Emote · Grenade · Swap · Reload</small></div>
                 <div class="kgroup"><div class="krow"><kbd class="wide">Space</kbd></div><small>Jetpack (tap = hop)</small></div>
               </div>
             </div>
@@ -294,7 +300,7 @@
                 <div class="ph-stick r"><span>AIM</span><i class="arr out">PUSH = FIRE</i></div>
                 <div class="ph-btns"><svg class="ic"><use href="#i-reload" /></svg><svg class="ic"><use href="#i-swap" /></svg><svg class="ic"><use href="#i-grenade" /></svg><svg class="ic"><use href="#i-knife" /></svg></div>
               </div>
-              <small class="muted">Emote button on the left edge</small>
+              <small class="muted">Emote button sits beside the leaderboard</small>
             </div>
           </div>
         </div>
@@ -319,7 +325,7 @@
     <!-- Emote dock: outside the game screen so it stays usable while the respawn overlay is up. -->
     <div id="emote-dock" class="emote-dock hidden">
       <div id="emote-bar" class="emote-bar hidden" role="menu" aria-label="Emotes"></div>
-      <button id="btn-emote" class="emote-btn" aria-label="Emote" title="Emote (E)"><svg class="ic"><use href="#i-emote" /></svg></button>
+      <button id="btn-emote" class="emote-btn" aria-label="Emote (Q)" title="Emote (Q)"><svg class="ic"><use href="#i-emote" /></svg></button>
     </div>
 
     <div id="ov-reconnect" class="notice hidden">Reconnecting…</div>

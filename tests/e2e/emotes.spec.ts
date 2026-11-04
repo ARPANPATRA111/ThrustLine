@@ -36,7 +36,7 @@ const myKey = (p: Page) => p.evaluate(() => (window as any).__tl.net.myKey as st
 const teleport = (p: Page, x: number, y: number) => p.evaluate(([tx, ty]) => (window as any).__tl.net.conn.reducers.devTeleport({ x: tx, y: ty }), [x, y]);
 
 async function emote(page: Page, index: number): Promise<void> {
-  await page.click('#btn-emote');
+  if (!(await page.locator('#emote-bar').isVisible())) await page.click('#btn-emote');
   await page.waitForSelector('#emote-bar:not(.hidden)');
   await page.click(`#emote-bar button[data-emote="${index}"]`);
 }
@@ -57,6 +57,16 @@ test('emotes follow alive players, freeze at the death spot, and the camera hold
     await p.waitForSelector('#scr-game:not(.hidden)');
     await expect(p.locator('#emote-dock')).toBeVisible();
   }
+
+  // Eight sticker buttons, each drawn as an image rather than a text emoji.
+  await expect(host.locator('#emote-bar button')).toHaveCount(8);
+  await expect(host.locator('#emote-bar button img')).toHaveCount(8);
+
+  // Q toggles the picker for keyboard players.
+  await host.keyboard.press('KeyQ');
+  await expect(host.locator('#emote-bar')).toBeVisible();
+  await host.keyboard.press('KeyQ');
+  await expect(host.locator('#emote-bar')).toBeHidden();
 
   // Emote while alive: both clients draw it, and it follows the host as they move.
   await emote(host, 0);
@@ -79,6 +89,7 @@ test('emotes follow alive players, freeze at the death spot, and the camera hold
   await host.waitForSelector('#scr-respawn:not(.hidden)', { timeout: 15_000 });
   await expect(host.locator('#respawn-count')).toHaveText(/^\d$/);
   await expect(host.locator('#emote-dock'), 'emotes remain available while dead').toBeVisible();
+  await expect(host.locator('#emote-bar'), 'dying opens the sticker picker').toBeVisible();
 
   // The camera is pinned to the death spot (clamped to the map edge) and does not drift.
   const dead1 = await state(host);

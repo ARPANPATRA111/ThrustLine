@@ -37,6 +37,10 @@ test('CPU players join, move and fight', async ({ browser }) => {
     };
   });
   await page.waitForTimeout(2500);
+  // The mini leaderboard shows the room count and every row (four are visible on phones).
+  await expect(page.locator('#mini-board .mb-count')).toHaveText('3 PLAYERS');
+  await expect(page.locator('#mini-board .mb-row')).toHaveCount(3);
+  await expect(page.locator('#mini-board .mb-lead')).toBeVisible();
 
   // Audio was unlocked by the first tap; a 30 s round is entirely Frenzy, so the Frenzy loop plays.
   const audio = await page.evaluate(() => ({ state: (window as any).__tl.audio.ctx.state, music: (window as any).__tl.audio.musicKind }));

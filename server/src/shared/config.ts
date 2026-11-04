@@ -197,8 +197,11 @@ export const TIME_DEBT_MAX_MS = 350;
 export const MOVE_MAX_DT_SEC = 0.5;
 
 // ---------- Emotes ----------
-/** Emotes a player can send during a match; the array index is what the server broadcasts. */
-export const EMOTES = ['👍', '😂', '🔥', '👏', '😮', '💀'];
+/**
+ * Emotes a player can send during a match; the array index is what the server broadcasts.
+ * The client draws the matching Hinglish sticker for each index (client/src/render/stickers.ts).
+ */
+export const EMOTES = ['BHAI', 'OYE', 'JHAKAAS', 'BINDAAS', 'CHUP', 'DHAMAKA', 'KYA RE', 'TATA'];
 /** Short server-side cooldown so a held key cannot flood the room. */
 export const EMOTE_COOLDOWN_SEC = 0.6;
 /** How long an emote stays above the sender's head, in seconds. */
