@@ -1,9 +1,10 @@
-// Weapons and modes (definition of done: "All four guns, the knife and frags work in Arms;
-// Blades and Boom restrict loadouts correctly"). Two clients in a dev room, four 30 s rounds:
-//   1. Arms with the shotgun: shotgun, pistol (Q swap), knife (F) and frag (G) all hit/explode.
+// Weapons and modes (definition of done: every gun, the knife and frags work in Arms;
+// Blades and Boom restrict loadouts correctly). Two clients in a dev room, five 30 s rounds:
+//   1. Arms with the shotgun: shotgun, pistol (F swap), knife (R) and frag (G) all hit/explode.
 //   2. Arms with the sniper: sniper hits.
-//   3. Blades: only the knife; Q does nothing; G throws nothing; knife hits.
-//   4. Boom: frags only; firing throws a grenade that explodes.
+//   3. Arms with the SMG: SMG hits.
+//   4. Blades: only the knife; F does nothing; G throws nothing; knife hits.
+//   5. Boom: frags only; firing throws a grenade that explodes.
 // (The AR is covered by smoke.spec.ts.)
 import { test, expect, type Browser, type Page, type BrowserContext } from '@playwright/test';
 
@@ -13,7 +14,7 @@ test.afterEach(async () => {
 });
 
 test.skip(!!process.env.BASE_URL?.startsWith('https'), 'local only');
-test.setTimeout(300_000);
+test.setTimeout(360_000);
 
 const FLOOR_Y = 36 * 32;
 const SHOOTER_X = 6 * 32 + 16;
@@ -115,7 +116,7 @@ test('every weapon works in Arms; Blades and Boom restrict loadouts', async ({ b
   await faceOff(a, b, 120);
   await aimAtVictim(a);
   await a.keyboard.press('KeyG');
-  await expect.poll(async () => (await st(a)).booms, { timeout: 5000 }).toBeGreaterThan(booms0);
+  await expect.poll(async () => (await st(a)).booms, { timeout: 4000 }).toBeGreaterThan(booms0);
   console.log('frag: exploded');
   await waitRoundEnd(pages);
 
@@ -128,7 +129,16 @@ test('every weapon works in Arms; Blades and Boom restrict loadouts', async ({ b
   await expectHit(a, b, 250, click, 'sniper');
   await waitRoundEnd(pages);
 
-  // ---- Round 3: Blades ----
+  // ---- Round 3: Arms, SMG primary ----
+  await reducer(a, 'choosePrimary', { weapon: 6 });
+  await playRound(a, pages);
+  await waitAlive(a);
+  expect((await st(a)).me.weapon).toBe(6);
+  await a.waitForTimeout(1600);
+  await expectHit(a, b, 200, click, 'smg');
+  await waitRoundEnd(pages);
+
+  // ---- Round 4: Blades ----
   await reducer(a, 'updateRoomSettings', { mode: 1, roundSec: 30, teams: false, rules: await rules(a) });
   await playRound(a, pages);
   await waitAlive(a);
@@ -145,7 +155,7 @@ test('every weapon works in Arms; Blades and Boom restrict loadouts', async ({ b
   expect((await st(a)).booms, 'no grenades in Blades').toBe(boomsBlades);
   await waitRoundEnd(pages);
 
-  // ---- Round 4: Boom ----
+  // ---- Round 5: Boom ----
   await reducer(a, 'updateRoomSettings', { mode: 2, roundSec: 30, teams: false, rules: await rules(a) });
   await playRound(a, pages);
   await waitAlive(a);

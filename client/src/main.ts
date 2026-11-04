@@ -99,7 +99,7 @@ async function boot(): Promise<void> {
   const audio = new Audio();
   const input = new Input();
   const hud = new Hud();
-  hud.causeIcons = { 0: atlas.iconURL('w0'), 1: atlas.iconURL('w1'), 2: atlas.iconURL('w2'), 3: atlas.iconURL('w3'), 4: atlas.iconURL('w4'), 5: atlas.iconURL('w5'), [C.CAUSE_ACID]: atlas.iconURL('bubbleAcid', 3) };
+  hud.causeIcons = { 0: atlas.iconURL('w0'), 1: atlas.iconURL('w1'), 2: atlas.iconURL('w2'), 3: atlas.iconURL('w3'), 4: atlas.iconURL('w4'), 5: atlas.iconURL('w5'), 6: atlas.iconURL('w6'), [C.CAUSE_ACID]: atlas.iconURL('bubbleAcid', 3) };
   const game = new Game(app, atlas, audio, net, time, input, hud);
   game.setQuality(settings.quality);
   game.debug = settings.showDebug;

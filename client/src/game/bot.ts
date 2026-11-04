@@ -11,7 +11,7 @@ import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
 import { MAP_W, RIG7, T_ACID, T_SOLID, spawnWorldPos, tileAt } from '@shared/map';
 import { lineOfSight } from '@shared/raycast';
-import { PRIMARIES, WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_SNIPER, canThrow, isGun } from '@shared/weapons';
+import { PRIMARIES, WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_SMG, W_SNIPER, canThrow, isGun } from '@shared/weapons';
 import { tables, type DbConnection } from '../module_bindings';
 import type { Player, Pstate } from '../module_bindings/types';
 import { openBotConnection } from '../net/connection';
@@ -139,6 +139,7 @@ export class BotBrain {
       if (world.mode === C.MODE_BLADES || w === W_KNIFE) ideal = 10;
       else if (w === W_SNIPER) ideal = 600;
       else if (w === 2) ideal = 170;
+      else if (w === W_SMG) ideal = 220;
       else if (world.mode === C.MODE_BOOM) ideal = 320;
       if (Math.abs(dx) > ideal + 60) moveX = Math.sign(dx);
       else if (Math.abs(dx) < ideal - 90 && ideal > 50) moveX = -Math.sign(dx);
@@ -330,7 +331,7 @@ export class BotManager {
       if (!row.alive && bot.lastLife !== row.lifeId) {
         // Dead: maybe switch primary for the next life.
         bot.lastLife = row.lifeId;
-        if (Math.random() < 0.3) void bot.conn.reducers.choosePrimary({ weapon: PRIMARIES[Math.floor(Math.random() * 3)] }).catch(() => {});
+        if (Math.random() < 0.3) void bot.conn.reducers.choosePrimary({ weapon: PRIMARIES[Math.floor(Math.random() * PRIMARIES.length)] }).catch(() => {});
       }
       if (!bot.actor.alive) continue;
       const input = bot.brain.think(bot.actor, world, this.claims);

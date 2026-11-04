@@ -49,9 +49,9 @@ Touch buttons sit on an arc around the aim stick and only appear when the mode u
 
 | Mode | Loadout | Pickups |
 | --- | --- | --- |
-| **Arms** (default) | Pistol, one primary (AR, shotgun or sniper, picked on the respawn screen), knife, 2 frags | Health, ammo, grenade |
+| **Arms** (default) | Pistol, one primary (AR, SMG, shotgun or sniper, picked on the respawn screen), knife, 2 frags | Health, ammo, grenade |
 | **Blades** (melee only) | Knife only, +15 % run speed | Health |
-| **Boom** (grenades only) | Unlimited frags (1 s cooldown, max 2 live), knife backup | Health |
+| **Boom** (grenades only) | Unlimited frags (0.85 s cooldown, max 3 live), knife backup | Health |
 | **Snipers** | Sniper rifle and knife | Health, ammo |
 
 ### House rules (host sets them in the lobby)
@@ -106,18 +106,19 @@ one setup script on the server, then change `VITE_STDB_URI` and run `npm run dep
 | --- | --- | --- | --- | --- |
 | Pistol | 18 | 4/s | 12 / ∞ | Always carried |
 | AR | 11 | 10/s | 30 / 120 | Automatic; spread grows while moving |
+| SMG | 8 | 14/s | 35 / 140 | Latency-friendly: many fast shots and forgiving spread; falls off past 450 px |
 | Shotgun | 7 × 9 | 1.1/s | 6 / 24 | Falls off past 180 px; recoil throws you back (blast-jumping) |
 | Sniper | 85 | 0.8/s | 4 / 16 | Pinpoint while still; camera leads 320 px |
 | Knife | 55 | 2/s | — | Short lunge |
-| Frag | up to 90 | — | 2 per life | 2.5 s fuse, bounces, knockback, half damage to yourself |
+| Frag | up to 100 | — | 2 per life | 1.5 s fuse, bounces, knockback, half damage to yourself |
 
 Solid metal (glowing cyan edges) blocks bullets. The see-through mesh catwalks (yellow top rail) are
 one-way platforms: you can jump up through them and bullets pass through them.
 
 ## What makes it THRUSTLINE (customisation)
 
-- **Jetpack fuel:** 100 fuel, ~2.6 s of flight, refills after 0.15 s on the ground (a full tank in ~1.7 s). Tap for a hop, hold to fly.
-- **Blast-jumping:** shotgun recoil (520) and grenade knockback (650) push you; chain them with the jetpack to move fast.
+- **Jetpack fuel:** 100 fuel, ~2.9 s of flight, refills after 0.12 s on the ground (a full tank in ~1.4 s). Tap for a hop, hold to fly.
+- **Blast-jumping:** shotgun recoil (520) and grenade knockback (700) push you; chain them with the jetpack to move fast.
 - **Bounty:** a 3-kill streak makes you glow gold and worth +50 to whoever stops you.
 - **Frenzy:** the last 60 s: damage ×1.5, fuel refills twice as fast, red edge tint, FRENZY banner, faster music.
 - **Modes and house rules:** four loadouts plus host-set health, fuel, ammo, pickups, acid and Frenzy. Respawn is always 5 s.
