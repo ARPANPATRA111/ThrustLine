@@ -44,6 +44,21 @@ export class Camera {
     this.shakeY = (Math.random() * 2 - 1) * this.shakeAmt;
   }
 
+  /** Stay exactly where it is (used while dead) and let the shake decay. */
+  hold(dt: number): void {
+    this.clamp();
+    this.shakeAmt *= Math.pow(0.0005, dt);
+    this.shakeX = (Math.random() * 2 - 1) * this.shakeAmt;
+    this.shakeY = (Math.random() * 2 - 1) * this.shakeAmt;
+  }
+
+  /** Centre the view on a world point immediately (no lead, no lerp). */
+  snapTo(x: number, y: number): void {
+    this.x = x;
+    this.y = y;
+    this.clamp();
+  }
+
   clamp(): void {
     const hw = this.viewW / 2;
     const hh = this.viewH / 2;

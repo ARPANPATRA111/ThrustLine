@@ -209,7 +209,8 @@ export class Actor {
       }
     } else if (w === W_KNIFE && input.firePressed) {
       this.doMelee(now);
-    } else if (w === W_FRAG && input.fire) {
+    } else if (w === W_FRAG && (input.fire || input.firePressed)) {
+      // Edge too: a quick tap can start and end between two frames on a slow device.
       this.doThrow(now, mode, world.rules.infiniteAmmo);
     }
     if (input.melee) this.doMelee(now);

@@ -22,8 +22,8 @@ Most score when the timer runs out wins.
 | Kill a **bounty** target (a player on a 3-kill streak, glowing gold with a crown) | +50 extra |
 | Die to acid or your own grenade | −50 |
 
-Leaderboard order: score, then kills, then fewer deaths. HP has no regeneration; you respawn after the
-room's respawn delay with 1.5 s of spawn protection (a bubble; it ends early if you attack). Your ping
+Leaderboard order: score, then kills, then fewer deaths. HP has no regeneration; you respawn after a
+fixed 5 seconds with 1.5 s of spawn protection (a bubble; it ends early if you attack). Your ping
 and FPS are always shown under the timer; everyone's ping is on the mini leaderboard and scoreboard.
 
 ### Controls
@@ -39,6 +39,7 @@ and FPS are always shown under the timer; everyone's ping is on the mini leaderb
 | Grenade | G | Grenade button (Arms and Boom) |
 | Swap weapon | Q | Swap button |
 | Reload | R | Reload button |
+| Emote | E | Emote button (left edge) |
 | Scoreboard | Hold Tab | Tap the mini leaderboard |
 | Menu / detailed stats | Esc / F3 | ≡ button / Settings |
 
@@ -59,7 +60,6 @@ Touch buttons sit on an arc around the aim stick and only appear when the mode u
 | --- | --- |
 | Round length | 2, 3, 5, 8 or 10 minutes (30 s in `?dev=1` rooms) |
 | Health | 50, 100, 150 or 200 HP |
-| Respawn delay | 2, 4 or 6 s |
 | CPU skill | Easy, Normal, Hard |
 | Infinite jetpack | Fuel never runs out |
 | Infinite ammo | No reloading; unlimited grenades in Arms |
@@ -120,7 +120,8 @@ one-way platforms: you can jump up through them and bullets pass through them.
 - **Blast-jumping:** shotgun recoil (520) and grenade knockback (650) push you; chain them with the jetpack to move fast.
 - **Bounty:** a 3-kill streak makes you glow gold and worth +50 to whoever stops you.
 - **Frenzy:** the last 60 s: damage ×1.5, fuel refills twice as fast, red edge tint, FRENZY banner, faster music.
-- **Modes and house rules:** four loadouts plus host-set health, respawn, fuel, ammo, pickups, acid and Frenzy.
+- **Modes and house rules:** four loadouts plus host-set health, fuel, ammo, pickups, acid and Frenzy. Respawn is always 5 s.
+- **Emotes:** tap the smiley button (or press E) and pick one of six emotes. They float above you, follow you while you move, and stay at your death spot while you wait to respawn.
 - **Acid hazard:** the pit in the middle burns 30 HP/s while you're in it. You can fly out.
 - **Smart spawns:** never within 200 px of where you died, preferring points far from living enemies.
 - **CPU players:** computer opponents with three difficulty levels and human limits (reaction time,

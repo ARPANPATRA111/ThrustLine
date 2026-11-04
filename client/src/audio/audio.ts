@@ -4,7 +4,7 @@
 
 type SoundName =
   | 'pistol' | 'ar' | 'shotgun' | 'sniper' | 'reload' | 'empty' | 'jet' | 'boom' | 'knife'
-  | 'hit' | 'hurt' | 'pickup' | 'click' | 'beep' | 'alarm' | 'sting' | 'music' | 'musicFrenzy';
+  | 'hit' | 'hurt' | 'death' | 'pickup' | 'click' | 'beep' | 'alarm' | 'sting' | 'music' | 'musicFrenzy';
 
 const SR = 44100;
 const MAX_VOICES = 16;
@@ -91,6 +91,12 @@ const RECIPES: Record<Exclude<SoundName, 'music' | 'musicFrenzy'>, [number, (c: 
   knife: [0.2, (c) => { const g = c.createGain(); g.gain.setValueAtTime(0.0001, 0); g.gain.linearRampToValueAtTime(0.6, 0.07); g.gain.exponentialRampToValueAtTime(0.0001, 0.18); const n = noise(c, 0.2); const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.setValueAtTime(1500, 0); f.frequency.exponentialRampToValueAtTime(5000, 0.18); n.connect(f).connect(g).connect(c.destination); n.start(0); }],
   hit: [0.08, (c) => tone(c, 'sine', 1800, 1800, 0, 0.06, 0.5, c.destination)],
   hurt: [0.2, (c) => tone(c, 'sine', 140, 55, 0, 0.18, 0.9, c.destination)],
+  // Mini-Militia-style falling whistle into a soft thud: you died, respawn is on its way.
+  death: [0.95, (c) => {
+    tone(c, 'triangle', 880, 150, 0, 0.55, 0.22, c.destination);
+    tone(c, 'sine', 110, 45, 0.5, 0.42, 0.85, c.destination);
+    burst(c, 0.5, 0.3, 0.4, 'lowpass', 700, 90, c.destination, 0.5);
+  }],
   pickup: [0.3, (c) => { [660, 880, 1320].forEach((f, i) => tone(c, 'triangle', f, f, i * 0.08, 0.09, 0.4, c.destination)); }],
   click: [0.05, (c) => tone(c, 'square', 1000, 1000, 0, 0.03, 0.15, c.destination)],
   beep: [0.15, (c) => tone(c, 'sine', 880, 880, 0, 0.12, 0.4, c.destination)],

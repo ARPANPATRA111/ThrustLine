@@ -38,6 +38,7 @@ import BackToLobbyReducer from "./back_to_lobby_reducer";
 import ChoosePrimaryReducer from "./choose_primary_reducer";
 import CreateRoomReducer from "./create_room_reducer";
 import DevTeleportReducer from "./dev_teleport_reducer";
+import EmoteReducer from "./emote_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import KickPlayerReducer from "./kick_player_reducer";
 import LeaveRoomReducer from "./leave_room_reducer";
@@ -52,6 +53,7 @@ import UpdateRoomSettingsReducer from "./update_room_settings_reducer";
 
 // Import all table schema definitions
 import BoomEvRow from "./boom_ev_table";
+import EmoteEvRow from "./emote_ev_table";
 import GrenadeRow from "./grenade_table";
 import HitEvRow from "./hit_ev_table";
 import KickEvRow from "./kick_ev_table";
@@ -77,6 +79,14 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, BoomEvRow),
+  emoteEv: __table({
+    name: 'emote_ev',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, EmoteEvRow),
   grenade: __table({
     name: 'grenade',
     indexes: [
@@ -215,6 +225,7 @@ const reducersSchema = __reducers(
   __reducerSchema("choose_primary", ChoosePrimaryReducer),
   __reducerSchema("create_room", CreateRoomReducer),
   __reducerSchema("dev_teleport", DevTeleportReducer),
+  __reducerSchema("emote", EmoteReducer),
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("kick_player", KickPlayerReducer),
   __reducerSchema("leave_room", LeaveRoomReducer),

@@ -53,13 +53,17 @@ test('CPU players join, move and fight', async ({ browser }) => {
   console.log((await page.locator('#debug').innerText()).replace(/\n/g, ' | '));
   await page.keyboard.press('F3');
 
-  const a = await snap();
-  await page.waitForTimeout(4000);
-  const b = await snap();
-  for (const bot of b.bots) {
-    const prev = a.bots.find((q: any) => q.name === bot.name);
-    expect(Math.hypot(bot.x - prev.x, bot.y - prev.y), `${bot.name} moves`).toBeGreaterThan(20);
-  }
+  // Bots can take a moment to receive their spawn row under load: poll for the same 20 px move.
+  const start = await snap();
+  const moved = new Set<string>();
+  await expect.poll(async () => {
+    const now = await snap();
+    for (const bot of now.bots) {
+      const prev = start.bots.find((q: any) => q.name === bot.name);
+      if (prev && Math.hypot(bot.x - prev.x, bot.y - prev.y) > 20) moved.add(bot.name);
+    }
+    return moved.size;
+  }, { timeout: 15_000, intervals: [1000] }).toBe(start.bots.length);
   // Within the round someone must take damage (bots shoot each other and the idle human).
   await expect.poll(async () => (await snap()).damage, { timeout: 25_000 }).toBeGreaterThan(0);
   console.log(`damage dealt so far: ${(await snap()).damage.toFixed(0)}`);
