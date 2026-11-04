@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TILE } from './config';
 import { RIG7, spawnWorldPos } from './map';
-import { fireRateOk, hitClaimDistance, isValidPosition, meleeHits, shotOriginOk, validateMove } from './validate';
+import { fireRateOk, hitClaimDistance, isStaleSeq, isValidPosition, meleeHits, shotOriginOk, validateMove } from './validate';
 import { WEAPONS, W_AR, W_PISTOL, W_SNIPER } from './weapons';
 
 const floorY = 35 * TILE + TILE; // ground floor top (row 36) for the lower spawns
@@ -75,6 +75,20 @@ describe('shot validation', () => {
     expect(fireRateOk(1_000_000n, 1_050_000n, ar.rate)).toBe(false);
     expect(fireRateOk(1_000_000n, 1_090_000n, ar.rate)).toBe(true);
     expect(fireRateOk(0n, 5n, ar.rate)).toBe(true);
+  });
+});
+
+describe('packet sequencing', () => {
+  it('accepts only newer sync packets', () => {
+    expect(isStaleSeq(1, 0)).toBe(false); // first packet of a life
+    expect(isStaleSeq(8, 7)).toBe(false);
+    expect(isStaleSeq(7, 7)).toBe(true); // replayed
+    expect(isStaleSeq(6, 7)).toBe(true); // arrived late
+  });
+
+  it('keeps working when the 32-bit counter wraps', () => {
+    expect(isStaleSeq(0, 0xffffffff)).toBe(false); // wrapped around to zero
+    expect(isStaleSeq(1, 0)).toBe(false); // zero is also the "no packet yet" sentinel
   });
 });
 

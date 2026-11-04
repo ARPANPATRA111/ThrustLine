@@ -289,3 +289,11 @@ export const ShotIn = __t.object("ShotIn", {
 });
 export type ShotIn = __Infer<typeof ShotIn>;
 
+export const Throttle = __t.object("Throttle", {
+  identity: __t.identity(),
+  lastRoomMicros: __t.i64(),
+  lastJoinMicros: __t.i64(),
+  lastPingMicros: __t.i64(),
+});
+export type Throttle = __Infer<typeof Throttle>;
+

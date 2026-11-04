@@ -193,6 +193,31 @@ other players are interpolated on the sender's own timeline, drawn just far enou
 explosions) arrive through event tables. Grenades follow a deterministic simulation that server and
 clients run on the same stored inputs, so they explode exactly where they are drawn.
 
+### Fair play (why cheating is limited)
+
+The browser is never trusted. Clients simulate their own soldier, but the module decides every
+outcome that matters:
+
+- **Movement:** speed, walls, map bounds and a capped client-clock debt (350 ms) are checked on every
+  sync; a rejected position is answered with a correction counter and the client snaps back.
+- **Damage:** the server owns HP, kills, score, ammo and pickups. A client sends hit *claims*, and
+  each claim is checked against the shooter's server-side position, the weapon's range, a tile
+  raycast (cover wins) and the target's lag-compensated history. Pellet count and fire rate are
+  capped by the weapon definition.
+- **Actions:** only the equipped weapon from the mode's loadout can fire; shots, knives, reloads and
+  grenade throws are rate-limited per player and per weapon.
+- **Replays:** every sync carries a monotonically increasing sequence number. Replayed, duplicated or
+  late packets are dropped before they can act, and a reconnecting page starts a fresh sequence.
+- **Identity:** room codes must match the alphabet exactly, room creation/joins and pings are
+  rate-limited per identity, and names drop control, zero-width and bidirectional characters so two
+  players cannot appear to share a name.
+
+Two limits are inherent to a client-rendered game and are not fixable with server checks: a modified
+client can draw information it already receives (positions of everyone in its room are public so
+they can be rendered), and it can aim perfectly or ignore its own spread. The server still decides
+whether a claimed hit is legal. For a public deployment, pair this with platform-level rate limiting
+and a way to receive reports; never rely on a client-side anti-cheat.
+
 ```text
 server/src/index.ts        tables, reducers, scheduled jobs, event tables (the referee)
 server/src/shared/         physics, map, raycasts, grenades, spawns, validation, config (server AND client)

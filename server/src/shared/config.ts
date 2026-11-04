@@ -159,6 +159,10 @@ export const PING_COUNT_INITIAL = 5;
 export const PING_INITIAL_GAP_MS = 200;
 export const PING_INTERVAL_MS = 2000;
 export const PING_MEDIAN_OF = 5;
+/** Server-side anti-spam limits (per identity). */
+export const ROOM_CREATE_COOLDOWN_SEC = 5;
+export const ROOM_JOIN_COOLDOWN_SEC = 1;
+export const PING_MIN_GAP_MS = 150;
 
 // ---------- Client sim & camera ----------
 export const SIM_HZ = 60;

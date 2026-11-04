@@ -11,8 +11,8 @@ import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, PRIMARIES, allowedWeapons, canThrow
 import { fuseTicks, simulateGrenade } from './shared/grenade';
 import { pickSpawn, shuffledSpawnOrder, type Point } from './shared/spawn';
 import { lineOfSight } from './shared/raycast';
-import { randomCallsign } from './shared/names';
-import { fireRateOk, hitClaimDistance, isValidPosition, meleeHits, shotOriginOk, validateMove } from './shared/validate';
+import { randomCallsign, sanitizeName } from './shared/names';
+import { fireRateOk, hitClaimDistance, isStaleSeq, isValidPosition, meleeHits, shotOriginOk, validateMove } from './shared/validate';
 
 // ============================================================================
 // Tables
@@ -146,13 +146,24 @@ const pmeta = table(
     histT: t.array(t.f64()),
     histX: t.array(t.f32()),
     histY: t.array(t.f32()),
-    /** Last fire time per gun, indexed by weapon id 0..3. */
+    /** Last fire time per gun, indexed by weapon id 0..6. */
     lastFire: t.array(t.i64()),
     lastMeleeMicros: t.i64(),
     lastThrowMicros: t.i64(),
     hasDeath: t.bool(),
     deathX: t.f32(),
     deathY: t.f32(),
+  },
+);
+
+/** Per-identity spam guard. Kept outside `pmeta` so it also covers clients that never join. */
+const throttle = table(
+  { name: 'throttle' },
+  {
+    identity: t.identity().primaryKey(),
+    lastRoomMicros: t.i64(),
+    lastJoinMicros: t.i64(),
+    lastPingMicros: t.i64(),
   },
 );
 
@@ -300,6 +311,7 @@ const spacetimedb = schema({
   player,
   pstate,
   pmeta,
+  throttle,
   pickup,
   grenade,
   kicked,
@@ -337,9 +349,42 @@ const nowMicros = (ctx: Ctx) => ctx.timestamp.microsSinceUnixEpoch;
 const nowMs = (ctx: Ctx) => Number(ctx.timestamp.microsSinceUnixEpoch) / 1000;
 const atMicros = (micros: bigint) => ScheduleAt.time(micros);
 
-/** Trim to 16 chars and remove control characters. */
+/** Trim to 16 chars, remove invisible characters and collapse whitespace. */
 function cleanName(raw: string): string {
-  return raw.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, C.NAME_MAX).trim();
+  return sanitizeName(raw, C.NAME_MAX);
+}
+
+/**
+ * Per-identity spam guard for cheap, repeatable actions. Returns false (and does not record
+ * anything) while the cooldown is running. A zero timestamp means "never used".
+ */
+function throttleOk(ctx: Ctx, kind: 'room' | 'join' | 'ping', gapMicros: bigint): boolean {
+  const now = nowMicros(ctx);
+  const row = ctx.db.throttle.identity.find(ctx.sender);
+  const last = row ? (kind === 'room' ? row.lastRoomMicros : kind === 'join' ? row.lastJoinMicros : row.lastPingMicros) : 0n;
+  if (last !== 0n && now - last < gapMicros) return false;
+  const next = row
+    ? { ...row }
+    : { identity: ctx.sender, lastRoomMicros: 0n, lastJoinMicros: 0n, lastPingMicros: 0n };
+  if (kind === 'room') next.lastRoomMicros = now;
+  else if (kind === 'join') next.lastJoinMicros = now;
+  else next.lastPingMicros = now;
+  if (row) ctx.db.throttle.identity.update(next);
+  else ctx.db.throttle.insert(next);
+  return true;
+}
+
+/**
+ * Room codes are exactly ROOM_CODE_LEN letters from the unambiguous alphabet. Cheap to check
+ * before touching the room index, and it keeps arbitrary strings out of the lookup.
+ */
+function validRoomCode(raw: string): string | null {
+  // Cap before trim so an attacker cannot make the module copy a huge string.
+  if (raw.length > 32) return null;
+  const code = raw.trim().toUpperCase();
+  if (code.length !== C.ROOM_CODE_LEN) return null;
+  for (const ch of code) if (!C.ROOM_CODE_LETTERS.includes(ch)) return null;
+  return code;
 }
 
 /**
@@ -691,6 +736,8 @@ export const createRoom = spacetimedb.reducer(
   (ctx, { name, mode, roundSec, dev }) => {
     if (mode > C.MODE_SNIPERS) throw new SenderError('Unknown mode');
     if (!validRoundSec(roundSec, dev)) throw new SenderError('Invalid round length');
+    // Creating, leaving and creating again churns rooms and pickup rows; one room per 5 s is plenty.
+    if (!throttleOk(ctx, 'room', secToMicros(C.ROOM_CREATE_COOLDOWN_SEC))) throw new SenderError('Slow down: try again in a few seconds');
     removePlayer(ctx, ctx.sender); // leave any current room first
 
     // Unique 4-letter code from letters without O, I or L.
@@ -732,7 +779,9 @@ export const createRoom = spacetimedb.reducer(
 export const joinRoom = spacetimedb.reducer(
   { code: t.string(), name: t.string(), bot: t.bool() },
   (ctx, { code, name, bot }) => {
-    const r = ctx.db.room.code.find(code.trim().toUpperCase());
+    const wanted = validRoomCode(code);
+    if (!wanted) throw new SenderError('Invalid room code');
+    const r = ctx.db.room.code.find(wanted);
     if (!r) throw new SenderError('Room not found');
     if ([...ctx.db.kicked.roomId.filter(r.id)].some((k) => k.identity.isEqual(ctx.sender))) {
       throw new SenderError('The host removed you from this room');
@@ -742,8 +791,12 @@ export const joinRoom = spacetimedb.reducer(
       // Rejoining the same room (page reload / reconnect): keep stats, adopt the new connection.
       const meta = ctx.db.pmeta.identity.find(ctx.sender);
       if (meta) ctx.db.pmeta.identity.update({ ...meta, connId: ctx.connectionId ?? undefined });
+      // The new page starts its packet counter at zero; accept it again.
+      const ps = ctx.db.pstate.identity.find(ctx.sender);
+      if (ps) ctx.db.pstate.identity.update({ ...ps, seq: 0 });
       return;
     }
+    if (!throttleOk(ctx, 'join', secToMicros(C.ROOM_JOIN_COOLDOWN_SEC))) throw new SenderError('Slow down: try again in a moment');
     if (roomPlayers(ctx, r.id).length >= C.MAX_PLAYERS) throw new SenderError('Room is full');
     removePlayer(ctx, ctx.sender);
     addPlayerToRoom(ctx, r, name, bot);
@@ -878,6 +931,8 @@ export const emote = spacetimedb.reducer({ emote: t.u8() }, (ctx, { emote: which
 /** Clock-sync ping. The client also reports its last measured round trip, which everyone can see. */
 export const ping = spacetimedb.reducer({ clientMs: t.f64(), rttMs: t.u16() }, (ctx, { clientMs, rttMs }) => {
   if (!Number.isFinite(clientMs)) return;
+  // Pings are cheap but they write an event row; a modified client must not be able to flood them.
+  if (!throttleOk(ctx, 'ping', BigInt(C.PING_MIN_GAP_MS) * 1000n)) return;
   ctx.db.pongEv.insert({ to: ctx.sender, clientMs, serverMicros: nowMicros(ctx) });
   const p = ctx.db.player.identity.find(ctx.sender);
   if (p && rttMs > 0 && Math.abs(p.pingMs - rttMs) >= 3) ctx.db.player.identity.update({ ...p, pingMs: Math.min(rttMs, 9999) });
@@ -980,6 +1035,8 @@ export const sync = spacetimedb.reducer(
     if (a.melee !== undefined && !Number.isFinite(a.melee)) return rejected(r, 'sync: non-finite melee angle');
     if (a.throwG !== undefined && !Number.isFinite(a.throwG)) return rejected(r, 'sync: non-finite throw angle');
     for (const s of a.shots) if (!finiteShot(s)) return rejected(r, 'sync: malformed shot');
+    // Replays and late packets: only a packet newer than the last accepted one may act.
+    if (isStaleSeq(a.seq, ps.seq)) return rejected(r, 'sync: stale sequence');
 
     // ---- 2. Movement check, on the CLIENT's timeline ----
     // Packets bunch up on real networks (two syncs sent 50 ms apart can arrive 5 ms apart), so
@@ -1360,4 +1417,5 @@ export const onDisconnect = spacetimedb.clientDisconnected((ctx) => {
   // already have rejoined on a new connection before the old one's disconnect arrives.
   if (meta && meta.connId && ctx.connectionId && !meta.connId.isEqual(ctx.connectionId)) return;
   removePlayer(ctx, ctx.sender);
+  ctx.db.throttle.identity.delete(ctx.sender);
 });
