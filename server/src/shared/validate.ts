@@ -53,6 +53,17 @@ export function fireRateOk(lastFireMicros: bigint, nowMicros: bigint, rate: numb
   return nowMicros - lastFireMicros >= minGapMicros;
 }
 
+/**
+ * Packet replay check: each sync must carry a strictly newer `seq` than the last accepted one.
+ * `last === 0` means the server has not accepted a packet for this life yet (a fresh page or a
+ * reconnect), so anything is allowed. The subtraction is signed so it still works when the
+ * 32-bit counter wraps after ~6 years of play.
+ */
+export function isStaleSeq(next: number, last: number): boolean {
+  if (last === 0) return false;
+  return ((next - last) | 0) <= 0;
+}
+
 /** The shot origin must be near the shooter's centre on the server. */
 export function shotOriginOk(shooter: Pos, ox: number, oy: number): boolean {
   return Math.hypot(ox - shooter.x, oy - (shooter.y - PLAYER_H / 2)) <= SHOT_ORIGIN_TOLERANCE;
