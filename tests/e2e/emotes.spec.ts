@@ -89,7 +89,10 @@ test('emotes follow alive players, freeze at the death spot, and the camera hold
   await host.waitForSelector('#scr-respawn:not(.hidden)', { timeout: 15_000 });
   await expect(host.locator('#respawn-count')).toHaveText(/^\d$/);
   await expect(host.locator('#emote-dock'), 'emotes remain available while dead').toBeVisible();
-  await expect(host.locator('#emote-bar'), 'dying opens the sticker picker').toBeVisible();
+  await expect(host.locator('#emote-bar'), 'dying does not open the picker by itself').toBeHidden();
+  // The player opens it themselves, and it does not cover the bottom pick row.
+  await host.click('#btn-emote');
+  await expect(host.locator('#emote-bar'), 'the player can open it while dead').toBeVisible();
 
   // The camera is pinned to the death spot (clamped to the map edge) and does not drift.
   const dead1 = await state(host);
@@ -124,4 +127,57 @@ test('emotes follow alive players, freeze at the death spot, and the camera hold
   await expect.poll(async () => (await state(host)).me?.alive, { timeout: 5000 }).toBe(true);
   expect((await state(host)).deathSpot).toBeNull();
   await expect.poll(async () => (await state(host)).me?.weapon, { timeout: 3000 }).toBe(2);
+});
+
+test('phone layout: the tray drops from the button and never covers the respawn picks', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+  contexts.push(ctx);
+  const page = await ctx.newPage();
+  await page.goto('/?dev=1');
+  await page.waitForSelector('#btn-tap:not(.hidden)', { timeout: 60_000 });
+  await page.click('#btn-tap');
+  await page.waitForSelector('#scr-home:not(.hidden)', { timeout: 60_000 });
+  await page.click('#btn-create');
+  await page.waitForSelector('#scr-lobby:not(.hidden)');
+  await page.click('#btn-start');
+  await page.waitForSelector('#scr-game:not(.hidden)');
+
+  // The tray hangs directly below the emote button, right-aligned with it.
+  const btn = (await page.locator('#btn-emote').boundingBox())!;
+  await page.click('#btn-emote');
+  await expect(page.locator('#emote-bar')).toBeVisible();
+  const bar = (await page.locator('#emote-bar').boundingBox())!;
+  expect(bar.y).toBeGreaterThan(btn.y + btn.height);
+  expect(Math.abs(bar.x + bar.width - (btn.x + btn.width))).toBeLessThanOrEqual(2);
+
+  // Two fingers at once: one holds the movement stick while the other taps Emote. The tap must
+  // still register, so a player can emote without letting go of the controls.
+  await page.click('#btn-emote'); // close the tray first
+  await expect(page.locator('#emote-bar')).toBeHidden();
+  const cdp = await ctx.newCDPSession(page);
+  const eb = (await page.locator('#btn-emote').boundingBox())!;
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [
+      { x: 110, y: 300, id: 1 },
+      { x: eb.x + eb.width / 2, y: eb.y + eb.height / 2, id: 2 },
+    ],
+  });
+  await expect(page.locator('#emote-bar'), 'a second finger opens the tray while the stick is held').toBeVisible();
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await page.click('#btn-emote');
+
+  // Close it, then die: death must not reopen the tray.
+  await expect(page.locator('#emote-bar')).toBeHidden();
+  await page.evaluate(() => (window as any).__tl.net.conn.reducers.devTeleport({ x: 48 * 32, y: 38 * 32 }));
+  await page.waitForSelector('#scr-respawn:not(.hidden)', { timeout: 15_000 });
+  await expect(page.locator('#emote-bar')).toBeHidden();
+  const picks = (await page.locator('#primary-pick').boundingBox())!;
+  expect(picks.y, 'weapon picks sit in the lower part of the screen').toBeGreaterThan(390 * 0.55);
+
+  // Opening the tray while dead cannot overlap the picks.
+  await page.click('#btn-emote');
+  const open = (await page.locator('#emote-bar').boundingBox())!;
+  const overlap = !(open.x + open.width <= picks.x || picks.x + picks.width <= open.x || open.y + open.height <= picks.y || picks.y + picks.height <= open.y);
+  expect(overlap, 'emote tray and respawn picks do not overlap').toBe(false);
 });

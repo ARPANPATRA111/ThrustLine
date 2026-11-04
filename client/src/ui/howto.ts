@@ -3,7 +3,7 @@
 import { WEAPONS } from '@shared/weapons';
 import type { Atlas } from '../render/atlas';
 
-const NOTES = ['Always carried', 'Full auto, sprays on the move', 'Seven pellets, recoil launches you', 'One shot, huge damage', 'Lunge and slash up close', 'Bounces, then boom', 'Fast and forgiving, falls off at range'];
+const NOTES = ['Always carried', 'Full auto, sprays on the move', 'Ten pellets, recoil launches you', 'One shot drops a full-health pilot', 'Lunge and slash up close', 'Bounces, then boom', 'Fast and forgiving, falls off at range'];
 
 export function setupHowTo(atlas: Atlas): void {
   // Every <img data-icon="..."> on the page gets its sprite from the atlas.

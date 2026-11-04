@@ -257,10 +257,11 @@ A shot is a ray, not a flying bullet. For each pellet:
 | --- | --- | --- | --- |
 | Pistol | 18 | 4/s | always carried, infinite reserve |
 | AR | 11 | 10/s | automatic; more spread while moving |
-| Shotgun | 7 pellets × 9 | 1.1/s | full damage to 180 px, half at 420 px; recoil |
-| Sniper | 85 | 0.8/s | no spread when still |
+| SMG | 8 | 14/s | fast and forgiving; falls off past 450 px |
+| Shotgun | 10 pellets × 10 | 1.3/s | all pellets at point blank; falls off past 200 px (55% at 460); recoil |
+| Sniper | 100 | 0.85/s | one clean body hit kills; no spread when still |
 | Knife | 55 | 2/s | server finds targets: within 72 px and ±70° |
-| Frag | up to 90 | — | 2.5 s fuse, bounces, linear falloff to 0 at 150 px, half on yourself |
+| Frag | up to 100 | — | 1.5 s fuse, bounces, linear falloff to 0 at 170 px, half on yourself |
 
 ### Grenades are deterministic (`server/src/shared/grenade.ts`)
 
@@ -483,11 +484,12 @@ Hard ~2–4 s to kill them (an aimbot would need under 1 s).
   hide when the mode doesn't use them.
 - Fullscreen on start where supported, screen wake lock during matches, safe-area insets,
   installable web app manifest.
-- **Emotes** (`emote_ev` event + Pixi `Text`): six emotes behind one smiley button (or E). The
-  server echoes the emote to the room; clients draw it above the sender and follow them while they
-  are alive. While dead, the emote stays at the exact death spot, where the camera is also held for
-  the whole 5 s respawn. The local client draws its own emote immediately, then reconciles with
-  the server echo.
+- **Emotes** (`emote_ev` event + Pixi sprites): eight Hinglish stickers behind the button beside
+  the leaderboard (or `Q`). The picker drops down from the button, opens only when the player asks
+  for it, and accepts a second finger while the sticks are held. The server echoes the emote to the
+  room; clients draw it above the sender and follow them while they are alive. While dead, the emote
+  stays at the exact death spot, where the camera is also held for the whole 5 s respawn. The local
+  client draws its own emote immediately, then reconciles with the server echo.
 
 ---
 
