@@ -14,7 +14,7 @@ export class Input {
   onScoreboard: (show: boolean) => void = () => {};
   onMenu: () => void = () => {};
   onDebug: () => void = () => {};
-  /** KeyE: open/close the emote picker (also reachable by touch). */
+  /** Q: open/close the emote picker (also reachable by touch). */
   onEmote: () => void = () => {};
 
   // Written by the touch controls.
@@ -46,14 +46,15 @@ export class Input {
     if (k === 'Tab') { e.preventDefault(); if (this.enabled) this.onScoreboard(down); return; }
     if (k === 'F3' && down) { e.preventDefault(); this.onDebug(); return; }
     if (k === 'Escape' && down) { if (this.enabled) this.onMenu(); return; }
-    if (k === 'KeyE' && down && !e.repeat) { if (this.enabled) this.onEmote(); return; }
+    if (k === 'KeyQ' && down && !e.repeat) { if (this.enabled) this.onEmote(); return; }
     if (!this.enabled) return;
     if (k === 'Space') e.preventDefault();
     if (down && !this.keys.has(k)) {
-      if (k === 'KeyF') this.edges.melee = true;
+      if (k === 'KeyE') this.edges.fire = true;
+      if (k === 'KeyR') this.edges.melee = true;
       if (k === 'KeyG') this.edges.grenade = true;
-      if (k === 'KeyQ') this.edges.swap = true;
-      if (k === 'KeyR') this.edges.reload = true;
+      if (k === 'KeyF') this.edges.swap = true;
+      if (k === 'KeyT') this.edges.reload = true;
     }
     if (down) this.keys.add(k);
     else this.keys.delete(k);
@@ -74,7 +75,7 @@ export class Input {
     let thrust = k.has('KeyW') || k.has('Space') || k.has('ArrowUp');
     let thrustAmount = 1; // keyboard: full power
     let down = k.has('KeyS') || k.has('ArrowDown');
-    let fire = this.mouseDown;
+    let fire = this.mouseDown || k.has('KeyE');
     let firePressed = this.edges.fire;
     let aim = this.usingTouch ? currentAim : aimFromMouse(this.mouseX, this.mouseY);
     if (this.usingTouch) {

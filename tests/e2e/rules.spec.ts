@@ -84,9 +84,9 @@ test('host rules are applied and enforced', async ({ browser }) => {
   expect(s.pickupsVisible, 'pickups hidden when off').toBe(false);
 
   // Snipers: swap goes rifle <-> knife only.
-  await host.keyboard.press('KeyQ');
+  await host.keyboard.press('KeyF');
   await expect.poll(async () => (await g(host)).weapon).toBe(4);
-  await host.keyboard.press('KeyQ');
+  await host.keyboard.press('KeyF');
   await expect.poll(async () => (await g(host)).weapon).toBe(3);
 
   // Infinite jetpack: fly for 3 s, fuel stays full.

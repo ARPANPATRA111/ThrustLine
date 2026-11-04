@@ -1,6 +1,6 @@
 // The match: fixed-step simulation of the local player (and any CPU bots hosted here),
 // interpolation of remote players, server events turned into effects, and rendering.
-import { type Application, Container, Sprite, Text, type Texture, TilingSprite } from 'pixi.js';
+import { type Application, Container, Sprite, type Texture, TilingSprite } from 'pixi.js';
 import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
 import { RIG7, MAP_H, MAP_W } from '@shared/map';
@@ -13,6 +13,7 @@ import { LagEstimator, SnapshotBuffer, type Sample } from '../net/interp';
 import { Radar, type RadarEntry } from '../render/radar';
 import type { Atlas } from '../render/atlas';
 import { bakeMap, acidRect, makeAcid, makeParallaxTextures } from '../render/mapbake';
+import { stickerTextures } from '../render/stickers';
 import { Particles } from '../render/particles';
 import { Effects } from '../render/effects';
 import { SoldierView, playerColor, playerCss } from '../render/soldier';
@@ -56,10 +57,10 @@ interface PickupView {
   baseY: number;
 }
 
-/** An emote floating above a player (or frozen at a dead player's death spot). */
+/** An emote sticker floating above a player (or frozen at a dead player's death spot). */
 interface EmoteView {
   index: number;
-  text: Text;
+  sprite: Sprite;
   started: number;
   until: number;
   /** Centre position when it cannot follow a live player. */
@@ -68,6 +69,9 @@ interface EmoteView {
   /** True while the sender is alive: keep the emote above their head. */
   follow: boolean;
 }
+
+/** Drawn size of an emote sticker in world pixels. */
+const EMOTE_PX = 96;
 
 // Quality steps: resolution, particle cap, parallax layer count.
 const QUALITY_STEPS = [
@@ -231,7 +235,7 @@ export class Game implements WorldView {
     this.grenades.clear();
     for (const p of this.pickups.values()) p.sprite.destroy();
     this.pickups.clear();
-    for (const em of this.emotes.values()) em.text.destroy();
+    for (const em of this.emotes.values()) em.sprite.destroy();
     this.emotes.clear();
     this.deathSpot = null;
     this.localEmoteAt = 0;
@@ -485,28 +489,19 @@ export class Game implements WorldView {
   }
 
   private applyEmote(key: string, index: number, x: number, y: number, follow: boolean): void {
-    const emoji = C.EMOTES[index];
-    if (!emoji) return;
+    if (!C.EMOTES[index]) return;
     const now = performance.now();
     let em = this.emotes.get(key);
     if (!em) {
-      const text = new Text({
-        text: emoji,
-        style: {
-          fontFamily: '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif',
-          fontSize: 32,
-          stroke: { color: 0x0b1020, width: 5 },
-          dropShadow: { color: 0x000000, alpha: 0.5, blur: 4, distance: 2, angle: Math.PI / 2 },
-        },
-      });
-      text.anchor.set(0.5, 1);
-      this.emoteLayer.addChild(text);
-      em = { index, text, started: now, until: now, x, y, follow };
+      const sprite = new Sprite(stickerTextures()[index]);
+      sprite.anchor.set(0.5, 1);
+      this.emoteLayer.addChild(sprite);
+      em = { index, sprite, started: now, until: now, x, y, follow };
       this.emotes.set(key, em);
     }
     if (em.index !== index) {
       em.index = index;
-      em.text.text = emoji;
+      em.sprite.texture = stickerTextures()[index];
     }
     em.started = now;
     em.until = now + C.EMOTE_SHOW_SEC * 1000;
@@ -534,16 +529,19 @@ export class Game implements WorldView {
       const age = (nowMs - em.started) / 1000;
       const pop = Math.min(1, age * 12);
       const fade = Math.min(1, Math.max(0, (em.until - nowMs) / 400));
-      em.text.position.set(Math.round(em.x), Math.round(em.y - 44));
-      em.text.alpha = fade;
-      em.text.scale.set(0.55 + 0.45 * pop);
+      // A small overshoot and a slow wobble make the sticker feel hand-slapped on.
+      const scale = (EMOTE_PX / em.sprite.texture.width) * (0.55 + 0.45 * pop) * (1 + 0.08 * Math.sin(pop * Math.PI));
+      em.sprite.scale.set(scale);
+      em.sprite.rotation = Math.sin(age * 3.2 + key.length) * 0.055 * pop;
+      em.sprite.position.set(Math.round(em.x), Math.round(em.y - 46 - Math.sin(age * 2.4) * 3));
+      em.sprite.alpha = fade;
     }
   }
 
   private dropEmote(key: string): void {
     const em = this.emotes.get(key);
     if (!em) return;
-    em.text.destroy();
+    em.sprite.destroy();
     this.emotes.delete(key);
   }
 
