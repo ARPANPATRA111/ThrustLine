@@ -128,6 +128,8 @@ async function boot(): Promise<void> {
   let myRoomId: bigint | null = null;
   let boardHeld = false;
   let menuOpen = false;
+  /** Primary weapon picked on the death screen, shown immediately while the server confirms. */
+  let pendingPrimary: number | null = null;
   let wakeLock: { release(): Promise<void> } | null = null;
   const myRow = (): Player | undefined => (net.identity ? net.conn?.db.player.identity.find(net.identity) ?? undefined : undefined);
   const myRoom = (): Room | undefined => (myRoomId !== null ? net.conn?.db.room.id.find(myRoomId) ?? undefined : undefined);
@@ -140,6 +142,29 @@ async function boot(): Promise<void> {
     if (!p) { toast('Not connected'); return false; }
     try { await p; return true; } catch (e) { toast(errorText(e)); return false; }
   };
+
+  // ---------------------------------------------------------------- emotes
+  const emoteBar = $('emote-bar');
+  emoteBar.innerHTML = C.EMOTES.map((e, i) => `<button type="button" data-emote="${i}" role="menuitem" aria-label="Emote ${i + 1}">${e}</button>`).join('');
+  const setEmoteOpen = (open: boolean): void => {
+    emoteBar.classList.toggle('hidden', !open);
+    $('btn-emote').classList.toggle('on', open);
+  };
+  const sendEmote = (index: number): void => {
+    if (myRoom()?.state !== 1) return;
+    audio.play('click');
+    game.localEmote(index); // instant locally; the server echo reaches everyone else
+    void call(net.conn?.reducers.emote({ emote: index }));
+    setEmoteOpen(false);
+  };
+  $('btn-emote').addEventListener('click', () => {
+    audio.play('click');
+    setEmoteOpen(emoteBar.classList.contains('hidden'));
+  });
+  emoteBar.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-emote]');
+    if (b) sendEmote(Number(b.dataset.emote));
+  });
 
   const lobby = new LobbyView({
     send: (mode, roundSec, teams, rules) => void call(net.conn?.reducers.updateRoomSettings({ mode, roundSec, teams, rules })),
@@ -177,6 +202,7 @@ async function boot(): Promise<void> {
       if (mine) {
         if (p.roomId !== myRoomId) enterRoom(p.roomId);
         if (old && old.alive && !p.alive) game.killedBy = game.killedBy || 'Eliminated';
+        if (pendingPrimary !== null && p.primary === pendingPrimary) pendingPrimary = null;
       }
       if (p.roomId === myRoomId) game.playerUpsert(p);
       queueRoute();
@@ -203,6 +229,7 @@ async function boot(): Promise<void> {
     melee: (e) => game.onMelee(e),
     boom: (e) => game.onBoom(e),
     pickupTaken: (e) => game.onPickup(e),
+    emote: (e) => game.onEmote(e),
   };
   // The connection may already be up (it was started during loading): start the clock sync now.
   if (net.conn) time.start();
@@ -210,6 +237,7 @@ async function boot(): Promise<void> {
   function enterRoom(roomId: bigint): void {
     game.clear();
     boardHtml = '';
+    pendingPrimary = null;
     myRoomId = roomId;
     net.subscribeRoom(roomId);
     const r = myRoom();
@@ -221,6 +249,7 @@ async function boot(): Promise<void> {
     Net.savedRoom = null;
     myRoomId = null;
     boardHtml = '';
+    pendingPrimary = null;
     net.subscribeRoom(null);
     game.clear();
     menuOpen = false;
@@ -269,6 +298,8 @@ async function boot(): Promise<void> {
       game.stop();
       game.setAttract(true);
       input.enabled = false;
+      setEmoteOpen(false);
+      $('emote-dock').classList.add('hidden');
       checkRotate();
       return;
     }
@@ -279,6 +310,8 @@ async function boot(): Promise<void> {
       game.setAttract(true);
       input.enabled = false;
       for (const id of ['scr-respawn', 'scr-board']) showOverlay(id, false);
+      setEmoteOpen(false);
+      $('emote-dock').classList.add('hidden');
       renderLobby(room);
       checkRotate();
       return;
@@ -293,6 +326,9 @@ async function boot(): Promise<void> {
     const dead = !me.alive && !ended;
     input.enabled = !ended && !menuOpen;
     showOverlay('scr-respawn', dead && !menuOpen);
+    // Emotes are for the match only; the dock stays above the respawn overlay while dead.
+    $('emote-dock').classList.toggle('hidden', ended || menuOpen);
+    if (ended || menuOpen) setEmoteOpen(false);
     if (dead) renderRespawn(me, room);
     else game.killedBy = '';
     showOverlay('scr-board', ended || boardHeld);
@@ -317,20 +353,29 @@ async function boot(): Promise<void> {
   function renderRespawn(me: Player, room: Room): void {
     $('killed-by').textContent = me.deaths === 0 && me.kills === 0 && !game.killedBy ? 'Deploying…' : game.killedBy || 'Eliminated';
     $('primary-pick').classList.toggle('hidden', room.mode !== C.MODE_ARMS);
-    document.querySelectorAll<HTMLButtonElement>('#primary-pick .pick').forEach((b) => b.classList.toggle('sel', Number(b.dataset.w) === me.primary));
+    const sel = pendingPrimary ?? me.primary;
+    document.querySelectorAll<HTMLButtonElement>('#primary-pick .pick').forEach((b) => b.classList.toggle('sel', Number(b.dataset.w) === sel));
   }
   setInterval(() => {
     if ($('scr-respawn').classList.contains('hidden')) return;
     const left = game.respawnLeft();
-    const total = (myRoom()?.rules.respawnSec ?? C.RESPAWN_SEC) * 1000;
+    const total = C.RESPAWN_SEC * 1000;
     $('respawn-count').textContent = String(Math.ceil(left / 1000));
     $('ring-fg').style.strokeDashoffset = String(276.5 * (1 - Math.min(1, left / total)));
   }, 100);
   document.querySelectorAll<HTMLButtonElement>('#primary-pick .pick').forEach((b) => {
     b.addEventListener('click', () => {
       const w = Number(b.dataset.w);
-      if (PRIMARIES.includes(w)) void call(net.conn?.reducers.choosePrimary({ weapon: w }));
+      if (!PRIMARIES.includes(w)) return;
       audio.play('click');
+      // Show the pick at once instead of waiting for the server row to come back.
+      pendingPrimary = w;
+      const me = myRow();
+      const room = myRoom();
+      if (me && room) renderRespawn(me, room);
+      void call(net.conn?.reducers.choosePrimary({ weapon: w })).then((ok) => {
+        if (!ok && pendingPrimary === w) { pendingPrimary = null; queueRoute(); }
+      });
     });
   });
 
@@ -385,10 +430,17 @@ async function boot(): Promise<void> {
   const openMenu = (open: boolean) => {
     menuOpen = open;
     showOverlay('scr-menu', open);
-    if (open) input.reset();
+    if (open) {
+      input.reset();
+      setEmoteOpen(false);
+    }
     queueRoute();
   };
   input.onMenu = () => openMenu(!menuOpen);
+  input.onEmote = () => {
+    if ($('emote-dock').classList.contains('hidden')) return;
+    setEmoteOpen(emoteBar.classList.contains('hidden'));
+  };
   input.onDebug = () => {
     settings.showDebug = !settings.showDebug;
     game.debug = settings.showDebug;

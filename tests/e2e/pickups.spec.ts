@@ -18,6 +18,10 @@ test('acid burns, pickups heal and refill, death respawns', async ({ browser }) 
   await page.waitForSelector('#scr-home:not(.hidden)');
   await page.click('#btn-create');
   await page.waitForSelector('#scr-lobby:not(.hidden)');
+  // Infinite ammo (on by default) also makes frags unlimited, so turn it off to count grenades.
+  await page.click('label.tog:has(input[data-rule="infiniteAmmo"])');
+  await expect(page.locator('input[data-rule="infiniteAmmo"]')).not.toBeChecked();
+  await page.waitForTimeout(400);
   await page.click('#btn-start');
   await page.waitForSelector('#scr-game:not(.hidden)');
 
@@ -47,7 +51,7 @@ test('acid burns, pickups heal and refill, death respawns', async ({ browser }) 
   await expect.poll(async () => (await row()).grenades, { timeout: 3000 }).toBe(2);
   console.log('grenade crate: +1');
 
-  // Die in acid, then respawn 4 s later with a new life.
+  // Die in acid, then respawn 5 s later with a new life.
   const before = await row();
   await teleport(48 * 32, 38 * 32);
   await expect.poll(async () => (await row()).deaths, { timeout: 8000 }).toBe(before.deaths + 1);

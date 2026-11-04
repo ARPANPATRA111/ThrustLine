@@ -34,7 +34,8 @@ export const HOP_FUEL = 6;
 // ---------- Health, spawns, respawn ----------
 export const MAX_HP = 100;
 export const SPAWN_PROTECT_SEC = 1.5;
-export const RESPAWN_SEC = 4;
+/** Fixed respawn delay: the host no longer configures it. */
+export const RESPAWN_SEC = 5;
 export const JOIN_SPAWN_SEC = 1;
 export const SPAWN_MIN_DIST_FROM_DEATH = 200;
 export const SPAWN_RANDOM_TOP_N = 3;
@@ -87,7 +88,6 @@ export const BLADES_RUN_MUL = 1.15;
 
 // ---------- House rules (host-editable) ----------
 export const HP_OPTIONS = [50, 100, 150, 200];
-export const RESPAWN_OPTIONS = [2, 4, 6];
 export const BOT_EASY = 0;
 export const BOT_NORMAL = 1;
 export const BOT_HARD = 2;
@@ -98,7 +98,7 @@ export const DEFAULT_RULES = {
   acid: true,
   frenzy: true,
   maxHp: 100,
-  respawnSec: 4,
+  respawnSec: RESPAWN_SEC,
   botSkill: BOT_NORMAL,
   /** Teams only: teammates can hurt each other. */
   friendlyFire: true,
@@ -195,6 +195,14 @@ export const LAGCOMP_MAX_MS = 700;
 export const TIME_DEBT_MAX_MS = 350;
 /** Longest movement interval the server accepts in one sync. */
 export const MOVE_MAX_DT_SEC = 0.5;
+
+// ---------- Emotes ----------
+/** Emotes a player can send during a match; the array index is what the server broadcasts. */
+export const EMOTES = ['👍', '😂', '🔥', '👏', '😮', '💀'];
+/** Short server-side cooldown so a held key cannot flood the room. */
+export const EMOTE_COOLDOWN_SEC = 0.6;
+/** How long an emote stays above the sender's head, in seconds. */
+export const EMOTE_SHOW_SEC = 2.6;
 
 // ---------- kill causes (weapon ids 0..5 are reused as causes) ----------
 export const CAUSE_ACID = 10;

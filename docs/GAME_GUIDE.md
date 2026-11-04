@@ -68,6 +68,7 @@ menu, settings, rotate-your-phone prompt.
 | Drop through a platform | S | Left stick pulled firmly straight down |
 | Aim / fire | Mouse / left click | Right stick direction / push past ~55 % |
 | Knife, grenade, swap, reload | F or right click, G, Q, R | Buttons on an arc around the right stick |
+| Emote | E, or the smiley button | Smiley button on the left edge |
 | Scoreboard / menu / stats | Tab / Esc / F3 | Tap mini leaderboard / ≡ button / Settings |
 
 **HUD**: health and fuel bars, minimap, timer (turns into a red FRENZY badge), team score bar
@@ -379,16 +380,17 @@ are deterministic.
 | `pickup` | yes | crate kind, tile, when it becomes available again |
 | `grenade` | yes | owner, start position and velocity, throw time, fuse, zero-g flag |
 | `kicked` | no | who the host removed from which room |
+| `emote_log` | no | per-player emote cooldown |
 | `respawn_job`, `round_end_job`, `lobby_job`, `detonate_job`, `pickup_job` | no | one-shot timers |
-| `shot_ev`, `hit_ev`, `kill_ev`, `melee_ev`, `boom_ev`, `pickup_ev`, `pong_ev`, `kick_ev` | yes (event) | broadcast-once events |
+| `shot_ev`, `hit_ev`, `kill_ev`, `melee_ev`, `boom_ev`, `pickup_ev`, `emote_ev`, `pong_ev`, `kick_ev` | yes (event) | broadcast-once events |
 
 **Reducers**: `createRoom`, `joinRoom`, `leaveRoom`, `kickPlayer`, `updateRoomSettings`,
-`switchTeam`, `movePlayerTeam`, `backToLobby`, `startRound`, `choosePrimary`, `ping`, `sync`,
+`switchTeam`, `movePlayerTeam`, `backToLobby`, `startRound`, `choosePrimary`, `emote`, `ping`, `sync`,
 `devTeleport` (test rooms only); scheduled: `doRespawn`, `endRound`, `returnToLobby`, `detonate`,
 `restorePickup`; lifecycle: `onConnect`, `onDisconnect`.
 
 **There is no server tick.** Instead of a loop running every 16 ms, everything timed is a one-shot
-schedule (respawn in 4 s, round end, grenade fuse 2.5 s, pickup back in 20 s, lobby in 12 s) and
+schedule (respawn in 5 s, round end, grenade fuse 2.5 s, pickup back in 20 s, lobby in 12 s) and
 everything else happens inside `sync`. This keeps the server cheap and simple.
 
 **Room lifecycle (state machine)**
@@ -412,10 +414,11 @@ removing the rejoined player.
 **Modes**: Arms (pistol + chosen primary + knife + 2 frags), Blades (knife only, +15 % speed),
 Boom (unlimited frags, max 2 live, knife backup), Snipers (sniper + knife).
 
-**House rules (host)**: round 2/3/5/8/10 min; health 50/100/150/200; respawn 2/4/6 s; CPU skill;
+**House rules (host)**: round 2/3/5/8/10 min; health 50/100/150/200; CPU skill;
 infinite jetpack; infinite ammo; pickups on/off; acid on/off; Frenzy on/off; free-for-all or
-red vs blue; friendly fire (teams only); floating grenades. Every toggle starts **on**, so a fresh
-room is the fastest, most chaotic version; the host turns off what the group does not want.
+red vs blue; friendly fire (teams only); floating grenades. Respawn is fixed at 5 s for everyone.
+Every toggle starts **on**, so a fresh room is the fastest, most chaotic version; the host turns
+off what the group does not want.
 
 **Scoring**: kill +100; killing a bounty (3-kill streak, glowing gold with a crown) +50 extra;
 dying to acid or your own grenade −50; killing a teammate (friendly fire) −50 and no kill credit.
@@ -480,6 +483,11 @@ Hard ~2–4 s to kill them (an aimbot would need under 1 s).
   hide when the mode doesn't use them.
 - Fullscreen on start where supported, screen wake lock during matches, safe-area insets,
   installable web app manifest.
+- **Emotes** (`emote_ev` event + Pixi `Text`): six emotes behind one smiley button (or E). The
+  server echoes the emote to the room; clients draw it above the sender and follow them while they
+  are alive. While dead, the emote stays at the exact death spot, where the camera is also held for
+  the whole 5 s respawn. The local client draws its own emote immediately, then reconciles with
+  the server echo.
 
 ---
 
@@ -492,7 +500,8 @@ Hard ~2–4 s to kill them (an aimbot would need under 1 s).
   three-note arpeggio for pickups, and an 8-bar 120 bpm music loop (kick, snare, saw bass) plus a
   faster, brighter Frenzy version. A 16-voice pool steals the oldest sound when full; world sounds
   are panned left/right by position and quieter with distance. Audio starts after the first tap
-  (browsers block sound until a user gesture).
+  (browsers block sound until a user gesture). Death plays a short falling whistle into a soft thud
+  (Mini-Militia style), only for the local player.
 
 ---
 
@@ -769,7 +778,7 @@ unique.
 
 **Q: How does difficulty progress?**
 Frenzy in the last minute (×1.5 damage, ×2 fuel refill), bounty targets as streaks grow, CPU skill
-levels, and host rules like health and respawn time.
+levels, and host rules like health and mode. (Respawn is always 5 s.)
 
 **Q: How do teams and friendly fire work?**
 `room.teams` turns it on; each player has `team` 1 (red) or 2 (blue), balanced on join. With

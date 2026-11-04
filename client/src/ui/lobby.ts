@@ -1,5 +1,5 @@
 // Lobby screen: player slots and the host's match settings (match type, mode, round length,
-// health, respawn delay, CPU skill and house-rule toggles). Everyone sees the settings; only
+// health, CPU skill and house-rule toggles). Everyone sees the settings; only
 // the host can change them, kick players, or move players between teams.
 import * as C from '@shared/config';
 import type { Identity } from 'spacetimedb';
@@ -136,7 +136,6 @@ export class LobbyView {
     const rounds = room.dev ? [C.DEV_ROUND_SEC, ...C.ROUND_LENGTHS_SEC] : C.ROUND_LENGTHS_SEC;
     this.seg('seg-round', rounds.map((v) => ({ v, label: roundLabel(v) })), d.roundSec, (v) => this.change({ roundSec: v }));
     this.seg('seg-hp', C.HP_OPTIONS.map((v) => ({ v, label: `${v}` })), d.rules.maxHp, (v) => this.change({ rules: { maxHp: v } }));
-    this.seg('seg-respawn', C.RESPAWN_OPTIONS.map((v) => ({ v, label: `${v}s` })), d.rules.respawnSec, (v) => this.change({ rules: { respawnSec: v } }));
     this.seg('seg-bot', SKILL_LABELS.map((label, v) => ({ v, label })), d.rules.botSkill, (v) => this.change({ rules: { botSkill: v } }));
     document.querySelectorAll<HTMLInputElement>('#room-settings [data-rule]').forEach((el) => {
       el.checked = Boolean(d.rules[el.dataset.rule as keyof Rules]);

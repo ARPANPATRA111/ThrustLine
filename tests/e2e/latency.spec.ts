@@ -54,6 +54,9 @@ async function openClient(browser: Browser, query: string, name: string): Promis
   await page.goto(`/${query}`);
   await page.waitForSelector('#btn-tap:not(.hidden)', { timeout: 60_000 });
   await page.click('#btn-tap');
+  // Headless can drop a click while the tab is still warming up; retry once before giving up.
+  await page.waitForTimeout(300);
+  if (await page.locator('#btn-tap').isVisible()) await page.click('#btn-tap');
   await page.waitForSelector(query.includes('room=') ? '#scr-lobby:not(.hidden)' : '#scr-home:not(.hidden)', { timeout: 60_000 });
   return page;
 }

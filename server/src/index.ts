@@ -195,6 +195,15 @@ const kicked = table(
   },
 );
 
+/** Private per-player cooldown for emotes (keeps a held key from flooding the room). */
+const emoteLog = table(
+  { name: 'emote_log' },
+  {
+    identity: t.identity().primaryKey(),
+    lastMicros: t.i64(),
+  },
+);
+
 // ---------- Scheduled (one-shot) job tables, all private ----------
 const respawnJob = table(
   { name: 'respawn_job' },
@@ -277,6 +286,14 @@ const kickEv = table(
   { name: 'kick_ev', public: true, event: true },
   { to: t.identity(), roomCode: t.string() },
 );
+/**
+ * An emote above a player's head. Dead players emote at their death spot (x/y is the centre),
+ * which is also where their camera stays until respawn.
+ */
+const emoteEv = table(
+  { name: 'emote_ev', public: true, event: true },
+  { roomId: t.u64(), identity: t.identity(), emote: t.u8(), x: t.f32(), y: t.f32() },
+);
 
 const spacetimedb = schema({
   room,
@@ -286,6 +303,7 @@ const spacetimedb = schema({
   pickup,
   grenade,
   kicked,
+  emoteLog,
   respawnJob,
   roundEndJob,
   lobbyJob,
@@ -299,6 +317,7 @@ const spacetimedb = schema({
   pickupEv,
   pongEv,
   kickEv,
+  emoteEv,
 });
 export default spacetimedb;
 
@@ -472,8 +491,7 @@ function applyDamage(ctx: Ctx, victim: PlayerRow, amount: number, attacker: Iden
   victim.streak = 0;
   victim.reloadUntilMicros = 0n;
   if (selfInflicted) victim.score += C.SCORE_SELF_DEATH;
-  const vr = ctx.db.room.id.find(victim.roomId);
-  victim.respawnAtMicros = scheduleRespawn(ctx, victim, vr ? vr.rules.respawnSec : C.RESPAWN_SEC);
+  victim.respawnAtMicros = scheduleRespawn(ctx, victim, C.RESPAWN_SEC);
   const meta = ctx.db.pmeta.identity.find(victim.identity);
   if (meta && pos) ctx.db.pmeta.identity.update({ ...meta, hasDeath: true, deathX: pos.x, deathY: pos.y });
   ctx.db.killEv.insert({ roomId: victim.roomId, killer: attacker, victim: victim.identity, cause, bounty: result.bounty, teamkill: teamkill && !selfInflicted });
@@ -595,6 +613,7 @@ function removePlayer(ctx: Ctx, identity: Identity): void {
   const p = ctx.db.player.identity.find(identity);
   ctx.db.pstate.identity.delete(identity);
   ctx.db.pmeta.identity.delete(identity);
+  ctx.db.emoteLog.identity.delete(identity);
   for (const g of [...ctx.db.grenade.owner.filter(identity)]) {
     for (const job of [...ctx.db.detonateJob.grenadeId.filter(g.id)]) ctx.db.detonateJob.scheduledId.delete(job.scheduledId);
     ctx.db.grenade.id.delete(g.id);
@@ -654,7 +673,7 @@ function validRoundSec(sec: number, dev: boolean): boolean {
 }
 
 function validRules(rules: RulesRow): boolean {
-  return C.HP_OPTIONS.includes(rules.maxHp) && C.RESPAWN_OPTIONS.includes(rules.respawnSec) && rules.botSkill <= C.BOT_HARD;
+  return C.HP_OPTIONS.includes(rules.maxHp) && rules.botSkill <= C.BOT_HARD;
 }
 
 /** Ended round → back to the lobby for everyone (stats stay visible until the next start). */
@@ -759,7 +778,8 @@ export const updateRoomSettings = spacetimedb.reducer(
     if (mode > C.MODE_SNIPERS) throw new SenderError('Unknown mode');
     if (!validRoundSec(roundSec, r.dev)) throw new SenderError('Invalid round length');
     if (!validRules(rules)) throw new SenderError('Invalid house rules');
-    const updated = { ...r, mode, roundSec, teams, rules };
+    // Respawn delay is fixed at five seconds, whatever an older client sends.
+    const updated = { ...r, mode, roundSec, teams, rules: { ...rules, respawnSec: C.RESPAWN_SEC } };
     ctx.db.room.id.update(updated);
     if (teams !== r.teams) assignTeams(ctx, updated, teams);
   },
@@ -829,6 +849,30 @@ export const choosePrimary = spacetimedb.reducer({ weapon: t.u8() }, (ctx, { wea
   const { p } = requireMember(ctx);
   if (!isPrimary(weapon)) throw new SenderError('Not a primary weapon');
   ctx.db.player.identity.update({ ...p, primary: weapon });
+});
+
+/**
+ * Broadcast a short emote. Alive players emote above themselves (clients keep it following);
+ * dead players emote at their death spot, where their camera is waiting.
+ */
+export const emote = spacetimedb.reducer({ emote: t.u8() }, (ctx, { emote: which }) => {
+  const { p, r } = requireMember(ctx);
+  if (r.state !== ROOM_PLAYING) throw new SenderError('Emotes are for the match');
+  if (which >= C.EMOTES.length) throw new SenderError('Unknown emote');
+  const now = nowMicros(ctx);
+  const last = ctx.db.emoteLog.identity.find(ctx.sender);
+  if (last && now - last.lastMicros < secToMicros(C.EMOTE_COOLDOWN_SEC)) return;
+  if (last) ctx.db.emoteLog.identity.update({ ...last, lastMicros: now });
+  else ctx.db.emoteLog.insert({ identity: ctx.sender, lastMicros: now });
+
+  const ps = ctx.db.pstate.identity.find(ctx.sender);
+  const meta = ctx.db.pmeta.identity.find(ctx.sender);
+  const centre = p.alive
+    ? ps ? { x: ps.x, y: ps.y - C.PLAYER_H / 2 } : { x: p.cx, y: p.cy }
+    : meta?.hasDeath
+      ? { x: meta.deathX, y: meta.deathY - C.PLAYER_H / 2 }
+      : ps ? { x: ps.x, y: ps.y - C.PLAYER_H / 2 } : { x: p.cx, y: p.cy };
+  ctx.db.emoteEv.insert({ roomId: r.id, identity: p.identity, emote: which, x: centre.x, y: centre.y });
 });
 
 /** Clock-sync ping. The client also reports its last measured round trip, which everyone can see. */

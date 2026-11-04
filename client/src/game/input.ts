@@ -14,6 +14,8 @@ export class Input {
   onScoreboard: (show: boolean) => void = () => {};
   onMenu: () => void = () => {};
   onDebug: () => void = () => {};
+  /** KeyE: open/close the emote picker (also reachable by touch). */
+  onEmote: () => void = () => {};
 
   // Written by the touch controls.
   touch = { moveX: 0, thrust: false, thrustAmount: 1, down: false, aim: null as number | null, fire: false };
@@ -44,6 +46,7 @@ export class Input {
     if (k === 'Tab') { e.preventDefault(); if (this.enabled) this.onScoreboard(down); return; }
     if (k === 'F3' && down) { e.preventDefault(); this.onDebug(); return; }
     if (k === 'Escape' && down) { if (this.enabled) this.onMenu(); return; }
+    if (k === 'KeyE' && down && !e.repeat) { if (this.enabled) this.onEmote(); return; }
     if (!this.enabled) return;
     if (k === 'Space') e.preventDefault();
     if (down && !this.keys.has(k)) {

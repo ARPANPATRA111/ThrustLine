@@ -1,12 +1,12 @@
 // The match: fixed-step simulation of the local player (and any CPU bots hosted here),
 // interpolation of remote players, server events turned into effects, and rendering.
-import { type Application, Container, Sprite, type Texture, TilingSprite } from 'pixi.js';
+import { type Application, Container, Sprite, Text, type Texture, TilingSprite } from 'pixi.js';
 import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
 import { RIG7, MAP_H, MAP_W } from '@shared/map';
 import { fuseTicks, grenadePath } from '@shared/grenade';
 import { W_FRAG, W_KNIFE, W_PISTOL, W_SNIPER, canThrow, isGun, pickupActive } from '@shared/weapons';
-import type { BoomEv, Grenade, HitEv, KillEv, MeleeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
+import type { BoomEv, EmoteEv, Grenade, HitEv, KillEv, MeleeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
 import type { Net } from '../net/connection';
 import type { TimeSync } from '../net/timesync';
 import { LagEstimator, SnapshotBuffer, type Sample } from '../net/interp';
@@ -56,6 +56,19 @@ interface PickupView {
   baseY: number;
 }
 
+/** An emote floating above a player (or frozen at a dead player's death spot). */
+interface EmoteView {
+  index: number;
+  text: Text;
+  started: number;
+  until: number;
+  /** Centre position when it cannot follow a live player. */
+  x: number;
+  y: number;
+  /** True while the sender is alive: keep the emote above their head. */
+  follow: boolean;
+}
+
 // Quality steps: resolution, particle cap, parallax layer count.
 const QUALITY_STEPS = [
   { res: 2, particles: C.PARTICLE_CAP_HIGH, parallax: 3 },
@@ -97,6 +110,7 @@ export class Game implements WorldView {
   private pickupLayer = new Container();
   private grenadeLayer = new Container();
   private playerLayer = new Container();
+  private emoteLayer = new Container();
   private particles: Particles;
   private effects: Effects;
   private localView: SoldierView | null = null;
@@ -109,6 +123,11 @@ export class Game implements WorldView {
   private remotes = new Map<string, Remote>();
   private grenades = new Map<bigint, GrenadeView>();
   private pickups = new Map<bigint, PickupView>();
+  private emotes = new Map<string, EmoteView>();
+  /** Where the local player died: the camera holds here until respawn. */
+  private deathSpot: { x: number; y: number } | null = null;
+  /** Local-clock time of the last emote this client sent (optimistic rate limit). */
+  private localEmoteAt = 0;
   private input: ActorInput = emptyInput();
   private acc = 0;
   private wasFrenzy = false;
@@ -151,7 +170,7 @@ export class Game implements WorldView {
     this.acidGlow.position.set(this.acidR.x + this.acidR.w / 2, this.acidR.y);
     this.acidGlow.scale.set((this.acidR.w * 1.4) / 32, 90 / 32);
     this.world.addChild(
-      bakeMap(RIG7), this.acid, this.acidGlow, this.pickupLayer, this.grenadeLayer, this.playerLayer,
+      bakeMap(RIG7), this.acid, this.acidGlow, this.pickupLayer, this.grenadeLayer, this.playerLayer, this.emoteLayer,
       this.particles.normal, this.aimLine, this.effects.layer, this.particles.additive, this.effects.textLayer,
     );
     this.radar = new Radar(this.tex, RIG7);
@@ -212,6 +231,10 @@ export class Game implements WorldView {
     this.grenades.clear();
     for (const p of this.pickups.values()) p.sprite.destroy();
     this.pickups.clear();
+    for (const em of this.emotes.values()) em.text.destroy();
+    this.emotes.clear();
+    this.deathSpot = null;
+    this.localEmoteAt = 0;
     this.localView?.destroy();
     this.localView = null;
     this.local = null;
@@ -266,10 +289,22 @@ export class Game implements WorldView {
         this.playerLayer.addChild(this.localView.root);
       }
       const ps = this.net.conn?.db.pstate.identity.find(p.identity) ?? undefined;
+      const wasAlive = this.local.alive;
       const snap = this.local.applyServer(p, ps);
       if (snap === 'respawn') {
+        this.deathSpot = null;
         this.camera.follow(this.local.body.x, this.local.centerY, this.local.aim, false, 0, true);
         this.effects.ring(this.local.body.x, this.local.centerY, 60, playerColor(p.colorIdx, this.teams ? p.team : 0), 0.5, true);
+      } else if (wasAlive && !p.alive) {
+        // Freeze the camera and any live emote on the exact spot where we died.
+        this.deathSpot = { x: this.local.body.x, y: this.local.centerY };
+        this.camera.snapTo(this.deathSpot.x, this.deathSpot.y);
+        const em = this.emotes.get(this.net.myKey);
+        if (em) {
+          em.follow = false;
+          em.x = this.deathSpot.x;
+          em.y = this.deathSpot.y;
+        }
       }
       this.refreshColors();
       return;
@@ -304,6 +339,7 @@ export class Game implements WorldView {
       r.view.destroy();
       this.remotes.delete(key);
     }
+    this.dropEmote(key);
   }
 
   pstateUpsert(s: Pstate): void {
@@ -401,6 +437,7 @@ export class Game implements WorldView {
     if (pos) this.deathBurst(pos.x, pos.y, this.colorOf(vKey));
     if (vKey === this.net.myKey) {
       this.killedBy = self ? (e.cause === C.CAUSE_ACID ? 'Dissolved in acid' : 'Blown up by your own grenade') : `Eliminated by ${killer?.name ?? '?'}`;
+      this.audio.play('death', 0.75);
     }
     if (kKey === this.net.myKey && !self) {
       this.hud.showBanner(e.bounty ? 'BOUNTY! +150' : '+100', e.bounty ? '#ffd54a' : '#22d3ee', 1.2);
@@ -425,6 +462,89 @@ export class Game implements WorldView {
     const v = this.pickups.get(e.pickupId);
     if (v) this.effects.ring(v.sprite.x, v.sprite.y, 40, [0xff4d6d, 0xfbbf24, 0x7cff4f][e.kind] ?? 0xffffff, 0.4, true);
     if (e.identity.toHexString() === this.net.myKey) this.audio.play('pickup', 0.7);
+  }
+
+  /** Someone in the room sent an emote: show it above their head (or at their death spot). */
+  onEmote(e: EmoteEv): void {
+    if (!this.room || e.roomId !== this.room.id) return;
+    const key = e.identity.toHexString();
+    const row = this.rowOf(key);
+    this.applyEmote(key, e.emote, e.x, e.y, !!row?.alive);
+  }
+
+  /** Show the local player's emote instantly, before the server round-trip confirms it. */
+  localEmote(index: number): void {
+    if (!this.local || !this.localRow || this.room?.state !== 1) return;
+    const now = performance.now();
+    if (now - this.localEmoteAt < C.EMOTE_COOLDOWN_SEC * 1000) return;
+    this.localEmoteAt = now;
+    const alive = this.localRow.alive;
+    const x = alive || !this.deathSpot ? this.local.body.x : this.deathSpot.x;
+    const y = alive || !this.deathSpot ? this.local.centerY : this.deathSpot.y;
+    this.applyEmote(this.net.myKey, index, x, y, alive);
+  }
+
+  private applyEmote(key: string, index: number, x: number, y: number, follow: boolean): void {
+    const emoji = C.EMOTES[index];
+    if (!emoji) return;
+    const now = performance.now();
+    let em = this.emotes.get(key);
+    if (!em) {
+      const text = new Text({
+        text: emoji,
+        style: {
+          fontFamily: '"Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif',
+          fontSize: 32,
+          stroke: { color: 0x0b1020, width: 5 },
+          dropShadow: { color: 0x000000, alpha: 0.5, blur: 4, distance: 2, angle: Math.PI / 2 },
+        },
+      });
+      text.anchor.set(0.5, 1);
+      this.emoteLayer.addChild(text);
+      em = { index, text, started: now, until: now, x, y, follow };
+      this.emotes.set(key, em);
+    }
+    if (em.index !== index) {
+      em.index = index;
+      em.text.text = emoji;
+    }
+    em.started = now;
+    em.until = now + C.EMOTE_SHOW_SEC * 1000;
+    em.x = x;
+    em.y = y;
+    em.follow = follow;
+  }
+
+  /** Keep live emotes above their sender; freeze them when the sender dies. */
+  private updateEmotes(nowMs: number): void {
+    for (const [key, em] of this.emotes) {
+      if (nowMs >= em.until) {
+        this.dropEmote(key);
+        continue;
+      }
+      if (em.follow) {
+        if (this.rowOf(key)?.alive) {
+          const pos = this.positionOf(key);
+          if (pos) {
+            em.x = pos.x;
+            em.y = pos.y;
+          }
+        } else em.follow = false;
+      }
+      const age = (nowMs - em.started) / 1000;
+      const pop = Math.min(1, age * 12);
+      const fade = Math.min(1, Math.max(0, (em.until - nowMs) / 400));
+      em.text.position.set(Math.round(em.x), Math.round(em.y - 44));
+      em.text.alpha = fade;
+      em.text.scale.set(0.55 + 0.45 * pop);
+    }
+  }
+
+  private dropEmote(key: string): void {
+    const em = this.emotes.get(key);
+    if (!em) return;
+    em.text.destroy();
+    this.emotes.delete(key);
   }
 
   // ------------------------------------------------------------------ helpers for events
@@ -558,6 +678,7 @@ export class Game implements WorldView {
   private frame(): void {
     const dt = Math.min(this.app.ticker.deltaMS / 1000, 0.1);
     const now = this.serverNow();
+    const pnow = performance.now();
     const playing = this.room?.state === 1;
     const frenzy = this.frenzy;
     const runMul = this.mode === C.MODE_BLADES ? C.BLADES_RUN_MUL : 1;
@@ -672,8 +793,13 @@ export class Game implements WorldView {
     }
 
     // --- Camera, world transform, parallax ---
+    this.updateEmotes(pnow);
     const cam = this.camera;
-    if ((!local || !local.alive || !playing) && this.running) cam.follow(cam.x, cam.y, 0, false, dt);
+    if ((!local || !local.alive || !playing) && this.running) {
+      cam.hold(dt);
+      // Dead: keep the view pinned to the death spot for the whole respawn wait.
+      if (local && !local.alive && playing && this.deathSpot) cam.snapTo(this.deathSpot.x, this.deathSpot.y);
+    }
     const z = cam.zoom;
     this.world.scale.set(z);
     this.world.position.set(Math.round((-cam.left + cam.shakeX) * z), Math.round((-cam.top + cam.shakeY) * z));
@@ -828,6 +954,11 @@ export class Game implements WorldView {
       remotes: [...this.remotes.values()].map((r) => ({ name: r.row.name, alive: r.row.alive, x: r.s.x, y: r.s.y, ...toScreen(r.s.x, r.s.y - C.PLAYER_H / 2) })),
       kills: this.allPlayers().reduce((n, p) => n + p.kills, 0),
       renderer: this.app.renderer.name,
+      camera: { x: cam.x, y: cam.y, left: cam.left, top: cam.top, right: cam.right, bottom: cam.bottom, zoom: cam.zoom },
+      deathSpot: this.deathSpot,
+      emotes: [...this.emotes.entries()].map(([key, em]) => ({
+        key, index: em.index, x: em.x, y: em.y, follow: em.follow, ...toScreen(em.x, em.y - 44),
+      })),
     };
   }
 

@@ -26,6 +26,21 @@ export const DetonateJob = __t.object("DetonateJob", {
 });
 export type DetonateJob = __Infer<typeof DetonateJob>;
 
+export const EmoteEv = __t.object("EmoteEv", {
+  roomId: __t.u64(),
+  identity: __t.identity(),
+  emote: __t.u8(),
+  x: __t.f32(),
+  y: __t.f32(),
+});
+export type EmoteEv = __Infer<typeof EmoteEv>;
+
+export const EmoteLog = __t.object("EmoteLog", {
+  identity: __t.identity(),
+  lastMicros: __t.i64(),
+});
+export type EmoteLog = __Infer<typeof EmoteLog>;
+
 export const Grenade = __t.object("Grenade", {
   id: __t.u64(),
   roomId: __t.u64(),
