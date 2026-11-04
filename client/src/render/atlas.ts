@@ -50,8 +50,10 @@ export const WEAPON_DRAW: Draw[] = [
   (g) => { g.beginPath(); g.moveTo(6, 1); g.lineTo(17, 3); g.lineTo(6, 5); g.closePath(); fillStroke(g, '#e6ecff', 1.5); rr(g, 0, 1.5, 6, 3, 1); fillStroke(g, '#8e9ac8', 1.5); },
   // Frag
   (g, w, h) => { g.beginPath(); g.ellipse(w / 2, h / 2 + 1, 4, 5, 0, 0, Math.PI * 2); fillStroke(g, '#7cff4f'); rr(g, w / 2 - 2, 0, 4, 3, 1); fillStroke(g, '#8e9ac8', 1.5); },
+  // SMG
+  (g) => { rr(g, 1, 3, 27, 5, 2); fillStroke(g, '#cfd8ff'); rr(g, 9, 7, 5, 6, 1); fillStroke(g, '#8e9ac8'); rr(g, 0, 2, 6, 6, 1.5); fillStroke(g, '#8e9ac8'); rr(g, 25, 2, 7, 4, 1); fillStroke(g, '#22d3ee', 1.5); },
 ];
-export const WEAPON_SIZE: [number, number][] = [[18, 11], [33, 12], [32, 10], [46, 9], [18, 6], [10, 13]];
+export const WEAPON_SIZE: [number, number][] = [[18, 11], [33, 12], [32, 10], [46, 9], [18, 6], [10, 13], [34, 14]];
 
 const PARTS: Part[] = [
   // ---------- Soldier (white parts get tinted per player) ----------

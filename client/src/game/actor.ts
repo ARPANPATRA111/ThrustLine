@@ -99,7 +99,7 @@ export class Actor {
   reserve = 0;
   grenades = 0;
   reloadUntilMs = 0;
-  private lastShotMs = [0, 0, 0, 0];
+  private lastShotMs = WEAPONS.map(() => 0);
   private lastMeleeMs = 0;
   private lastThrowMs = 0;
 
@@ -142,7 +142,7 @@ export class Actor {
         this.snapTo(x, y);
         this.body.fuel = C.FUEL_MAX;
         this.weapon = row.weapon;
-        this.lastShotMs = [0, 0, 0, 0];
+        this.lastShotMs = WEAPONS.map(() => 0);
         snapped = 'respawn';
       }
       this.correction = row.correction;

@@ -5,7 +5,7 @@ import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
 import { RIG7, MAP_H, MAP_W } from '@shared/map';
 import { fuseTicks, grenadePath } from '@shared/grenade';
-import { W_FRAG, W_KNIFE, W_PISTOL, W_SNIPER, canThrow, isGun, pickupActive } from '@shared/weapons';
+import { W_FRAG, W_KNIFE, W_PISTOL, W_SMG, W_SNIPER, canThrow, isGun, pickupActive } from '@shared/weapons';
 import type { BoomEv, EmoteEv, Grenade, HitEv, KillEv, MeleeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
 import type { Net } from '../net/connection';
 import type { TimeSync } from '../net/timesync';
@@ -26,7 +26,18 @@ import type { Input } from './input';
 import type { Quality } from '../ui/settings';
 
 const STEP = 1 / C.SIM_HZ;
-const WEAPON_SOUND = ['pistol', 'ar', 'shotgun', 'sniper'] as const;
+/** Gun id -> sound name (knife and frag have their own cues). */
+const WEAPON_SOUND: Record<number, 'pistol' | 'ar' | 'smg' | 'shotgun' | 'sniper'> = {
+  [W_PISTOL]: 'pistol',
+  1: 'ar',
+  2: 'shotgun',
+  [W_SNIPER]: 'sniper',
+  [W_SMG]: 'smg',
+};
+/** Rapid-fire guns get a little pitch jitter so long bursts don't sound like a machine. */
+function gunPitch(w: number): number {
+  return w === 1 || w === W_SMG ? 0.95 + Math.random() * 0.1 : 1;
+}
 
 interface Remote {
   id: Identity;
@@ -402,7 +413,7 @@ export class Game implements WorldView {
     }
     const ang = e.ends.length >= 2 ? Math.atan2(e.ends[1] - e.y0, e.ends[0] - e.x0) : 0;
     this.effects.flash(e.x0, e.y0, ang, e.weapon === 2);
-    this.audio.play(WEAPON_SOUND[e.weapon] ?? 'pistol', 0.9, e.x0, e.y0, e.weapon === 1 ? 0.95 + Math.random() * 0.1 : 1);
+    this.audio.play(WEAPON_SOUND[e.weapon] ?? 'pistol', 0.9, e.x0, e.y0, gunPitch(e.weapon));
   }
 
   onHit(e: HitEv): void {
@@ -628,7 +639,7 @@ export class Game implements WorldView {
         }
         const a = this.local ? this.local.aim : 0;
         this.effects.flash(ox, oy, a, w === 2);
-        this.audio.play(WEAPON_SOUND[w] ?? 'pistol', 0.85, undefined, undefined, w === 1 ? 0.95 + Math.random() * 0.1 : 1);
+        this.audio.play(WEAPON_SOUND[w] ?? 'pistol', 0.85, undefined, undefined, gunPitch(w));
       },
       melee: (x, y, angle) => {
         this.effects.slash(x, y, angle, this.localRow ? this.colorOf(this.net.myKey) : 0xffffff);

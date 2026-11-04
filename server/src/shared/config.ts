@@ -10,7 +10,8 @@ export const PLAYER_W = 24;
 export const PLAYER_H = 48;
 export const RUN_SPEED = 260;
 export const GROUND_ACCEL = 2400;
-export const AIR_ACCEL = 1400;
+/** Air steering: high enough that jets stay agile without feeling floaty. */
+export const AIR_ACCEL = 1500;
 export const GROUND_FRICTION = 2600;
 /** Gentle slow-down in the air when no direction is held (keeps blast-jumps flowing). */
 export const AIR_DRAG = 300;
@@ -23,12 +24,12 @@ export const MAX_IMPULSE_SPEED_UP = 900;
 
 // ---------- Jetpack ----------
 export const JET_ACCEL = 3000; // net 1200 upward once gravity is subtracted
-export const JET_MAX_UP = 420;
+export const JET_MAX_UP = 460;
 export const FUEL_MAX = 100;
-export const FUEL_DRAIN = 38; // per second while thrusting (~2.6 s of flight)
-export const FUEL_REFILL = 60; // per second (full tank in ~1.7 s, so the action keeps moving)
-export const FUEL_REFILL_DELAY = 0.15; // seconds on the ground before refilling starts
-export const HOP_SPEED = 520;
+export const FUEL_DRAIN = 34; // per second while thrusting (just under 3 s of flight)
+export const FUEL_REFILL = 70; // per second (full tank in ~1.4 s, so the action keeps moving)
+export const FUEL_REFILL_DELAY = 0.12; // seconds on the ground before refilling starts
+export const HOP_SPEED = 560;
 export const HOP_FUEL = 6;
 
 // ---------- Health, spawns, respawn ----------
@@ -107,21 +108,22 @@ export const DEFAULT_RULES = {
 };
 
 // ---------- Grenades ----------
-export const GRENADE_FUSE_MS = 2500;
-export const GRENADE_THROW_SPEED = 820;
+/** Short enough that a thrown frag is a live threat, not a warning. */
+export const GRENADE_FUSE_MS = 1500;
+export const GRENADE_THROW_SPEED = 900;
 /** Fraction of the thrower's own velocity added to the throw. */
-export const GRENADE_INHERIT = 0.3;
+export const GRENADE_INHERIT = 0.35;
 export const GRENADE_RESTITUTION = 0.45;
 export const GRENADE_FRICTION = 0.7;
 export const GRENADE_RADIUS = 5;
-export const GRENADE_BLAST_RADIUS = 150;
-export const GRENADE_MAX_DAMAGE = 90;
-export const GRENADE_KNOCKBACK = 650;
+export const GRENADE_BLAST_RADIUS = 170;
+export const GRENADE_MAX_DAMAGE = 100;
+export const GRENADE_KNOCKBACK = 700;
 export const GRENADE_SELF_DAMAGE_MUL = 0.5;
 export const GRENADE_ARMS_PER_LIFE = 2;
-export const GRENADE_COOLDOWN_ARMS = 0.8;
-export const GRENADE_COOLDOWN_BOOM = 1.0;
-export const GRENADE_BOOM_MAX_LIVE = 2;
+export const GRENADE_COOLDOWN_ARMS = 0.7;
+export const GRENADE_COOLDOWN_BOOM = 0.85;
+export const GRENADE_BOOM_MAX_LIVE = 3;
 /** The grenade simulation runs at a fixed 120 Hz so server and client agree exactly. */
 export const GRENADE_TICK_HZ = 120;
 /** Zero-g grenades: velocity multiplier per 120 Hz tick (slow drift to a stop, ~680 px travel). */
@@ -207,7 +209,7 @@ export const EMOTE_COOLDOWN_SEC = 0.6;
 /** How long an emote stays above the sender's head, in seconds. */
 export const EMOTE_SHOW_SEC = 2.6;
 
-// ---------- kill causes (weapon ids 0..5 are reused as causes) ----------
+// ---------- kill causes (weapon ids 0..6 are reused as causes) ----------
 export const CAUSE_ACID = 10;
 
 /** Frenzy is computed from the round end time on both sides; nothing is stored. */

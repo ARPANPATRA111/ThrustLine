@@ -599,7 +599,7 @@ function addPlayerToRoom(ctx: Ctx, r: RoomRow, name: string, isBot: boolean): vo
     histT: [],
     histX: [],
     histY: [],
-    lastFire: [0n, 0n, 0n, 0n],
+    lastFire: WEAPONS.map(() => 0n),
     lastMeleeMicros: 0n,
     lastThrowMicros: 0n,
     hasDeath: false,
@@ -1159,7 +1159,7 @@ function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x:
   if (!isGun(wid) || wid !== p.weapon || !allowedWeapons(r.mode, p.primary).includes(wid)) return rejected(r, 'shot: weapon not equipped');
   if (p.reloadUntilMicros > 0n) return rejected(r, 'shot: reloading');
   const w = WEAPONS[wid];
-  if (!fireRateOk(meta.lastFire[wid], now, w.rate)) return rejected(r, 'shot: too fast');
+  if (!fireRateOk(meta.lastFire[wid] ?? 0n, now, w.rate)) return rejected(r, 'shot: too fast');
   const magLeft = wid === W_PISTOL ? p.pistolMag : p.mag;
   if (magLeft <= 0 && !r.rules.infiniteAmmo) return rejected(r, 'shot: empty');
   // The shot may have been fired before this sync's movement (e.g. shotgun recoil moved the
@@ -1173,7 +1173,7 @@ function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x:
   }
   const minGap = secToMicros(C.FIRE_RATE_TOLERANCE / w.rate);
   const floor = now - FIRE_BURST_MICROS;
-  const advanced = meta.lastFire[wid] + minGap;
+  const advanced = (meta.lastFire[wid] ?? 0n) + minGap;
   meta.lastFire[wid] = advanced > floor ? advanced : floor;
   p.spawnProtectUntilMicros = 0n; // firing ends spawn protection
 
