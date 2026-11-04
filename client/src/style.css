@@ -350,13 +350,13 @@ body.touch-mode .nades { font-size: 11px; }
 
 /* ---------- Emotes ---------- */
 /* Positioned by main.ts just left of the mini leaderboard; stays clickable while dead. */
-.emote-dock { position: fixed; right: calc(12px + var(--safe-r) + 206px); top: calc(10px + var(--safe-t)); z-index: 30; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-.emote-btn { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line); background: radial-gradient(circle at 35% 30%, rgba(60, 75, 140, 0.85), rgba(10, 15, 34, 0.85)); color: var(--ink); display: grid; place-items: center; cursor: pointer; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4); }
+.emote-dock { position: fixed; right: calc(12px + var(--safe-r) + 206px); top: calc(10px + var(--safe-t)); z-index: 30; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+.emote-btn { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line); background: radial-gradient(circle at 35% 30%, rgba(60, 75, 140, 0.85), rgba(10, 15, 34, 0.85)); color: var(--ink); display: grid; place-items: center; cursor: pointer; touch-action: none; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4); }
 .emote-btn .ic { width: 22px; height: 22px; }
 .emote-btn.on { color: var(--gold); border-color: var(--gold); }
-/* The sticker tray opens along the bottom edge, clear of the weapon chip. */
-.emote-bar { position: fixed; left: 0; right: 0; bottom: calc(76px + var(--safe-b)); margin-inline: auto; width: fit-content; max-width: calc(100vw - 24px); overflow-x: auto; z-index: 31; display: flex; gap: 6px; padding: 8px; border-radius: 16px; background: rgba(7, 11, 24, 0.94); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); animation: rise 0.14s ease-out; }
-.emote-bar button { flex: none; width: 54px; height: 54px; padding: 2px; border-radius: 12px; border: 1px solid transparent; background: rgba(255, 255, 255, 0.05); cursor: pointer; }
+/* The sticker tray drops straight down from the button, so it never covers the respawn picks. */
+.emote-bar { position: absolute; top: calc(100% + 8px); right: 0; width: fit-content; max-width: calc(100vw - 24px); overflow-x: auto; z-index: 1; display: flex; gap: 6px; padding: 8px; border-radius: 16px; background: rgba(7, 11, 24, 0.94); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); animation: rise 0.14s ease-out; touch-action: none; }
+.emote-bar button { flex: none; width: 54px; height: 54px; padding: 2px; border-radius: 12px; border: 1px solid transparent; background: rgba(255, 255, 255, 0.05); cursor: pointer; touch-action: none; }
 .emote-bar button:hover { background: rgba(255, 255, 255, 0.12); }
 .emote-bar button:active { transform: scale(0.9); }
 .emote-bar img { width: 100%; height: 100%; display: block; object-fit: contain; pointer-events: none; }
@@ -368,6 +368,9 @@ body.touch-mode .nades { font-size: 11px; }
 body.touch-mode .key-hints { display: none; }
 
 /* ---------- Overlays ---------- */
+/* The death screen sits at the bottom: the pick row must stay clear of the emote button
+   (top right) and the weapon chip (bottom centre). */
+#scr-respawn.center { justify-content: flex-end; padding-bottom: calc(66px + var(--safe-b)); }
 .respawn-card { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 320px; }
 .killed-by { margin: 0; font-family: var(--display); font-size: 20px; letter-spacing: 0.04em; text-align: center; }
 .ring-wrap { position: relative; width: 108px; height: 108px; }
@@ -506,8 +509,9 @@ kbd.wide { min-width: 110px; }
   .mini-board .pg { min-width: 26px; }
   .emote-btn { width: 38px; height: 38px; }
   .emote-btn .ic { width: 20px; height: 20px; }
-  .emote-bar { bottom: calc(70px + var(--safe-b)); display: grid; grid-template-columns: repeat(4, 46px); gap: 5px; padding: 6px; overflow: visible; }
+  .emote-bar { display: grid; grid-template-columns: repeat(4, 46px); gap: 5px; padding: 6px; overflow: visible; }
   .emote-bar button { width: 46px; height: 46px; }
+  #scr-respawn.center { padding-bottom: calc(58px + var(--safe-b)); }
   .killfeed { font-size: 11px; }
   .team-score { font-size: 12px; }
   .board th, .board td { padding: 4px 8px; font-size: 13px; }

@@ -40,8 +40,11 @@ export interface WeaponDef {
 export const WEAPONS: WeaponDef[] = [
   { id: W_PISTOL, name: 'Pistol', kind: 'semi', damage: 18, rate: 4, mag: 12, reserve: -1, reloadSec: 1.0, range: 900, spreadStill: 1.5, spreadMoving: 1.5, pellets: 1, falloffStart: 900, falloffMul: 1, recoil: 0, shake: 2 },
   { id: W_AR, name: 'AR', kind: 'auto', damage: 11, rate: 10, mag: 30, reserve: 120, reloadSec: 1.6, range: 1100, spreadStill: 1.5, spreadMoving: 3, pellets: 1, falloffStart: 1100, falloffMul: 1, recoil: 0, shake: 2 },
-  { id: W_SHOTGUN, name: 'Shotgun', kind: 'semi', damage: 9, rate: 1.1, mag: 6, reserve: 24, reloadSec: 2.2, range: 420, spreadStill: 14, spreadMoving: 14, pellets: 7, falloffStart: 180, falloffMul: 0.5, recoil: 520, shake: 7 },
-  { id: W_SNIPER, name: 'Sniper', kind: 'bolt', damage: 85, rate: 0.8, mag: 4, reserve: 16, reloadSec: 2.6, range: 2400, spreadStill: 0, spreadMoving: 6, pellets: 1, falloffStart: 2400, falloffMul: 1, recoil: 0, shake: 8 },
+  // Close-range burst: all ten pellets at point blank drop a full-health pilot, and the faster
+  // pump makes a second shot land before the target can fly clear at 250 ms ping.
+  { id: W_SHOTGUN, name: 'Shotgun', kind: 'semi', damage: 10, rate: 1.3, mag: 7, reserve: 28, reloadSec: 2.0, range: 460, spreadStill: 13, spreadMoving: 13, pellets: 10, falloffStart: 200, falloffMul: 0.55, recoil: 540, shake: 8 },
+  // One clean body hit kills; with a quarter-second of lag, two-shot kills were too hard to close.
+  { id: W_SNIPER, name: 'Sniper', kind: 'bolt', damage: 100, rate: 0.85, mag: 4, reserve: 16, reloadSec: 2.5, range: 2400, spreadStill: 0, spreadMoving: 5, pellets: 1, falloffStart: 2400, falloffMul: 1, recoil: 0, shake: 9 },
   { id: W_KNIFE, name: 'Knife', kind: 'melee', damage: 55, rate: 2, mag: 0, reserve: 0, reloadSec: 0, range: 64, spreadStill: 60, spreadMoving: 60, pellets: 0, falloffStart: 64, falloffMul: 1, recoil: 0, shake: 1 },
   { id: W_FRAG, name: 'Frag', kind: 'thrown', damage: 100, rate: 1.25, mag: 0, reserve: 0, reloadSec: 0, range: 170, spreadStill: 0, spreadMoving: 0, pellets: 0, falloffStart: 0, falloffMul: 1, recoil: 0, shake: 10 },
   // Latency-friendly primary: many forgiving shots, so a quarter-second of lag costs a few bullets

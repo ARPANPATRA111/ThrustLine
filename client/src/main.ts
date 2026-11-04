@@ -129,7 +129,7 @@ async function boot(): Promise<void> {
   let myRoomId: bigint | null = null;
   let boardHeld = false;
   let menuOpen = false;
-  /** The emote picker opens once each time the local player dies. */
+  /** Tracks death so the picker can close on respawn; it never opens by itself. */
   let wasDead = false;
   /** Primary weapon picked on the death screen, shown immediately while the server confirms. */
   let pendingPrimary: number | null = null;
@@ -174,11 +174,37 @@ async function boot(): Promise<void> {
     void call(net.conn?.reducers.emote({ emote: index }));
     setEmoteOpen(false);
   };
-  $('btn-emote').addEventListener('click', () => {
+  /**
+   * Fire on pointerdown, not click: a finger already holding a stick must not delay or swallow
+   * the tap (multi-touch), and the picker should react the instant it is touched. Keyboard
+   * activation still arrives as a click with `detail === 0`.
+   */
+  const press = (fn: () => void) => (e: Event): void => {
+    if (e.type === 'pointerdown') {
+      const pe = e as PointerEvent;
+      if (pe.pointerType === 'mouse' && pe.button !== 0) return;
+      e.preventDefault();
+      fn();
+    } else if ((e as MouseEvent).detail === 0) {
+      fn(); // keyboard Enter/Space
+    }
+  };
+  const toggleEmote = (): void => {
+    if (emoteDock.classList.contains('hidden')) return;
     audio.play('click');
     setEmoteOpen(emoteBar.classList.contains('hidden'));
+  };
+  const emoteBtn = $('btn-emote');
+  emoteBtn.addEventListener('pointerdown', press(toggleEmote));
+  emoteBtn.addEventListener('click', press(toggleEmote));
+  emoteBar.addEventListener('pointerdown', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-emote]');
+    if (!b) return;
+    e.preventDefault();
+    sendEmote(Number(b.dataset.emote));
   });
   emoteBar.addEventListener('click', (e) => {
+    if ((e as MouseEvent).detail !== 0) return; // pointer taps are handled above
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-emote]');
     if (b) sendEmote(Number(b.dataset.emote));
   });
@@ -348,8 +374,8 @@ async function boot(): Promise<void> {
     // Emotes are for the match only; the dock stays above the respawn overlay while dead.
     $('emote-dock').classList.toggle('hidden', ended || menuOpen);
     if (ended || menuOpen) setEmoteOpen(false);
-    // Dying opens the sticker picker once, so the player can react while waiting to respawn.
-    else if (dead && !wasDead) setEmoteOpen(true);
+    // The picker only ever opens from the button/key; dying leaves it closed. Close it on respawn
+    // so it does not cover the weapon picker when the next death screen appears.
     else if (!dead && wasDead) setEmoteOpen(false);
     wasDead = dead;
     if (dead) renderRespawn(me, room);

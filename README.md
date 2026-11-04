@@ -107,8 +107,8 @@ one setup script on the server, then change `VITE_STDB_URI` and run `npm run dep
 | Pistol | 18 | 4/s | 12 / ∞ | Always carried |
 | AR | 11 | 10/s | 30 / 120 | Automatic; spread grows while moving |
 | SMG | 8 | 14/s | 35 / 140 | Latency-friendly: many fast shots and forgiving spread; falls off past 450 px |
-| Shotgun | 7 × 9 | 1.1/s | 6 / 24 | Falls off past 180 px; recoil throws you back (blast-jumping) |
-| Sniper | 85 | 0.8/s | 4 / 16 | Pinpoint while still; camera leads 320 px |
+| Shotgun | 10 × 10 | 1.3/s | 7 / 28 | All pellets at point blank kill; falls off past 200 px; recoil throws you back (blast-jumping) |
+| Sniper | 100 | 0.85/s | 4 / 16 | One clean body hit kills; pinpoint while still; camera leads 320 px |
 | Knife | 55 | 2/s | — | Short lunge |
 | Frag | up to 100 | — | 2 per life | 1.5 s fuse, bounces, knockback, half damage to yourself |
 
@@ -122,7 +122,7 @@ one-way platforms: you can jump up through them and bullets pass through them.
 - **Bounty:** a 3-kill streak makes you glow gold and worth +50 to whoever stops you.
 - **Frenzy:** the last 60 s: damage ×1.5, fuel refills twice as fast, red edge tint, FRENZY banner, faster music.
 - **Modes and house rules:** four loadouts plus host-set health, fuel, ammo, pickups, acid and Frenzy. Respawn is always 5 s.
-- **Emotes:** press Q (or tap the button beside the leaderboard) and pick one of eight Hinglish stickers. They pop above you and follow you while you move; when you die the picker opens automatically and your sticker stays at the death spot while you wait to respawn.
+- **Emotes:** press Q (or tap the button beside the leaderboard) and pick one of eight Hinglish stickers. They pop above you and follow you while you move. The picker only opens when you ask for it and stays usable while dead; your sticker then stays at the death spot while you wait to respawn.
 - **Acid hazard:** the pit in the middle burns 30 HP/s while you're in it. You can fly out.
 - **Smart spawns:** never within 200 px of where you died, preferring points far from living enemies.
 - **CPU players:** computer opponents with three difficulty levels and human limits (reaction time,
