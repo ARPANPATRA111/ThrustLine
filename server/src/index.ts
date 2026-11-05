@@ -6,7 +6,7 @@
 import { schema, table, t, SenderError, type Infer, type InferSchema, type ReducerCtx } from 'spacetimedb/server';
 import { ScheduleAt, type Identity } from 'spacetimedb';
 import * as C from './shared/config';
-import { MAPS, MAP_H, MAP_W, inZone, PICKUP_AMMO, PICKUP_DROP, PICKUP_GRENADE, PICKUP_HEALTH, PICKUP_SHIELD, T_ACID, T_SOLID, boxTouchesTile, movesAround, spawnWorldPos, type TilePos } from './shared/map';
+import { MAPS, MAP_H, MAP_W, inZone, PICKUP_AMMO, PICKUP_DROP, PICKUP_GRENADE, PICKUP_HEALTH, PICKUP_SHIELD, T_ACID, T_SOLID, boxTouchesTile, movesAround, restingY, spawnWorldPos, type TilePos } from './shared/map';
 import { GRENADES, NADE_EMP, NADE_IMPACT, WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, PRIMARIES, allowedWeapons, canThrow, damageAtDistance, defaultWeapon, effectiveNade, effectivePrimary, grenadeDamage, isGun, isPrimary, nadeCooldownSec, nadeOptions, pickupActive } from './shared/weapons';
 import { bodyContact, firstTouchTick, fuseTicks, simulateGrenade, ticksToFuseMs } from './shared/grenade';
 import { pickSpawn, pickSpot, shuffledSpawnOrder, type Point } from './shared/spawn';
@@ -52,7 +52,7 @@ type RulesRow = Infer<typeof Rules>;
 const MatchRules = t.object('MatchRules', {
   airdrops: t.bool(),
   suddenDeath: t.bool(),
-  /** C.OBJECTIVE_KILLS or C.OBJECTIVE_HILL. */
+  /** C.OBJECTIVE_KILLS, C.OBJECTIVE_HILL or C.OBJECTIVE_FLAG. */
   objective: t.u8(),
   /** An index into MAPS, or C.MAP_ROTATE. */
   map: t.u8(),
@@ -247,6 +247,25 @@ const hill = table(
   },
 );
 
+/** Capture the Flag: one row per team's flag. */
+const flag = table(
+  { name: 'flag', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    roomId: t.u64().index('btree'),
+    /** Whose flag this is. */
+    team: t.u8(),
+    state: t.u8(),
+    carrier: t.option(t.identity()),
+    /** Where it rests (feet position). Clients draw a carried flag on its carrier. */
+    x: t.f32(),
+    y: t.f32(),
+    returnAtMicros: t.i64(),
+    /** Captures scored by this flag's team. */
+    caps: t.u32(),
+  },
+);
+
 /** Players the host removed from a room; they cannot rejoin it. */
 const kicked = table(
   { name: 'kicked' },
@@ -344,6 +363,16 @@ const pickupJob = table(
     roomId: t.u64().index('btree'),
   },
 );
+const flagJob = table(
+  { name: 'flag_job' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+    flagId: t.u64(),
+    roomId: t.u64().index('btree'),
+    returnAtMicros: t.i64(),
+  },
+);
 const loadoutJob = table(
   { name: 'loadout_job' },
   {
@@ -438,6 +467,7 @@ const spacetimedb = schema({
   pickup,
   grenade,
   hill,
+  flag,
   kicked,
   profile,
   seasonBoard,
@@ -447,6 +477,7 @@ const spacetimedb = schema({
   lobbyJob,
   detonateJob,
   pickupJob,
+  flagJob,
   loadoutJob,
   airdropJob,
   hillJob,
@@ -470,6 +501,7 @@ type PlayerRow = Infer<typeof player.rowType>;
 type MetaRow = Infer<typeof pmeta.rowType>;
 type PStateRow = Infer<typeof pstate.rowType>;
 type GrenadeRow = Infer<typeof grenade.rowType>;
+type FlagRow = Infer<typeof flag.rowType>;
 type ProfileRow = Infer<typeof profile.rowType>;
 
 // ============================================================================
@@ -538,7 +570,7 @@ function uniqueName(ctx: Ctx, roomId: bigint, raw: string, self: Identity): stri
 
 /** Where the rising acid is right now, or Infinity outside sudden death. */
 function acidLine(r: RoomRow, now: bigint): number {
-  if (!r.match.suddenDeath || !r.rules.acid) return Infinity;
+  if (!r.match.suddenDeath || !r.rules.acid || r.match.objective === C.OBJECTIVE_FLAG) return Infinity;
   return C.acidSurface(Number(now) / 1000, Number(r.endsAtMicros) / 1000, r.roundSec);
 }
 
@@ -610,9 +642,9 @@ function clampVel(vx: number, vy: number): { vx: number; vy: number } {
 // ============================================================================
 
 /** Put a player into the world at a spawn point with a fresh life and loadout. */
-function spawnAt(ctx: Ctx, r: RoomRow, p: PlayerRow, spawnIdx: number): PlayerRow {
+function spawnAt(ctx: Ctx, r: RoomRow, p: PlayerRow, tile: TilePos): PlayerRow {
   const now = nowMicros(ctx);
-  const pos = spawnWorldPos(mapOf(r).spawns[spawnIdx]);
+  const pos = spawnWorldPos(tile);
   const updated: PlayerRow = {
     ...p,
     alive: true,
@@ -640,6 +672,11 @@ function spawnAt(ctx: Ctx, r: RoomRow, p: PlayerRow, spawnIdx: number): PlayerRo
   const meta = ctx.db.pmeta.identity.find(p.identity);
   if (meta) ctx.db.pmeta.identity.update({ ...resetMotion(meta, pos.x, pos.y, now), lastHazardMicros: now, hasDeath: false });
   return updated;
+}
+
+/** A player's home in Capture the Flag; undefined in every other kind of round. */
+function baseOf(r: RoomRow, p: { team: number }) {
+  return r.match.objective === C.OBJECTIVE_FLAG && p.team !== C.TEAM_NONE ? mapOf(r).bases[p.team - 1] : undefined;
 }
 
 /** Living players' feet, for keeping pickups from appearing right on top of someone. */
@@ -671,9 +708,11 @@ function respawnPlayer(ctx: Ctx, r: RoomRow, p: PlayerRow): void {
       if (ps) enemies.push({ x: ps.x, y: ps.y });
     }
   }
-  // Never spawn under the rising acid (leave a player's height of margin).
-  const idx = pickSpawn(mapOf(r).spawns, death, enemies, () => ctx.random(), acidLine(r, nowMicros(ctx)) - C.PLAYER_H);
-  spawnAt(ctx, r, p, idx);
+  // Capture the Flag: always from your own base. Never spawn under the rising acid (leave a
+  // player's height of margin).
+  const pool = baseOf(r, p)?.spawns ?? mapOf(r).spawns;
+  const idx = pickSpawn(pool, death, enemies, () => ctx.random(), acidLine(r, nowMicros(ctx)) - C.PLAYER_H);
+  spawnAt(ctx, r, p, pool[idx]);
 }
 
 function scheduleRespawn(ctx: Ctx, p: PlayerRow, delaySec: number): bigint {
@@ -690,6 +729,8 @@ interface KillResult {
   killed: boolean;
   bounty: boolean;
   teamkill: boolean;
+  /** The victim was carrying a flag. */
+  carrier: boolean;
 }
 
 /**
@@ -699,7 +740,7 @@ interface KillResult {
  * attacker's row as an unsaved local copy.
  */
 function applyDamage(ctx: Ctx, victim: PlayerRow, amount: number, attacker: Identity, cause: number, teamkill = false): KillResult {
-  const result: KillResult = { killed: false, bounty: false, teamkill };
+  const result: KillResult = { killed: false, bounty: false, teamkill, carrier: false };
   if (!victim.alive || amount <= 0) return result;
   const pos = ctx.db.pstate.identity.find(victim.identity);
   const px = pos ? pos.x : 0;
@@ -721,6 +762,7 @@ function applyDamage(ctx: Ctx, victim: PlayerRow, amount: number, attacker: Iden
   victim.reloadUntilMicros = 0n;
   victim.shield = 0;
   victim.power = 0;
+  result.carrier = dropFlag(ctx, victim);
   if (selfInflicted) victim.score += C.SCORE_SELF_DEATH;
   victim.respawnAtMicros = scheduleRespawn(ctx, victim, C.RESPAWN_SEC);
   const meta = ctx.db.pmeta.identity.find(victim.identity);
@@ -736,8 +778,35 @@ function creditKill(p: PlayerRow, res: KillResult): void {
     return;
   }
   p.kills += 1;
-  p.score += C.SCORE_KILL + (res.bounty ? C.SCORE_BOUNTY_BONUS : 0);
+  p.score += C.SCORE_KILL + (res.bounty ? C.SCORE_BOUNTY_BONUS : 0) + (res.carrier ? C.SCORE_CARRIER_KILL : 0);
   p.streak += 1;
+}
+
+/** Send a flag back to its stand. */
+function sendFlagHome(ctx: Ctx, r: RoomRow, f: FlagRow): void {
+  const home = spawnWorldPos(mapOf(r).bases[f.team - 1].flag);
+  ctx.db.flag.id.update({ ...f, state: C.FLAG_HOME, carrier: undefined, x: home.x, y: home.y, returnAtMicros: 0n });
+}
+
+/**
+ * A carrier is gone: the flag falls to the ground where they were, and goes home by itself if
+ * nobody picks it up. Lost in the acid, it goes home at once. Returns whether they had a flag.
+ */
+function dropFlag(ctx: Ctx, p: PlayerRow): boolean {
+  const r = ctx.db.room.id.find(p.roomId);
+  if (!r || r.match.objective !== C.OBJECTIVE_FLAG) return false;
+  const f = [...ctx.db.flag.roomId.filter(r.id)].find((q) => q.carrier?.isEqual(p.identity));
+  if (!f) return false;
+  const ps = ctx.db.pstate.identity.find(p.identity);
+  const y = ps ? restingY(mapOf(r), ps.x, ps.y) : null;
+  if (!ps || y === null) {
+    sendFlagHome(ctx, r, f);
+    return true;
+  }
+  const at = nowMicros(ctx) + secToMicros(r.dev ? C.FLAG_RETURN_DEV_SEC : C.FLAG_RETURN_SEC);
+  ctx.db.flag.id.update({ ...f, state: C.FLAG_DROPPED, carrier: undefined, x: ps.x, y, returnAtMicros: at });
+  ctx.db.flagJob.insert({ scheduledId: 0n, scheduledAt: atMicros(at), flagId: f.id, roomId: r.id, returnAtMicros: at });
+  return true;
 }
 
 /** Damage another player identified by row; writes the victim; returns whether they died. */
@@ -851,6 +920,7 @@ function addPlayerToRoom(ctx: Ctx, r: RoomRow, name: string, isBot: boolean): vo
 /** Remove a player and everything they own; hand over host or close an empty room. */
 function removePlayer(ctx: Ctx, identity: Identity): void {
   const p = ctx.db.player.identity.find(identity);
+  if (p) dropFlag(ctx, p);
   ctx.db.pstate.identity.delete(identity);
   ctx.db.pmeta.identity.delete(identity);
   ctx.db.emoteLog.identity.delete(identity);
@@ -887,6 +957,7 @@ function passHost(ctx: Ctx, r: RoomRow, players: PlayerRow[]): void {
  * hold the slot and stats. The drop job removes them if they do not come back.
  */
 function holdForReconnect(ctx: Ctx, p: PlayerRow): void {
+  dropFlag(ctx, p);
   for (const job of [...ctx.db.respawnJob.identity.filter(p.identity)]) ctx.db.respawnJob.scheduledId.delete(job.scheduledId);
   ctx.db.player.identity.update({ ...p, connected: false, alive: false, respawnAtMicros: 0n, reloadUntilMicros: 0n });
   const r = ctx.db.room.id.find(p.roomId);
@@ -903,6 +974,7 @@ function clearRoomJobs(ctx: Ctx, roomId: bigint, includePickups: boolean): void 
   for (const g of [...ctx.db.grenade.roomId.filter(roomId)]) ctx.db.grenade.id.delete(g.id);
   if (includePickups) {
     for (const j of [...ctx.db.pickupJob.roomId.filter(roomId)]) ctx.db.pickupJob.scheduledId.delete(j.scheduledId);
+    for (const j of [...ctx.db.flagJob.roomId.filter(roomId)]) ctx.db.flagJob.scheduledId.delete(j.scheduledId);
     for (const j of [...ctx.db.loadoutJob.roomId.filter(roomId)]) ctx.db.loadoutJob.scheduledId.delete(j.scheduledId);
     for (const j of [...ctx.db.airdropJob.roomId.filter(roomId)]) ctx.db.airdropJob.scheduledId.delete(j.scheduledId);
     for (const j of [...ctx.db.hillJob.roomId.filter(roomId)]) ctx.db.hillJob.scheduledId.delete(j.scheduledId);
@@ -916,6 +988,7 @@ function deleteRoom(ctx: Ctx, roomId: bigint): void {
   for (const pk of [...ctx.db.pickup.roomId.filter(roomId)]) ctx.db.pickup.id.delete(pk.id);
   for (const k of [...ctx.db.kicked.roomId.filter(roomId)]) ctx.db.kicked.id.delete(k.id);
   ctx.db.hill.roomId.delete(roomId);
+  for (const f of [...ctx.db.flag.roomId.filter(roomId)]) ctx.db.flag.id.delete(f.id);
   ctx.db.room.id.delete(roomId);
 }
 
@@ -1106,13 +1179,15 @@ export const updateRoomSettings = spacetimedb.reducer(
     if (!validRoundSec(roundSec, r.dev)) throw new SenderError('Invalid round length');
     if (!validRules(rules)) throw new SenderError('Invalid house rules');
     if (match.map !== C.MAP_ROTATE && match.map >= MAPS.length) throw new SenderError('Unknown map');
-    if (match.objective > C.OBJECTIVE_HILL) throw new SenderError('Unknown objective');
+    if (match.objective > C.OBJECTIVE_FLAG) throw new SenderError('Unknown objective');
     // Respawn delay is fixed at five seconds, whatever an older client sends.
     // Show the chosen map behind the lobby straight away.
     const mapId = match.map === C.MAP_ROTATE ? r.mapId : match.map;
-    const updated = { ...r, mode, roundSec, teams, match, mapId, rules: { ...rules, respawnSec: C.RESPAWN_SEC } };
+    // Capture the Flag is always red against blue.
+    const onTeams = teams || match.objective === C.OBJECTIVE_FLAG;
+    const updated = { ...r, mode, roundSec, teams: onTeams, match, mapId, rules: { ...rules, respawnSec: C.RESPAWN_SEC } };
     ctx.db.room.id.update(updated);
-    if (teams !== r.teams) assignTeams(ctx, updated, teams);
+    if (onTeams !== r.teams) assignTeams(ctx, updated, onTeams);
   },
 );
 
@@ -1150,6 +1225,8 @@ export const startRound = spacetimedb.reducer((ctx) => {
 
 const hillMoveMicros = (r: RoomRow) => secToMicros(r.dev ? C.HILL_MOVE_DEV_SEC : C.HILL_MOVE_SEC);
 
+const QUICK_OBJECTIVES = [C.OBJECTIVE_KILLS, C.OBJECTIVE_HILL, C.OBJECTIVE_FLAG];
+
 /** Choose the next map and objective, and give everyone time to pick a loadout for them. */
 function prepareRound(ctx: Ctx, r: RoomRow): void {
   clearRoomJobs(ctx, r.id, true);
@@ -1158,8 +1235,11 @@ function prepareRound(ctx: Ctx, r: RoomRow): void {
   // Rotation walks through the maps; public rooms also alternate what each round is played for.
   const roundNo = r.roundNo + 1;
   const mapId = r.match.map === C.MAP_ROTATE ? r.roundNo % MAPS.length : r.match.map;
-  const objective = r.quick ? (roundNo % 2 === 0 ? C.OBJECTIVE_HILL : C.OBJECTIVE_KILLS) : r.match.objective;
-  const next: RoomRow = { ...r, roundNo, mapId, lobbyAtMicros: 0n, match: { ...r.match, objective } };
+  const objective = r.quick ? QUICK_OBJECTIVES[(roundNo - 1) % QUICK_OBJECTIVES.length] : r.match.objective;
+  // Public rooms split into teams for the flag rounds only.
+  const teams = r.quick ? objective === C.OBJECTIVE_FLAG : r.teams;
+  const next: RoomRow = { ...r, roundNo, mapId, teams, lobbyAtMicros: 0n, match: { ...r.match, objective } };
+  if (teams !== r.teams) assignTeams(ctx, next, teams);
   const wait = loadoutSec(next);
   if (wait === 0) return beginRound(ctx, next);
   // While choosing, startedAtMicros is when the round will begin.
@@ -1193,7 +1273,7 @@ function beginRound(ctx: Ctx, r: RoomRow): void {
   const order = shuffledSpawnOrder(spawns.length, () => ctx.random());
   const left = order.filter((i) => spawnWorldPos(spawns[i]).x < MAP_W / 2);
   const right = order.filter((i) => spawnWorldPos(spawns[i]).x >= MAP_W / 2);
-  let li = 0, ri = 0, ai = 0;
+  let li = 0, ri = 0, ai = 0, bi = 0;
   for (const p of roomPlayers(ctx, r.id)) {
     const reset: PlayerRow = { ...p, kills: 0, deaths: 0, score: 0, streak: 0 };
     // A player mid-reconnect deploys when they return.
@@ -1201,13 +1281,25 @@ function beginRound(ctx: Ctx, r: RoomRow): void {
       ctx.db.player.identity.update(reset);
       continue;
     }
+    const base = baseOf(started, p);
+    if (base) {
+      spawnAt(ctx, started, reset, base.spawns[bi++ % base.spawns.length]);
+      continue;
+    }
     let idx: number;
     if (r.teams && p.team === C.TEAM_RED) idx = left[li++ % left.length];
     else if (r.teams && p.team === C.TEAM_BLUE) idx = right[ri++ % right.length];
     else idx = order[ai++ % order.length];
-    spawnAt(ctx, started, reset, idx);
+    spawnAt(ctx, started, reset, spawns[idx]);
   }
   ctx.db.roundEndJob.insert({ scheduledId: 0n, scheduledAt: atMicros(started.endsAtMicros), roomId: r.id, roundNo: started.roundNo });
+  for (const f of [...ctx.db.flag.roomId.filter(r.id)]) ctx.db.flag.id.delete(f.id);
+  if (started.match.objective === C.OBJECTIVE_FLAG) {
+    for (const team of [C.TEAM_RED, C.TEAM_BLUE]) {
+      const home = spawnWorldPos(mapOf(started).bases[team - 1].flag);
+      ctx.db.flag.insert({ id: 0n, roomId: r.id, team, state: C.FLAG_HOME, carrier: undefined, x: home.x, y: home.y, returnAtMicros: 0n, caps: 0 });
+    }
+  }
   ctx.db.hill.roomId.delete(r.id);
   if (started.match.objective === C.OBJECTIVE_HILL) {
     const idx = ctx.random.integerInRange(0, mapOf(started).hills.length - 1);
@@ -1497,7 +1589,10 @@ export const sync = spacetimedb.reducer(
     ctx.db.player.identity.update(p);
     ctx.db.pmeta.identity.update(meta);
     // Last, because a blast writes player rows and the copies above must not overwrite it.
-    if (moved && p.alive) checkImpacts(ctx, r, p.identity, start, pos, moved.t0, moved.t1);
+    if (moved && p.alive) {
+      checkImpacts(ctx, r, p.identity, start, pos, moved.t0, moved.t1);
+      checkFlags(ctx, r, p.identity, start, pos);
+    }
   },
 );
 
@@ -1520,6 +1615,52 @@ function checkImpacts(ctx: Ctx, r: RoomRow, identity: Identity, from: Point, to:
     for (const job of [...ctx.db.detonateJob.grenadeId.filter(g.id)]) ctx.db.detonateJob.scheduledId.delete(job.scheduledId);
     ctx.db.grenade.id.delete(g.id);
     explode(ctx, r, g, hit.x, hit.y, identity);
+  }
+}
+
+/** Did a body moving from `a` to `b` come within reach of a spot on the ground? */
+function reached(a: Point, b: Point, spot: Point, reachX: number, reachUp: number): boolean {
+  for (const k of [0, 0.5, 1]) {
+    const x = a.x + (b.x - a.x) * k;
+    const y = a.y + (b.y - a.y) * k;
+    if (Math.abs(x - spot.x) <= reachX && y <= spot.y + C.TILE && y >= spot.y - reachUp) return true;
+  }
+  return false;
+}
+
+/**
+ * Capture the Flag happens here: touch the enemy flag to pick it up, touch your own dropped flag to
+ * send it home, and reach your own stand with the enemy flag to score. Your own flag does not have
+ * to be home, which stops two carriers from stalling a round.
+ */
+function checkFlags(ctx: Ctx, r: RoomRow, identity: Identity, from: Point, to: Point): void {
+  if (r.match.objective !== C.OBJECTIVE_FLAG) return;
+  const p = ctx.db.player.identity.find(identity);
+  if (!p || !p.alive || p.team === C.TEAM_NONE) return;
+  const flags = [...ctx.db.flag.roomId.filter(r.id)];
+  const mine = flags.find((f) => f.team === p.team);
+  const theirs = flags.find((f) => f.team !== p.team);
+  if (!mine || !theirs) return;
+
+  if (mine.state === C.FLAG_DROPPED && reached(from, to, mine, C.FLAG_TOUCH_X, C.FLAG_TOUCH_UP)) {
+    sendFlagHome(ctx, r, mine);
+    ctx.db.player.identity.update({ ...p, score: p.score + C.SCORE_FLAG_RETURN });
+    return;
+  }
+  if (theirs.carrier?.isEqual(identity)) {
+    const home = spawnWorldPos(mapOf(r).bases[p.team - 1].flag);
+    if (!reached(from, to, home, C.FLAG_BASE_X, C.FLAG_BASE_UP)) return;
+    sendFlagHome(ctx, r, theirs);
+    const caps = mine.caps + 1;
+    ctx.db.flag.id.update({ ...ctx.db.flag.id.find(mine.id)!, caps });
+    ctx.db.player.identity.update({ ...p, score: p.score + C.SCORE_FLAG_CAPTURE });
+    if (caps >= C.FLAG_CAPS_TO_WIN) finishRound(ctx, ctx.db.room.id.find(r.id)!);
+    return;
+  }
+  if (theirs.state !== C.FLAG_CARRIED && reached(from, to, theirs, C.FLAG_TOUCH_X, C.FLAG_TOUCH_UP)) {
+    ctx.db.flag.id.update({ ...theirs, state: C.FLAG_CARRIED, carrier: identity, returnAtMicros: 0n });
+    // Carrying the flag ends spawn protection, or a fresh spawn could run it home untouched.
+    ctx.db.player.identity.update({ ...p, score: p.score + C.SCORE_FLAG_TAKEN, spawnProtectUntilMicros: 0n });
   }
 }
 
@@ -1763,8 +1904,11 @@ function awardRound(ctx: Ctx, r: RoomRow): void {
   const season = C.seasonOf(nowMs(ctx));
   const top = [...everyone].sort((a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths)[0];
   const teamScore = (team: number) => everyone.filter((p) => p.team === team).reduce((n, p) => n + p.score, 0);
-  const red = teamScore(C.TEAM_RED);
-  const blue = teamScore(C.TEAM_BLUE);
+  const flags = [...ctx.db.flag.roomId.filter(r.id)];
+  const capsOf = (team: number) => flags.find((f) => f.team === team)?.caps ?? 0;
+  // Flags decide a Capture the Flag round; score only separates a tie.
+  const red = teamScore(C.TEAM_RED) + capsOf(C.TEAM_RED) * 1_000_000;
+  const blue = teamScore(C.TEAM_BLUE) + capsOf(C.TEAM_BLUE) * 1_000_000;
   const winningTeam = red === blue ? C.TEAM_NONE : red > blue ? C.TEAM_RED : C.TEAM_BLUE;
 
   for (const p of humans) {
@@ -1804,7 +1948,11 @@ function postToBoard(ctx: Ctx, pr: ProfileRow): void {
 export const endRound = spacetimedb.reducer({ onSchedule: roundEndJob }, { job: roundEndJob.rowType }, (ctx, { job }) => {
   if (!ctx.senderAuth.isInternal) throw new SenderError('Scheduler only');
   const r = ctx.db.room.id.find(job.roomId);
-  if (!r || r.roundNo !== job.roundNo || r.state !== ROOM_PLAYING) return;
+  if (r && r.roundNo === job.roundNo && r.state === ROOM_PLAYING) finishRound(ctx, r);
+});
+
+/** The round is over: time ran out, or a team made its last capture. */
+function finishRound(ctx: Ctx, r: RoomRow): void {
   // Show the results for a few seconds, then everyone returns to the lobby automatically.
   const lobbyAt = nowMicros(ctx) + secToMicros(C.LOBBY_RETURN_SEC);
   ctx.db.room.id.update({ ...r, state: ROOM_ENDED, lobbyAtMicros: lobbyAt });
@@ -1815,7 +1963,7 @@ export const endRound = spacetimedb.reducer({ onSchedule: roundEndJob }, { job: 
   for (const p of roomPlayers(ctx, r.id)) {
     ctx.db.player.identity.update({ ...p, alive: false, respawnAtMicros: 0n, reloadUntilMicros: 0n });
   }
-});
+}
 
 export const returnToLobby = spacetimedb.reducer({ onSchedule: lobbyJob }, { job: lobbyJob.rowType }, (ctx, { job }) => {
   if (!ctx.senderAuth.isInternal) throw new SenderError('Scheduler only');
@@ -1960,6 +2108,14 @@ function explode(ctx: Ctx, r: RoomRow, g: GrenadeRow, bx: number, by: number, st
     }
   }
 }
+
+/** Nobody picked a dropped flag up in time. */
+export const returnFlag = spacetimedb.reducer({ onSchedule: flagJob }, { job: flagJob.rowType }, (ctx, { job }) => {
+  if (!ctx.senderAuth.isInternal) throw new SenderError('Scheduler only');
+  const f = ctx.db.flag.id.find(job.flagId);
+  const r = ctx.db.room.id.find(job.roomId);
+  if (f && r && f.state === C.FLAG_DROPPED && f.returnAtMicros === job.returnAtMicros) sendFlagHome(ctx, r, f);
+});
 
 export const restorePickup = spacetimedb.reducer({ onSchedule: pickupJob }, { job: pickupJob.rowType }, (ctx, { job }) => {
   if (!ctx.senderAuth.isInternal) throw new SenderError('Scheduler only');

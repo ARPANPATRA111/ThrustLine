@@ -3,7 +3,7 @@
 import type { Identity } from 'spacetimedb';
 import { DbConnection, tables, type EventContext, type SubscriptionHandle } from '../module_bindings';
 import type {
-  BoomEv, EmoteEv, Grenade, Hill, HitEv, KickEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, PongEv, Profile, Pstate, Room, SeasonBoard, ShotEv,
+  BoomEv, EmoteEv, Flag, Grenade, Hill, HitEv, KickEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, PongEv, Profile, Pstate, Room, SeasonBoard, ShotEv,
 } from '../module_bindings/types';
 
 export const STDB_URI: string = import.meta.env.VITE_STDB_URI ?? 'ws://localhost:3000';
@@ -28,6 +28,8 @@ export interface NetHandlers {
   pickupDelete?: (p: Pickup) => void;
   hillUpsert?: (h: Hill) => void;
   hillDelete?: () => void;
+  flagUpsert?: (f: Flag, old: Flag | undefined) => void;
+  flagDelete?: (f: Flag) => void;
   grenadeInsert?: (g: Grenade) => void;
   grenadeDelete?: (g: Grenade) => void;
   shot?: (e: ShotEv) => void;
@@ -171,6 +173,9 @@ export class Net {
     db.hill.onInsert((_c: EventContext, r) => h().hillUpsert?.(r));
     db.hill.onUpdate((_c: EventContext, _o, r) => h().hillUpsert?.(r));
     db.hill.onDelete((_c: EventContext) => h().hillDelete?.());
+    db.flag.onInsert((_c: EventContext, f) => h().flagUpsert?.(f, undefined));
+    db.flag.onUpdate((_c: EventContext, o, f) => h().flagUpsert?.(f, o));
+    db.flag.onDelete((_c: EventContext, f) => h().flagDelete?.(f));
     db.grenade.onInsert((_c: EventContext, g) => h().grenadeInsert?.(g));
     db.grenade.onDelete((_c: EventContext, g) => h().grenadeDelete?.(g));
     db.shotEv.onInsert((_c: EventContext, e) => h().shot?.(e));
@@ -218,6 +223,7 @@ export class Net {
           tables.pickup.where((r) => r.roomId.eq(roomId)),
           tables.grenade.where((r) => r.roomId.eq(roomId)),
           tables.hill.where((r) => r.roomId.eq(roomId)),
+          tables.flag.where((r) => r.roomId.eq(roomId)),
           tables.shotEv.where((r) => r.roomId.eq(roomId)),
           tables.hitEv.where((r) => r.roomId.eq(roomId)),
           tables.killEv.where((r) => r.roomId.eq(roomId)),

@@ -56,6 +56,7 @@ import UpdateRoomSettingsReducer from "./update_room_settings_reducer";
 // Import all table schema definitions
 import BoomEvRow from "./boom_ev_table";
 import EmoteEvRow from "./emote_ev_table";
+import FlagRow from "./flag_table";
 import GrenadeRow from "./grenade_table";
 import HillRow from "./hill_table";
 import HitEvRow from "./hit_ev_table";
@@ -93,6 +94,20 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, EmoteEvRow),
+  flag: __table({
+    name: 'flag',
+    indexes: [
+      { accessor: 'id', name: 'flag_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'roomId', name: 'flag_room_id_idx_btree', algorithm: 'btree', columns: [
+        'roomId',
+      ] },
+    ],
+    constraints: [
+      { name: 'flag_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, FlagRow),
   grenade: __table({
     name: 'grenade',
     indexes: [

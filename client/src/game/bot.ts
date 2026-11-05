@@ -10,6 +10,7 @@
 import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
 import { type GameMap, MAP_W, T_ACID, T_SOLID, spawnWorldPos, tileAt } from '@shared/map';
+import { steer } from '@shared/nav';
 import { lineOfSight } from '@shared/raycast';
 import { GRENADES, PRIMARIES, WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, W_SMG, W_SNIPER, canThrow, isGun } from '@shared/weapons';
 import { tables, type DbConnection } from '../module_bindings';
@@ -95,6 +96,7 @@ export class BotBrain {
     const waypoint = (this.waypoint ??= pickWaypoint(nav));
     inp.fire = inp.firePressed = inp.melee = inp.grenade = inp.swap = inp.reload = false;
     inp.down = false;
+    inp.thrustAmount = 1;
 
     // --- Notice enemies: within sight range and line of sight only ---
     const n = world.targets(a.key, this.tmp);
@@ -220,10 +222,22 @@ export class BotBrain {
       const dy = gy - b.y;
       if (hunting && Math.abs(dx) < 40 && Math.abs(dy) < 60) this.huntFor = 0;
       if (Math.abs(dx) < 40 && Math.abs(dy) < 50) this.waypoint = pickWaypoint(nav);
-      moveX = Math.abs(dx) > 20 ? Math.sign(dx) : 0;
-      if (dy < -40 && b.fuel > 25) thrust = true;
-      if (dy > 60 && b.grounded) inp.down = true;
+      const route = steer(map, cx, b.y, gx, gy);
+      moveX = route.moveX;
+      if ((route.up || route.hover) && b.fuel > 25) thrust = true;
+      if (route.hover && !b.grounded) inp.thrustAmount = C.JET_HOVER + 0.08;
+      if (route.down && b.grounded) inp.down = true;
       inp.aim = turnToward(a.aim, moveX >= 0 ? 0.1 : Math.PI - 0.1, 3 * DT);
+    }
+
+    // --- Capture the Flag: the flag comes first; they shoot whatever they pass on the way ---
+    const flagAt = world.flagGoal(a.team, a.key);
+    if (flagAt) {
+      const route = steer(map, cx, b.y, flagAt.x, flagAt.y);
+      moveX = route.moveX;
+      thrust = route.up || route.hover;
+      inp.thrustAmount = route.hover && !b.grounded ? C.JET_HOVER + 0.08 : 1;
+      inp.down = route.down && b.grounded;
     }
 
     // --- Objective: the hill pulls bots in even mid-fight; they shoot on the way ---

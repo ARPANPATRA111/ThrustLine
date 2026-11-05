@@ -41,13 +41,13 @@ test('the host picks HELIOS-9 and the server plays by its tiles', async ({ brows
 
   // Tile (21, 15) is inside the HELIOS tower but open air on RIG-7.
   expect(await teleport(a, 21 * 32 + 16, 16 * 32)).toContain('Invalid position');
-  // The pickups are HELIOS's own: its shield sits on the centre roof.
-  const shields = (await st(a)).pickups.filter((k: any) => k.kind === 3);
-  expect(shields.map((k: any) => k.tx).sort()).toEqual([40, 55]);
-  expect(await teleport(a, 40 * 32 + 16, 16 * 32)).toBe('ok');
+  // The pickups are HELIOS's own: a shield waits on one of its floors.
+  const shield = (await st(a)).pickups.find((k: any) => k.kind === 3);
+  expect(await teleport(a, (shield.tx + 0.5) * 32, (shield.ty + 1) * 32)).toBe('ok');
   await expect.poll(() => a.evaluate(() => (window as any).__tl.game.localRow.shield), { timeout: 4000 }).toBe(50);
 
   // Standing on a HELIOS platform holds the player up: the client simulates the same tiles.
+  expect(await teleport(a, 40 * 32 + 16, 16 * 32)).toBe('ok');
   await a.waitForTimeout(700);
   expect((await st(a)).me.y).toBeCloseTo(16 * 32, 0);
 });

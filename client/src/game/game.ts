@@ -6,7 +6,7 @@ import * as C from '@shared/config';
 import { MAPS, MAP_H, MAP_NAMES, MAP_W, PICKUP_DROP, PICKUP_SHIELD, inZone, movesAround } from '@shared/map';
 import { fuseTicks, grenadePath } from '@shared/grenade';
 import { GRENADES, NADE_EMP, NADE_IMPACT, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, W_SMG, W_SNIPER, canThrow, effectiveNade, isGun, pickupActive } from '@shared/weapons';
-import type { BoomEv, EmoteEv, Grenade, Hill, HitEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
+import type { BoomEv, EmoteEv, Flag, Grenade, Hill, HitEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
 import type { Net } from '../net/connection';
 import type { TimeSync } from '../net/timesync';
 import { LagEstimator, SnapshotBuffer, type Sample } from '../net/interp';
@@ -16,7 +16,7 @@ import { bakeMap, acidRect, makeAcid, makeParallaxTextures } from '../render/map
 import { stickerTextures } from '../render/stickers';
 import { Particles } from '../render/particles';
 import { Effects } from '../render/effects';
-import { SoldierView, playerColor, playerCss } from '../render/soldier';
+import { SoldierView, TEAM_COLORS, TEAM_CSS, TEAM_NAMES, playerColor, playerCss } from '../render/soldier';
 import type { Audio } from '../audio/audio';
 import { CAUSE_NAMES, type Hud, rankPlayers } from '../ui/hud';
 import { Actor, type ActorInput, type FxSink, type SimRules, type Target, type WorldView, emptyInput } from './actor';
@@ -68,6 +68,11 @@ interface GrenadeView {
   path: Float32Array;
   ticks: number;
   thrownMs: number;
+  sprite: Sprite;
+}
+
+interface FlagView {
+  row: Flag;
   sprite: Sprite;
 }
 
@@ -145,6 +150,10 @@ export class Game implements WorldView {
   /** King of the Hill: the live zone and how it is drawn. */
   private hill: Hill | null = null;
   private hillGfx = new Graphics();
+  /** Capture the Flag: the flags, by team, and the pads they stand on. */
+  private flags = new Map<number, FlagView>();
+  private baseGfx = new Graphics();
+  private flagLayer = new Container();
   private pickupLayer = new Container();
   private grenadeLayer = new Container();
   private playerLayer = new Container();
@@ -219,7 +228,7 @@ export class Game implements WorldView {
     this.acidSheet.visible = false;
     this.hillGfx.visible = false;
     this.world.addChild(
-      this.mapLayer, this.acid, this.acidGlow, this.hillGfx, this.pickupLayer, this.grenadeLayer, this.playerLayer, this.emoteLayer, this.acidSheet,
+      this.mapLayer, this.acid, this.acidGlow, this.hillGfx, this.baseGfx, this.pickupLayer, this.grenadeLayer, this.playerLayer, this.flagLayer, this.emoteLayer, this.acidSheet,
       this.particles.normal, this.aimLine, this.effects.layer, this.particles.additive, this.effects.textLayer,
     );
     this.radar = new Radar(this.tex);
@@ -288,6 +297,9 @@ export class Game implements WorldView {
     this.hill = null;
     this.hillGfx.visible = false;
     this.hud.setHill(null, '');
+    for (const f of this.flags.values()) f.sprite.destroy();
+    this.flags.clear();
+    this.baseGfx.visible = false;
     this.localView?.destroy();
     this.localView = null;
     this.local = null;
@@ -320,6 +332,7 @@ export class Game implements WorldView {
     this.acidGlow.scale.set((this.acidR.w * 1.4) / 32, 90 / 32);
     this.radar.setMap(id, this.map);
     this.drawHill();
+    this.drawBases();
   }
 
   get frenzy(): boolean {
@@ -351,7 +364,7 @@ export class Game implements WorldView {
       this.lastBeepSec = -1;
       this.hud.reset();
       this.hud.showBanner('FIGHT!', '#22d3ee');
-      const objective = r.match.objective === C.OBJECTIVE_HILL ? 'KING OF THE HILL' : 'DEATHMATCH';
+      const objective = ['DEATHMATCH', 'KING OF THE HILL', 'CAPTURE THE FLAG'][r.match.objective] ?? '';
       this.hud.showNotice(`${objective} · ${MAP_NAMES[r.mapId] ?? ''}`, '#eef2ff', 3);
       this.audio.play('beep', 0.7, undefined, undefined, 1.5);
     }
@@ -479,6 +492,70 @@ export class Game implements WorldView {
     this.hill = null;
     this.hillGfx.visible = false;
     this.hud.setHill(null, '');
+  }
+
+  private get flagRound(): boolean {
+    return this.room?.state === 1 && this.room.match.objective === C.OBJECTIVE_FLAG;
+  }
+
+  /** A flag changed hands: tell everyone, and say it from their side. */
+  flagUpsert(f: Flag, old: Flag | undefined): void {
+    let v = this.flags.get(f.team);
+    if (!v) {
+      const sprite = new Sprite(this.tex.flag);
+      sprite.anchor.set(0.08, 1);
+      this.flagLayer.addChild(sprite);
+      v = { row: f, sprite };
+      this.flags.set(f.team, v);
+    }
+    v.row = f;
+    v.sprite.tint = TEAM_COLORS[f.team];
+    this.baseGfx.visible = true;
+    if (!old) return;
+    const name = TEAM_NAMES[f.team];
+    const css = TEAM_CSS[f.team];
+    const mine = f.team === this.localRow?.team;
+    if (f.caps > old.caps) {
+      this.hud.showBanner(`${name} SCORES`, css, 2.4);
+      this.audio.play('sting', 0.7);
+      this.camera.shake(6);
+    } else if (f.state === C.FLAG_CARRIED && old.state !== C.FLAG_CARRIED) {
+      const who = f.carrier?.toHexString() === this.net.myKey ? 'YOU HAVE' : `${this.rowOf(f.carrier?.toHexString() ?? '')?.name ?? 'SOMEONE'} TOOK`;
+      this.hud.showNotice(`${who} THE ${name} FLAG`, css, 2.4);
+      this.audio.play(mine ? 'alarm' : 'pickup', 0.6);
+      this.effects.ring(f.x, f.y - 24, 70, TEAM_COLORS[f.team], 0.5, true);
+    } else if (f.state === C.FLAG_DROPPED && old.state === C.FLAG_CARRIED) {
+      this.hud.showNotice(`${name} FLAG DROPPED`, css, 2);
+      this.audio.play('beep', 0.6);
+    } else if (f.state === C.FLAG_HOME && old.state === C.FLAG_DROPPED) {
+      this.hud.showNotice(`${name} FLAG RETURNED`, css, 2);
+      this.audio.play('beep', 0.6, undefined, undefined, 1.3);
+      this.effects.ring(f.x, f.y - 24, 70, TEAM_COLORS[f.team], 0.5, true);
+    }
+  }
+
+  flagDelete(f: Flag): void {
+    const v = this.flags.get(f.team);
+    if (v) { v.sprite.destroy(); this.flags.delete(f.team); }
+    if (this.flags.size === 0) this.baseGfx.visible = false;
+  }
+
+  /** Captures so far as [red, blue], in a Capture the Flag round. */
+  flagCaps(): [number, number] | null {
+    if (this.flags.size === 0) return null;
+    return [this.flags.get(C.TEAM_RED)?.row.caps ?? 0, this.flags.get(C.TEAM_BLUE)?.row.caps ?? 0];
+  }
+
+  /** A glowing pad under each flag stand. */
+  private drawBases(): void {
+    const g = this.baseGfx.clear();
+    this.map.bases.forEach((b, i) => {
+      const x = (b.flag.tx + 0.5) * C.TILE;
+      const y = (b.flag.ty + 1) * C.TILE;
+      const w = C.FLAG_BASE_X * 2;
+      g.rect(x - C.FLAG_BASE_X, y - C.FLAG_BASE_UP, w, C.FLAG_BASE_UP).fill({ color: TEAM_COLORS[i + 1], alpha: 0.07 });
+      g.rect(x - C.FLAG_BASE_X, y - 4, w, 4).fill({ color: TEAM_COLORS[i + 1], alpha: 0.9 });
+    });
   }
 
   /** Is the zone held by me or my team? */
@@ -633,8 +710,30 @@ export class Game implements WorldView {
 
   acidLine(): number {
     const r = this.room;
-    if (!r || r.state !== 1 || !r.match.suddenDeath || !r.rules.acid) return Infinity;
+    if (!r || r.state !== 1 || !r.match.suddenDeath || !r.rules.acid || r.match.objective === C.OBJECTIVE_FLAG) return Infinity;
     return C.acidSurface(this.serverNow(), Number(r.endsAtMicros) / 1000, r.roundSec);
+  }
+
+  /**
+   * Capture the Flag orders for a CPU player: carry the flag home, recover your own, otherwise go
+   * for theirs. One in four stays back to guard the stand.
+   */
+  flagGoal(team: number, key: string): { x: number; y: number } | null {
+    if (!this.flagRound || team === C.TEAM_NONE) return null;
+    const mine = this.flags.get(team)?.row;
+    const theirs = this.flags.get(team === C.TEAM_RED ? C.TEAM_BLUE : C.TEAM_RED)?.row;
+    if (!mine || !theirs) return null;
+    const home = this.map.bases[team - 1].flag;
+    const base = { x: (home.tx + 0.5) * C.TILE, y: (home.ty + 1) * C.TILE };
+    const feetOf = (f: Flag) => {
+      const c = this.positionOf(f.carrier?.toHexString() ?? '');
+      return c ? { x: c.x, y: c.y + C.PLAYER_H / 2 } : null;
+    };
+    if (theirs.carrier?.toHexString() === key) return base;
+    if (mine.state === C.FLAG_DROPPED) return { x: mine.x, y: mine.y };
+    if (mine.state === C.FLAG_CARRIED) return feetOf(mine) ?? base;
+    if (parseInt(key.slice(-2), 16) % 4 === 0) return base;
+    return theirs.state === C.FLAG_CARRIED ? feetOf(theirs) ?? { x: theirs.x, y: theirs.y } : { x: theirs.x, y: theirs.y };
   }
 
   /** Where a CPU player with nothing to shoot should head: the crate, else a shield close by. */
@@ -992,6 +1091,26 @@ export class Game implements WorldView {
       else if (show) p.sprite.y = p.baseY - 6 + Math.sin(tSec * 3 + p.row.tx) * 3;
     }
 
+    // --- Flags: on their stand, on the ground, or on a carrier's back ---
+    for (const v of this.flags.values()) {
+      const f = v.row;
+      let x = f.x;
+      let y = f.y;
+      let show = playing;
+      if (f.state === C.FLAG_CARRIED) {
+        const c = this.positionOf(f.carrier?.toHexString() ?? '');
+        show = playing && !!c;
+        if (c) {
+          x = c.x - 8;
+          y = c.y + 2;
+        }
+      }
+      v.sprite.visible = show;
+      v.sprite.position.set(x, y);
+      v.sprite.skew.y = Math.sin(tSec * 5 + f.team) * 0.05;
+    }
+    this.baseGfx.visible = this.flagRound || (this.flags.size > 0 && this.room?.state === 2);
+
     // --- King of the Hill zone: colour by who holds it, pulsing while it matters ---
     if (this.hill && playing) {
       this.hillGfx.tint = this.hillColor(this.hill);
@@ -1112,7 +1231,7 @@ export class Game implements WorldView {
       } else {
         this.hud.setAmmo(w === W_KNIFE ? '—' : '', '');
       }
-      this.updateHillChip(now);
+      if (!this.updateFlagChip()) this.updateHillChip(now);
       if (canThrow(this.mode)) {
         const count = this.rules.infiniteAmmo || this.mode !== C.MODE_ARMS ? '∞' : '●'.repeat(local.grenades) || '○';
         const wait = local.nadeWait(now, this.mode);
@@ -1123,7 +1242,7 @@ export class Game implements WorldView {
     if (this.hudTimer <= 0) {
       this.hudTimer = 0.25;
       this.hud.setNet(this.time.synced ? this.time.rtt : null, this.fps);
-      this.hud.setTeamScore(this.teams ? this.teamScores() : null, this.teams ? this.localRow?.team ?? 0 : 0);
+      this.hud.setTeamScore(this.teams ? this.flagCaps() ?? this.teamScores() : null, this.teams ? this.localRow?.team ?? 0 : 0);
       const players = this.allPlayers();
       this.hud.setMiniBoard(rankPlayers(players), this.net.myKey, this.teams);
       if (this.debug) {
@@ -1136,6 +1255,21 @@ export class Game implements WorldView {
         );
       } else this.hud.setDebug(null);
     }
+  }
+
+  /** One line under the timer: what your team should be doing about the flags. */
+  private updateFlagChip(): boolean {
+    if (!this.flagRound) return false;
+    const team = this.localRow?.team ?? 0;
+    const mine = this.flags.get(team)?.row;
+    const theirs = this.flags.get(team === C.TEAM_RED ? C.TEAM_BLUE : C.TEAM_RED)?.row;
+    if (!mine || !theirs) return false;
+    if (theirs.carrier?.toHexString() === this.net.myKey) this.hud.setHill('YOU HAVE THE FLAG · GET HOME', 'mine');
+    else if (mine.state === C.FLAG_CARRIED) this.hud.setHill('YOUR FLAG IS TAKEN', 'contested');
+    else if (mine.state === C.FLAG_DROPPED) this.hud.setHill('YOUR FLAG IS DOWN · RETURN IT', 'enemy');
+    else if (theirs.state === C.FLAG_CARRIED) this.hud.setHill('COVER YOUR CARRIER', 'open');
+    else this.hud.setHill(`GET THE ENEMY FLAG · FIRST TO ${C.FLAG_CAPS_TO_WIN}`, 'open');
+    return true;
   }
 
   /** One line under the timer: who holds the hill and when it moves. */
@@ -1193,6 +1327,19 @@ export class Game implements WorldView {
       // They move around, so the minimap shows where they turned up.
       else if (movesAround(p.row.kind) && p.sprite.visible) out.push({ x: p.sprite.x, y: p.baseY, color: p.row.kind === PICKUP_SHIELD ? 0x22d3ee : 0xff4d6d, kind: 'item', firedAgo: 0 });
     }
+    if (this.flagRound) {
+      const team = this.localRow?.team ?? 0;
+      const carrying = [...this.flags.values()].some((v) => v.row.carrier?.toHexString() === this.net.myKey);
+      for (const v of this.flags.values()) {
+        if (v.row.carrier?.toHexString() === this.net.myKey || !v.sprite.visible) continue;
+        out.push({ x: v.sprite.x, y: v.sprite.y - 24, color: TEAM_COLORS[v.row.team], kind: 'objective', firedAgo: 0 });
+      }
+      // Bringing a flag in: point at home even if your own flag has left it.
+      if (carrying && team) {
+        const home = this.map.bases[team - 1].flag;
+        out.push({ x: (home.tx + 0.5) * C.TILE, y: home.ty * C.TILE, color: TEAM_COLORS[team], kind: 'objective', firedAgo: 0 });
+      }
+    }
     const hill = this.hillRect();
     if (hill && !(this.local?.alive && this.inHill())) {
       out.push({ x: (hill.x0 + hill.x1) / 2, y: (hill.y0 + hill.y1) / 2, color: this.hill ? this.hillColor(this.hill) : 0xffffff, kind: 'objective', firedAgo: 0 });
@@ -1231,6 +1378,7 @@ export class Game implements WorldView {
       kills: this.allPlayers().reduce((n, p) => n + p.kills, 0),
       pickups: [...this.pickups.values()].map((p) => ({ kind: p.row.kind, tx: p.row.tx, ty: p.row.ty, ready: p.row.availableAtMicros === 0n })),
       mapId: this.mapId,
+      flags: [...this.flags.values()].map((v) => ({ team: v.row.team, state: v.row.state, x: v.row.x, y: v.row.y, caps: v.row.caps, carrier: v.row.carrier ? this.rowOf(v.row.carrier.toHexString())?.name ?? null : null })),
       hill: this.hill ? { idx: this.hill.idx, state: this.hill.state, zone: this.map.hills[this.hill.idx], mine: this.hillIsMine(this.hill) } : null,
       acidLine: this.acidLine(),
       renderer: this.app.renderer.name,
