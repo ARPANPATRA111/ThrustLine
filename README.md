@@ -198,14 +198,18 @@ clients run on the same stored inputs, so they explode exactly where they are dr
 The browser is never trusted. Clients simulate their own soldier, but the module decides every
 outcome that matters:
 
-- **Movement:** speed, walls, map bounds and a capped client-clock debt (350 ms) are checked on every
-  sync; a rejected position is answered with a correction counter and the client snaps back.
+- **Movement:** every sync is checked against the map, the path travelled (no stepping through walls
+  or floors) and a capped client-clock debt (350 ms). Speed is held to what physics allows right now:
+  run and jet speed, plus a bonus only after a real push such as recoil, a knife lunge or a nearby
+  blast. A rejected position is answered with a correction counter and the client snaps back.
 - **Damage:** the server owns HP, kills, score, ammo and pickups. A client sends hit *claims*, and
   each claim is checked against the shooter's server-side position, the weapon's range, a tile
-  raycast (cover wins) and the target's lag-compensated history. Pellet count and fire rate are
-  capped by the weapon definition.
-- **Actions:** only the equipped weapon from the mode's loadout can fire; shots, knives, reloads and
-  grenade throws are rate-limited per player and per weapon.
+  raycast (cover wins) and the target's lag-compensated history. Fire rate is capped by the weapon
+  definition, and a shotgun claim cannot report more pellets than the target's size allows at that
+  distance.
+- **Actions:** only the equipped weapon from the mode's loadout can fire, and the primary can only
+  change while respawning; shots, knives, reloads and grenade throws are rate-limited per player and
+  per weapon.
 - **Replays:** every sync carries a monotonically increasing sequence number. Replayed, duplicated or
   late packets are dropped before they can act, and a reconnecting page starts a fresh sequence.
 - **Identity:** room codes must match the alphabet exactly, room creation/joins and pings are

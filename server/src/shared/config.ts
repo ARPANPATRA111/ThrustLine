@@ -143,11 +143,24 @@ export const SYNC_MAX_DT_SEC = 0.25;
 export const MOVE_CHECK_SPEED = 1400;
 export const MOVE_CHECK_SLACK = 1.3;
 export const MOVE_CHECK_EXTRA_PX = 24;
+/**
+ * Per-axis travel credit (px) a client may bank for jitter and bunched packets. Credit refills at
+ * the speed physics allows right now, so this bounds a burst but never raises the sustained speed.
+ */
+export const MOVE_BUDGET_PX = 96;
+/** Head-room over the physically possible speed, for rounding and clock drift. */
+export const MOVE_SPEED_SLACK = 1.1;
+/** Extra reach around a blast when granting knockback speed: the client may see it elsewhere. */
+export const BLAST_BOOST_MARGIN_PX = 120;
+/** A blast also lifts: Actor.knockback adds a quarter of its strength upward. */
+export const BLAST_BOOST = GRENADE_KNOCKBACK * 1.25;
 /** The server shrinks the hitbox by this much when testing for solid overlap (f32 rounding). */
 export const SOLID_OVERLAP_EPS = 0.5;
 export const SHOT_ORIGIN_TOLERANCE = 48;
 export const SHOT_RANGE_TOLERANCE = 64;
 export const SHOT_RAY_TOLERANCE = 40;
+/** Extra pellets a claim may report over what the target's size allows at that distance. */
+export const PELLET_TOLERANCE = 2;
 /** Fraction of the weapon's fire interval that the server insists on between shots. */
 export const FIRE_RATE_TOLERANCE = 0.85;
 export const MELEE_SERVER_RANGE = 72;

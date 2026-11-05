@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { TILE } from './config';
 import { RIG7, spawnWorldPos } from './map';
-import { fireRateOk, hitClaimDistance, isStaleSeq, isValidPosition, meleeHits, shotOriginOk, validateMove } from './validate';
-import { WEAPONS, W_AR, W_PISTOL, W_SNIPER } from './weapons';
+import { canSeeBody, fireRateOk, hitClaimDistance, isStaleSeq, isValidPosition, maxPelletsAt, meleeHits, shotOriginOk, validateMove } from './validate';
+import { WEAPONS, W_AR, W_PISTOL, W_SHOTGUN, W_SNIPER } from './weapons';
 
 const floorY = 35 * TILE + TILE; // ground floor top (row 36) for the lower spawns
 const at = (tx: number) => ({ x: (tx + 0.5) * TILE, y: floorY });
@@ -52,6 +52,21 @@ describe('shot validation', () => {
     const shooter = at(17);
     const target = at(24);
     expect(hitClaimDistance(RIG7, sniper, shooter.x, shooter.y - 24, 0, target)).toBe(-1);
+  });
+
+  it('hits a player peeking over a low wall', () => {
+    // Standing on top of the low wall at columns 20-21 only the legs would be hidden from below;
+    // a shooter level with the head sees head and chest even though the feet are blocked.
+    const target = { x: 20 * TILE + 8, y: 33 * TILE };
+    expect(canSeeBody(RIG7, 17 * TILE, target.y - 40, target)).toBe(true);
+  });
+
+  it('caps shotgun pellets by how much of the cone a body fills', () => {
+    const shotgun = WEAPONS[W_SHOTGUN];
+    expect(maxPelletsAt(shotgun, 60)).toBe(shotgun.pellets);
+    expect(maxPelletsAt(shotgun, 200)).toBeLessThan(shotgun.pellets);
+    expect(maxPelletsAt(shotgun, 460)).toBeLessThanOrEqual(6);
+    expect(maxPelletsAt(WEAPONS[W_SNIPER], 2000)).toBe(1);
   });
 
   it('rejects out-of-range hits', () => {

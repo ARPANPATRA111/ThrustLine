@@ -3,14 +3,23 @@
 // tolerant enough for real latency ("favour the shooter") but stop teleports, wall-hacks,
 // rapid fire and out-of-range hits.
 import {
+  AIR_DRAG,
   FIRE_RATE_TOLERANCE,
+  HOP_SPEED,
+  MAX_FALL,
+  MAX_IMPULSE_SPEED_UP,
+  MAX_IMPULSE_SPEED_X,
   MELEE_SERVER_ARC_DEG,
   MELEE_SERVER_RANGE,
+  MOVE_BUDGET_PX,
   MOVE_CHECK_EXTRA_PX,
   MOVE_CHECK_SLACK,
   MOVE_CHECK_SPEED,
+  MOVE_SPEED_SLACK,
+  PELLET_TOLERANCE,
   PLAYER_H,
   PLAYER_W,
+  RUN_SPEED,
   SHOT_ORIGIN_TOLERANCE,
   SHOT_RANGE_TOLERANCE,
   SHOT_RAY_TOLERANCE,
@@ -40,10 +49,63 @@ export function maxMoveDistance(dtSec: number): number {
   return MOVE_CHECK_SPEED * dtSec * MOVE_CHECK_SLACK + MOVE_CHECK_EXTRA_PX;
 }
 
-/** Movement check: inside the map, not in a wall, and not farther than physically possible. */
+/**
+ * Did the body travel through open space? A straight line between two body centres can clip a
+ * corner the physics walked around (it moves X and Y separately), so either L-shaped route also
+ * counts. A wall or floor between the two points blocks all three.
+ */
+export function isPathClear(map: GameMap, from: Pos, to: Pos): boolean {
+  const ay = from.y - PLAYER_H / 2;
+  const by = to.y - PLAYER_H / 2;
+  if (lineOfSight(map, from.x, ay, to.x, by)) return true;
+  return (lineOfSight(map, from.x, ay, to.x, ay) && lineOfSight(map, to.x, ay, to.x, by))
+    || (lineOfSight(map, from.x, ay, from.x, by) && lineOfSight(map, from.x, by, to.x, by));
+}
+
+/** Movement check: inside the map, not through a wall, and not farther than physically possible. */
 export function validateMove(map: GameMap, from: Pos, to: Pos, dtSec: number): boolean {
   if (!isValidPosition(map, to.x, to.y)) return false;
-  return Math.hypot(to.x - from.x, to.y - from.y) <= maxMoveDistance(dtSec);
+  if (Math.hypot(to.x - from.x, to.y - from.y) > maxMoveDistance(dtSec)) return false;
+  return isPathClear(map, from, to);
+}
+
+/**
+ * The server's model of how fast a player can really be moving. `validateMove` alone would let
+ * any client move at grenade-blast speed all the time; this holds them to run and jet speed
+ * unless something actually pushed them (`boost`, in px/s, decays like air drag).
+ */
+export interface MoveCredit {
+  x: number;
+  up: number;
+  boost: number;
+}
+
+export function freshMoveCredit(): MoveCredit {
+  return { x: MOVE_BUDGET_PX, up: MOVE_BUDGET_PX, boost: 0 };
+}
+
+/** An impulse (recoil, lunge, blast) lets the player go this much faster, up to the speed caps. */
+export function addBoost(c: MoveCredit, impulse: number): void {
+  c.boost = Math.min(Math.max(MAX_IMPULSE_SPEED_X, MAX_IMPULSE_SPEED_UP), c.boost + impulse);
+}
+
+/**
+ * Spend movement credit for a step of (dx, dy) over `dtSec`. Returns false if the step is faster
+ * than physics allows; credit is refilled but not spent, so an honest client recovers at once.
+ */
+export function spendMove(c: MoveCredit, dx: number, dy: number, dtSec: number, runMul: number): boolean {
+  const vx = Math.min(RUN_SPEED * runMul + c.boost, MAX_IMPULSE_SPEED_X) * MOVE_SPEED_SLACK;
+  const vUp = Math.min(HOP_SPEED + c.boost, MAX_IMPULSE_SPEED_UP) * MOVE_SPEED_SLACK;
+  c.x = Math.min(MOVE_BUDGET_PX, c.x + vx * dtSec);
+  c.up = Math.min(MOVE_BUDGET_PX, c.up + vUp * dtSec);
+  c.boost = Math.max(0, c.boost - AIR_DRAG * dtSec);
+  const needX = Math.abs(dx);
+  const needUp = Math.max(0, -dy);
+  if (needX > c.x || needUp > c.up) return false;
+  if (dy > MAX_FALL * MOVE_SPEED_SLACK * dtSec + MOVE_BUDGET_PX) return false;
+  c.x -= needX;
+  c.up -= needUp;
+  return true;
 }
 
 /** Fire-rate check: at least 0.85 / rate seconds since the last shot of that weapon. */
@@ -70,12 +132,30 @@ export function shotOriginOk(shooter: Pos, ox: number, oy: number): boolean {
 }
 
 const HALF_DIAGONAL = Math.hypot(PLAYER_W, PLAYER_H) / 2;
+/** Heights above the feet that count as an exposed body: shins, chest, head. */
+const BODY_POINTS = [8, PLAYER_H / 2, PLAYER_H - 8];
+
+/** Can a shot from (ox, oy) reach any part of the body? Someone peeking over a low wall is hittable. */
+export function canSeeBody(map: GameMap, ox: number, oy: number, target: Pos): boolean {
+  return BODY_POINTS.some((h) => lineOfSight(map, ox, oy, target.x, target.y - h));
+}
+
+/**
+ * Most pellets of a spread weapon that can land on one body at distance `d`: the share of the
+ * cone the body fills, plus a small tolerance. A hit claim cannot report more than this.
+ */
+export function maxPelletsAt(w: WeaponDef, d: number): number {
+  if (w.pellets <= 1) return w.pellets;
+  const spread = (Math.max(w.spreadStill, w.spreadMoving) * Math.PI) / 180;
+  const share = Math.min(1, Math.atan2(HALF_DIAGONAL, Math.max(1, d)) / Math.max(spread, 1e-3));
+  return Math.min(w.pellets, Math.ceil(w.pellets * share) + PELLET_TOLERANCE);
+}
 
 /**
  * Check a single hit claim against one candidate position of the target (its current or
  * previous server position). Returns the distance from the shot origin if valid, else -1.
  *   - within weapon range + 64 px
- *   - a clear tile raycast from the origin to the target's centre
+ *   - a clear tile raycast from the origin to some part of the target's body
  *   - the claimed ray passes within half-diagonal + 40 px of the target's centre
  */
 export function hitClaimDistance(
@@ -90,7 +170,7 @@ export function hitClaimDistance(
   const cy = target.y - PLAYER_H / 2;
   const d = Math.hypot(cx - ox, cy - oy);
   if (d > w.range + SHOT_RANGE_TOLERANCE) return -1;
-  if (!lineOfSight(map, ox, oy, cx, cy)) return -1;
+  if (!canSeeBody(map, ox, oy, target)) return -1;
   const dist = pointToRayDistance(ox, oy, Math.cos(angle), Math.sin(angle), cx, cy);
   if (dist > HALF_DIAGONAL + SHOT_RAY_TOLERANCE) return -1;
   return d;
