@@ -123,6 +123,8 @@ export class BotBrain {
 
     let moveX = 0;
     let thrust = false;
+    /** Following a route: it already knows how to get round whatever is ahead. */
+    let routed = false;
     const t = this.target;
     const w = a.weapon;
     if (t) {
@@ -211,6 +213,7 @@ export class BotBrain {
       if (hunting && Math.abs(dx) < 40 && Math.abs(dy) < 60) this.huntFor = 0;
       if (Math.abs(dx) < 40 && Math.abs(dy) < 50) this.waypoint = pickWaypoint(nav);
       const route = steer(map, cx, b.y, gx, gy);
+      routed = true;
       moveX = route.moveX;
       if ((route.up || route.hover) && b.fuel > 25) thrust = true;
       if (route.hover && !b.grounded) inp.thrustAmount = C.JET_HOVER + 0.08;
@@ -222,6 +225,7 @@ export class BotBrain {
     const flagAt = world.flagGoal(a.team, a.key);
     if (flagAt) {
       const route = steer(map, cx, b.y, flagAt.x, flagAt.y);
+      routed = true;
       moveX = route.moveX;
       thrust = route.up || route.hover;
       inp.thrustAmount = route.hover && !b.grounded ? C.JET_HOVER + 0.08 : 1;
@@ -239,7 +243,7 @@ export class BotBrain {
     // --- Navigation: hop walls, escape acid, get unstuck ---
     const aheadTx = Math.floor((cx + Math.sign(moveX || 1) * 24) / C.TILE);
     const bodyTy = Math.floor(cy / C.TILE);
-    if (moveX !== 0 && (tileAt(map, aheadTx, bodyTy) === T_SOLID || tileAt(map, aheadTx, bodyTy + 1) === T_SOLID)) thrust = true;
+    if (!routed && moveX !== 0 && (tileAt(map, aheadTx, bodyTy) === T_SOLID || tileAt(map, aheadTx, bodyTy + 1) === T_SOLID)) thrust = true;
     const feetTy = Math.floor((b.y + 4) / C.TILE);
     let inAcid = false;
     if (world.rules.acid) {
