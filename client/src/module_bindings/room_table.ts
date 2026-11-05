@@ -31,4 +31,5 @@ export default __t.row({
   lobbyAtMicros: __t.i64().name("lobby_at_micros"),
   roundNo: __t.u32().name("round_no"),
   createdAt: __t.timestamp().name("created_at"),
+  quick: __t.bool(),
 });

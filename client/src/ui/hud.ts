@@ -159,7 +159,7 @@ export class Hud {
       if (i < 4 || i === myIdx) {
         const me = i === myIdx ? ' me' : '';
         const lead = i === 0 ? ' lead' : '';
-        const ping = p.isBot ? 'CPU' : p.pingMs ? `${p.pingMs}ms` : '';
+        const ping = p.isBot ? 'CPU' : !p.connected ? 'LOST' : p.pingMs ? `${p.pingMs}ms` : '';
         rows.push(`<li class="mb-row${me}${lead}"><span class="rk">${i + 1}</span><span class="dot" style="background:${playerCss(p.colorIdx, teams ? p.team : 0)}"></span><span class="nm">${escapeHtml(p.name)}</span><span class="sc">${p.score}</span><span class="pg">${ping}</span></li>`);
       }
     });

@@ -384,6 +384,23 @@ async function boot(): Promise<void> {
     if (ended || boardHeld) renderBoard(ended);
     placeEmoteDock();
     checkRotate();
+    fillQuickRoom(room);
+  }
+
+  /** Quick Play: the host's tab keeps the room lively with CPU players, and gives them up to humans. */
+  let fillingRoom = false;
+  function fillQuickRoom(room: Room): void {
+    if (!room.quick || !isHost() || fillingRoom) return;
+    const total = roomPlayers().length;
+    if (total < C.QUICK_MIN_PLAYERS) {
+      fillingRoom = true;
+      void game.bots.add(room.code).catch((e) => console.warn('CPU player failed to join', e)).finally(() => {
+        fillingRoom = false;
+        queueRoute();
+      });
+    } else if (total > C.QUICK_MIN_PLAYERS && game.bots.bots.length > 0) {
+      game.bots.removeOne();
+    }
   }
 
   // ---------------------------------------------------------------- lobby
@@ -448,7 +465,7 @@ async function boot(): Promise<void> {
     }
     const boardRows = ranked.map((p, i) => {
       const me = p.identity.toHexString() === net.myKey ? ' class="me"' : '';
-      const ping = p.isBot ? '<span class="cpu-tag">CPU</span>' : p.pingMs ? `<span class="ping ${pingClass(p.pingMs)}">${p.pingMs}</span>` : '–';
+      const ping = p.isBot ? '<span class="cpu-tag">CPU</span>' : !p.connected ? '<span class="lost-tag">LOST</span>' : p.pingMs ? `<span class="ping ${pingClass(p.pingMs)}">${p.pingMs}</span>` : '–';
       const rank = teams ? ranked.filter((q, j) => j <= i && q.team === p.team).length : i + 1;
       return `<tr${me}><td><span class="rank r${rank}">${rank}</span></td><td><span class="pn"><span class="avatar" style="width:12px;height:12px;border-radius:4px;background:${playerCss(p.colorIdx, teams ? p.team : 0)};color:${playerCss(p.colorIdx, teams ? p.team : 0)}"></span>${escapeHtml(p.name)}</span></td><td class="num">${p.score}</td><td class="num">${p.kills}</td><td class="num">${p.deaths}</td><td class="num">${ping}</td></tr>`;
     }).join('');
@@ -457,8 +474,8 @@ async function boot(): Promise<void> {
       boardHtml = boardRows;
     }
     $('end-actions').classList.toggle('hidden', !ended);
-    $('btn-again').classList.toggle('hidden', !isHost());
-    $('btn-to-lobby').classList.toggle('hidden', !isHost());
+    $('btn-again').classList.toggle('hidden', !isHost() || !!room?.quick);
+    $('btn-to-lobby').classList.toggle('hidden', !isHost() || !!room?.quick);
     $('lobby-countdown').classList.toggle('hidden', !ended);
     updateCountdown();
   }
@@ -467,7 +484,7 @@ async function boot(): Promise<void> {
     const room = myRoom();
     if (!room || room.state !== 2 || room.lobbyAtMicros === 0n) return;
     const left = Math.max(0, Math.ceil((Number(room.lobbyAtMicros) / 1000 - time.serverNow()) / 1000));
-    $('lobby-countdown').textContent = `Everyone returns to the lobby in ${left} s`;
+    $('lobby-countdown').textContent = room.quick ? `Next round in ${left} s` : `Everyone returns to the lobby in ${left} s`;
   }
   setInterval(updateCountdown, 250);
   input.onScoreboard = (show) => { boardHeld = show; queueRoute(); };
@@ -546,6 +563,11 @@ async function boot(): Promise<void> {
   const inCode = $<HTMLInputElement>('in-code');
   inCode.value = INVITE;
   inCode.addEventListener('input', () => { inCode.value = inCode.value.toUpperCase().replace(/[^A-Z]/g, ''); });
+  $('btn-quick').addEventListener('click', async () => {
+    audio.play('click');
+    saveName();
+    await call(net.conn?.reducers.quickPlay({ name: nameValue(), dev: DEV }));
+  });
   $('btn-create').addEventListener('click', async () => {
     audio.play('click');
     saveName();

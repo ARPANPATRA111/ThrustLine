@@ -26,6 +26,13 @@ export const DetonateJob = __t.object("DetonateJob", {
 });
 export type DetonateJob = __Infer<typeof DetonateJob>;
 
+export const DropJob = __t.object("DropJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  identity: __t.identity(),
+});
+export type DropJob = __Infer<typeof DropJob>;
+
 export const EmoteEv = __t.object("EmoteEv", {
   roomId: __t.u64(),
   identity: __t.identity(),
@@ -168,6 +175,7 @@ export const Player = __t.object("Player", {
   cx: __t.f32(),
   cy: __t.f32(),
   pingMs: __t.u16(),
+  connected: __t.bool(),
 });
 export type Player = __Infer<typeof Player>;
 
@@ -245,6 +253,7 @@ export const Room = __t.object("Room", {
   lobbyAtMicros: __t.i64(),
   roundNo: __t.u32(),
   createdAt: __t.timestamp(),
+  quick: __t.bool(),
 });
 export type Room = __Infer<typeof Room>;
 
