@@ -132,3 +132,18 @@ Every deviation from the build brief, and every non-obvious choice, one line eac
 - While dead, the movement controls pan the camera, but it only leaves the death spot if the player asks · the view stays fixed there by default, as the emote flow expects, and the respawn overlay no longer blocks input or dims the world as heavily.
 - The death screen shows a recap line instead of a replayed killcam · a real killcam needs a longer position history and five seconds is already short. The recap answers the same questions: what killed me, and how close was it.
 - Dev rooms are labelled TEST ROOM for everyone inside · they stay available because the production smoke test uses them, but anyone can create one, so a guest must be able to see that teleporting is on.
+
+## Round 6: variety, objectives and getting ready to move
+
+- Health, shields and airdrops take random spots derived from the map's own tiles · fixed spots become routes people memorise, and deriving spots means a new map needs no markers. Ammo and grenade crates stay put so resupply is always somewhere known.
+- Impact grenades store their first touch as a shorter fuse · touching the map is a pure function of the throw, so no new messages or client logic were needed. Only contact with a moving body is checked live.
+- A grenade reaching a player is judged on that player's own timeline · at 250 ms the thrower sees everyone late, so the only fair view of "it touched me" is the target's.
+- All grenades cap at 80 after Frenzy, and hurt their thrower in full · a frag used to one-shot, and half self-damage made point-blank throws free. The cap applies after the multiplier so Frenzy cannot bring the one-shot back.
+- EMP is enforced as a lift budget rather than a speed limit · a jump and a jet climb at nearly the same speed, but only one stops. The EMP is on a 6 s cooldown because infinite ammo is on by default.
+- The loadout screen is a room state, with the map and objective decided before it opens · players can see what they are choosing for. Modes with nothing to choose skip it.
+- Your own flag does not have to be home to score · two carriers would otherwise stall a round, which rounds as short as two minutes cannot afford.
+- Flag state changes are not announced by event · clients read them from the `flag` row's old and new values, so no message can be missed or arrive out of order.
+- Sudden death is off in Capture the Flag · the bases sit low, and the acid would decide a round that captures should decide.
+- CPU players moved from "steer at the goal" to a shared breadth-first field · the older approach could not get through a tunnel, and a field per goal costs the same for one bot or eight.
+- Maps stay 96 × 40 and differ by layout and palette · size is assumed by the acid, the camera and the minimap, and three very different layouts prove it was not needed for variety.
+- Progress moves between servers through a private key in the browser · tokens are signed per server, so a new server cannot verify an old identity, and the public identity alone would let anyone claim anyone's level. The key has to reach browsers before the move, so it shipped ahead of it.

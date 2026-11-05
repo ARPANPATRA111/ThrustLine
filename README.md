@@ -23,6 +23,9 @@ Most score when the timer runs out wins.
 | --- | --- |
 | Kill | +100 |
 | Hold the hill (King of the Hill) | +10 a second |
+| Bring the enemy flag home (Capture the Flag) | +300 |
+| Take the enemy flag / return your own | +25 / +50 |
+| Kill the flag carrier | +50 extra |
 | Kill a **bounty** target (a player on a 3-kill streak, glowing gold with a crown) | +50 extra |
 | Die to acid or your own grenade | −50 |
 
@@ -59,14 +62,24 @@ While you wait to respawn, your view stays on the spot where you died, and your 
 it around the map. The death screen says what killed you, how much health your killer has left and how
 much damage you dealt to them.
 
+### Loadout
+
+Arms and Boom rounds open with an 8 second loadout screen, showing the map and the objective. Pick a
+gun and one grenade type. They stay with you until you die: both are locked for the whole life, and you
+can change them during the 5 second respawn wait. Your last pick is saved for the next room. Blades and
+Snipers have nothing to choose, so they skip the screen.
+
 ### Maps
 
 | Map | Layout |
 | --- | --- |
 | **RIG-7** | The refinery: long catwalks, a low central pit and open air between the decks |
 | **HELIOS-9** | Two shores around a wide acid well, with towers, a centre pillar and islands to fight over |
+| **KILN-3** | A foundry cut into rock: tunnels, shafts and one big furnace hall. Close fights, no room to hide |
+| **SKYREACH** | No ground at all: islands over an acid sea, so every jump is a commitment |
+| **CRYO-12** | Two towers with hatches between their floors, joined by long bridges over a chasm |
 
-Quick Play rotates through the maps and alternates Deathmatch with King of the Hill.
+Quick Play rotates through the maps and cycles Deathmatch, King of the Hill and Capture the Flag.
 
 ### Modes (host chooses in the lobby)
 
@@ -112,6 +125,18 @@ A glowing zone appears on the map and on the minimap. One player alone in it (or
 match) scores +10 a second; if two sides are inside, it is contested and nobody scores. The zone moves
 every 40 seconds, and early if the rising acid reaches it. Kills still count, so defending it is a real
 choice. The line under the timer always says who holds it.
+
+### Capture the Flag
+
+Red against blue, from fixed homes: each team always spawns at its own base, beside its flag. Touch the
+enemy flag to carry it, with nothing to press, and reach your own stand to score. Your own flag does
+not have to be home. The first team to 3 captures ends the round; otherwise captures decide it when the
+timer runs out, and team score breaks a tie.
+
+If the carrier dies or disconnects, the flag falls where they were. Touch your own dropped flag to send
+it home, or it walks home by itself after 15 seconds. A flag lost in the acid goes home at once. The
+line under the timer says what your team should be doing, and flags show on the minimap with arrows at
+the screen edge. Sudden death stays out of this objective, because the bases sit low on the map.
 
 ### Sudden death
 
@@ -160,8 +185,13 @@ carrying every player's level across (measured ~25–40 ms from India vs ~250 ms
 | Shotgun | 10 × 10 | 1.3/s | 7 / 28 | All pellets at point blank kill; falls off past 200 px; recoil throws you back (blast-jumping) |
 | Sniper | 100 | 0.85/s | 4 / 16 | One clean body hit kills; pinpoint while still; camera leads 320 px |
 | Knife | 55 | 2/s | — | Short lunge |
-| Frag | up to 100 | — | 2 per life | 1.5 s fuse, bounces, knockback, half damage to yourself |
+| Frag | up to 80 | — | 2 per life | 1.5 s fuse, bounces, large blast, knockback |
+| Impact | up to 80 | — | 2 per life | Bursts on the first player, wall or floor it touches; 1.8 s fuse if it hits nothing; smaller blast |
+| EMP | 0 | — | 2 per life | Jetpacks in range go offline for 3 s, jumps still work; 6 s cooldown |
 | Railgun | 150 | 0.9/s | 3 shots | Airdrop only; pierces every body on the line, walls still stop it; infinite ammo does not apply |
+
+No grenade does more than 80, even in Frenzy, so none can one-shot a full-health pilot. They hurt their
+thrower like anyone else, and an EMP catches its thrower too. You carry one type per life.
 
 ### Power-ups
 
@@ -169,6 +199,10 @@ carrying every player's level across (measured ~25–40 ms from India vs ~250 ms
 | --- | --- |
 | **Shield** | +50 shield. Damage takes the shield first, so a shield survives a one-shot sniper hit. Acid goes straight through. Back after 30 s. |
 | **Airdrop** | First crate 30 s into the round, then one a minute (one at a time). It is announced, shown on the minimap, and marked with an arrow when off-screen. It lands 4 s later and whoever reaches it gets the railgun. |
+
+Health packs and shields appear on a random open spot and move every time they come back, and the
+minimap shows where they turned up. Airdrops land on a random spot with open sky. Ammo and grenade
+crates stay put, so resupply is always somewhere you know.
 
 Solid metal (glowing cyan edges) blocks bullets. The see-through mesh catwalks (yellow top rail) are
 one-way platforms: you can jump up through them and bullets pass through them.
@@ -229,6 +263,12 @@ season points, and that flag erases them. Schema changes must migrate in place: 
 columns to the end of a table with `.default()`. The shape of an object column such as `MatchRules`
 cannot be changed in place, so add a new column instead. Try it on a throwaway local database first.
 
+### Moving to your own server
+
+Production stays on Maincloud until the move is made. [deploy/README.md](deploy/README.md) is the whole
+runbook. Login tokens do not carry between servers, so players' levels move with a private key held in
+their browser ([scripts/move-data.mjs](scripts/move-data.mjs)).
+
 ### Offline LAN fallback
 
 No internet? One laptop hosts everything on the same Wi-Fi (or a phone hotspot, laptop as host):
@@ -270,10 +310,14 @@ outcome that matters:
   raycast (cover wins) and the target's lag-compensated history. Fire rate is capped by the weapon
   definition, and a shotgun claim cannot report more pellets than the target's size allows at that
   distance.
-- **Actions:** only the equipped weapon from the mode's loadout can fire, and the primary can only
-  change while respawning; shots, knives, reloads and grenade throws are rate-limited per player and
+- **Actions:** only the equipped weapon from the mode's loadout can fire, and the gun and grenade type
+  can only change while respawning; shots, knives, reloads and grenade throws are rate-limited per player and
   per weapon. A pellet stops at one body, so a shot cannot claim more targets than it has pellets;
   only the railgun pierces.
+- **EMP:** with the jetpack offline, the server allows no more lift than a jump can give, and it refills
+  only on real ground, so a client that ignores the EMP is snapped back.
+- **Flags and grenades:** flags are touched by the server-checked position, and only the server moves
+  them. The grenade type comes from the player's row, never from the throw.
 - **Replays:** every sync carries a monotonically increasing sequence number. Replayed, duplicated or
   late packets are dropped before they can act, and a reconnecting page starts a fresh sequence.
 - **Identity:** room codes must match the alphabet exactly, room creation/joins and pings are

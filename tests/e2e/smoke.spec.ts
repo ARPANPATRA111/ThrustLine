@@ -66,6 +66,7 @@ test('rooms, movement, kills and round end across clients', async ({ browser }) 
   // --- Start the round ---
   await host.click('#btn-start');
   for (const p of pages) await p.waitForSelector('#scr-game:not(.hidden)', { timeout: 15_000 });
+  for (const p of pages) await p.waitForFunction(() => (window as any).__tl.game.room?.state === 1 && (window as any).__tl.game.local?.alive, null, { timeout: 15_000 }); // past the loadout screen
   const s0 = await state(host);
   console.log(`renderer: ${s0.renderer}`);
   expect(['webgl', 'webgpu']).toContain(s0.renderer);

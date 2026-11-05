@@ -41,7 +41,12 @@ const TIPS = [
   'Grenades bounce: bank them off walls.',
   'Shields soak damage before your health does.',
   'Airdrops carry a railgun that pierces everyone on the line.',
-  'In the last 30 seconds the acid rises: get high.',
+  'In the last 30 seconds the acid rises: climb or burn.',
+  'Pick a gun and a grenade before each round. They stay yours until you die.',
+  'Impact grenades burst on the first thing they touch, including you.',
+  'An EMP kills every jetpack in range for 3 seconds, yours too.',
+  'Touch the enemy flag to carry it, then bring it home to score.',
+  'Health and shields move every time they come back: check the minimap.',
   'Hosts can add CPU players and change the house rules.',
 ];
 
