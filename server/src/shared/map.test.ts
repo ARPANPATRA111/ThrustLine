@@ -44,6 +44,18 @@ describe('RIG-7 map', () => {
     }
   });
 
+  it('rests every hill zone on a platform or the floor, with room to stand', () => {
+    expect(RIG7.hills.length).toBeGreaterThanOrEqual(4);
+    for (const z of RIG7.hills) {
+      let footing = 0;
+      for (let tx = z.tx; tx < z.tx + z.tw; tx++) {
+        if ([T_SOLID, T_ONEWAY].includes(tileAt(RIG7, tx, z.ty + z.th))) footing++;
+        for (let ty = z.ty; ty < z.ty + z.th; ty++) expect(tileAt(RIG7, tx, ty), `tile ${tx},${ty}`).not.toBe(T_SOLID);
+      }
+      expect(footing, `zone at ${z.tx},${z.ty}`).toBeGreaterThanOrEqual(6);
+    }
+  });
+
   it('treats everything outside the map as solid', () => {
     expect(tileAt(RIG7, -1, 5)).toBe(T_SOLID);
     expect(tileAt(RIG7, 5, 400)).toBe(T_SOLID);

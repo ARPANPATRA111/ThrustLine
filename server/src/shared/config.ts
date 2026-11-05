@@ -63,6 +63,21 @@ export const AIRDROP_EVERY_SEC = 60;
 export const AIRDROP_FALL_SEC = 4;
 export const AIRDROP_FALL_PX_PER_SEC = 240;
 
+// ---------- King of the Hill ----------
+export const HILL_POINTS_PER_SEC = 10;
+export const HILL_MOVE_SEC = 40;
+export const HILL_MOVE_DEV_SEC = 10;
+export const HILL_EMPTY = 0;
+export const HILL_CONTESTED = 1;
+export const HILL_HELD = 2;
+
+// ---------- Sudden death ----------
+export const SUDDEN_DEATH_SEC = 30;
+export const SUDDEN_DEATH_DEV_SEC = 12;
+/** The acid surface climbs from the floor to here (world y, px). */
+export const SUDDEN_DEATH_FROM_Y = 36 * TILE;
+export const SUDDEN_DEATH_TO_Y = 17 * TILE;
+
 // ---------- Scoring ----------
 export const SCORE_KILL = 100;
 export const SCORE_BOUNTY_BONUS = 50;
@@ -127,10 +142,16 @@ export const DEFAULT_RULES = {
   /** Grenades ignore gravity and drift where they are thrown (zero-g). */
   floatingGrenades: true,
 };
+/** What a round is played for. */
+export const OBJECTIVE_KILLS = 0;
+export const OBJECTIVE_HILL = 1;
 /** Arena options, stored in `room.match` next to the original house rules. */
 export const DEFAULT_MATCH = {
   /** Crates with a power weapon parachute in during the round. */
   airdrops: true,
+  /** The acid rises in the final seconds, so a round cannot end in hiding. */
+  suddenDeath: true,
+  objective: OBJECTIVE_KILLS,
 };
 
 // ---------- Grenades ----------
@@ -257,6 +278,19 @@ export const CAUSE_ACID = 10;
 
 // ---------- Room-wide announcements (notice_ev.kind) ----------
 export const NOTICE_AIRDROP = 0;
+export const NOTICE_HILL_MOVED = 1;
+
+/**
+ * World y of the rising acid during sudden death, or Infinity before it starts. Like Frenzy this
+ * comes from the round clock on both sides, so nothing is stored or sent.
+ */
+export function acidSurface(nowMs: number, endsAtMs: number, roundSec: number): number {
+  const span = (roundSec < 120 ? SUDDEN_DEATH_DEV_SEC : SUDDEN_DEATH_SEC) * 1000;
+  const left = endsAtMs - nowMs;
+  if (left > span) return Infinity;
+  const t = Math.min(1, Math.max(0, 1 - left / span));
+  return SUDDEN_DEATH_FROM_Y + (SUDDEN_DEATH_TO_Y - SUDDEN_DEATH_FROM_Y) * t;
+}
 
 /** Frenzy is computed from the round end time on both sides; nothing is stored. */
 export function isFrenzy(nowMs: number, endsAtMs: number): boolean {

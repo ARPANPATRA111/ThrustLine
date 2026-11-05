@@ -148,6 +148,7 @@ export class LobbyView {
     $('mode-cards').classList.toggle('locked', !isHost);
     $('mode-cards').querySelectorAll<HTMLButtonElement>('.mode').forEach((b) => b.classList.toggle('on', Number(b.dataset.mode) === d.mode));
     this.seg('seg-teams', [{ v: 0, label: 'Free-for-all' }, { v: 1, label: 'Red vs Blue' }], d.teams ? 1 : 0, (v) => this.change({ teams: v === 1 }));
+    this.seg('seg-objective', [{ v: C.OBJECTIVE_KILLS, label: 'Deathmatch' }, { v: C.OBJECTIVE_HILL, label: 'King of the Hill' }], d.match.objective, (v) => this.change({ match: { objective: v } }));
     const rounds = room.dev ? [C.DEV_ROUND_SEC, ...C.ROUND_LENGTHS_SEC] : C.ROUND_LENGTHS_SEC;
     this.seg('seg-round', rounds.map((v) => ({ v, label: roundLabel(v) })), d.roundSec, (v) => this.change({ roundSec: v }));
     this.seg('seg-hp', C.HP_OPTIONS.map((v) => ({ v, label: `${v}` })), d.rules.maxHp, (v) => this.change({ rules: { maxHp: v } }));

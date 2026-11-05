@@ -121,3 +121,5 @@ Every deviation from the build brief, and every non-obvious choice, one line eac
 - A shot may come from the gun held at the start of a packet or the end · one packet spans up to 50 ms, so a shot fired just before a swap was rejected as "weapon not equipped". The railgun's last shot exposed it, but any quick swap could lose a bullet.
 - Each pellet may only land on one body · without this a single AR bullet could claim up to eight targets.
 - Routine announcements use a small line under the timer, not the big banner · airdrops repeat every minute and the banner sits where players aim.
+- King of the Hill is an objective on top of any mode, not a fifth mode · a hill with knives or grenades plays differently, and modes already mean "what you carry". Hill state lives in its own small table, so the room row is not rewritten every second.
+- Sudden death computes the acid line from the round clock on both sides, like Frenzy · nothing extra goes over the network, and the client's sheet and the server's hazard cannot disagree. Rounds under two minutes use a 12 s window so test rooms stay usable, and dev rooms start with it off.

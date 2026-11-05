@@ -21,6 +21,7 @@ Most score when the timer runs out wins.
 | Event | Score |
 | --- | --- |
 | Kill | +100 |
+| Hold the hill (King of the Hill) | +10 a second |
 | Kill a **bounty** target (a player on a 3-kill streak, glowing gold with a crown) | +50 extra |
 | Die to acid or your own grenade | −50 |
 
@@ -67,20 +68,35 @@ Touch buttons sit on an arc around the aim stick and only appear when the mode u
 | Infinite ammo | No reloading; unlimited grenades in Arms |
 | Pickups | Crates on or off |
 | Airdrops | A railgun crate parachutes in every minute (needs Pickups) |
+| Sudden death | The acid rises for the last 30 s (needs Acid hazard) |
 | Acid hazard | The pit burns, or is harmless |
 | Final-minute Frenzy | On or off |
 | Match type | Free-for-all, or Red vs Blue teams (1v1, 2v2 … 4v4; up to 8 players) |
+| Objective | Deathmatch, or King of the Hill |
 | Friendly fire | Teams only, on by default: teammates' hits count (a teamkill costs 50) |
 | Floating grenades | Zero-g: grenades drift where you throw them and slow to a stop |
 
 Everyone in the room sees the settings; only the host can change them. Every toggle starts **on**
-(infinite jetpack, infinite ammo, pickups, airdrops, acid, Frenzy, floating grenades), so a fresh room is the
+(infinite jetpack, infinite ammo, pickups, airdrops, acid, Frenzy, sudden death, floating grenades), so a fresh room is the
 fastest, most chaotic version; the host turns off whatever the group does not want. The server
 enforces every rule. The host can also **kick** a player (✕ on their row; they can't rejoin that
 room) and move players between teams (⇄). In a team match each player can press **Switch team**.
 
 After a round, everyone sees the results, then the whole room returns to the lobby automatically
 after 12 seconds (the host can press **Play again** or **Lobby now** sooner).
+
+### King of the Hill
+
+A glowing zone appears on the map and on the minimap. One player alone in it (or one team, in a team
+match) scores +10 a second; if two sides are inside, it is contested and nobody scores. The zone moves
+every 40 seconds, and early if the rising acid reaches it. Kills still count, so defending it is a real
+choice. The line under the timer always says who holds it.
+
+### Sudden death
+
+For the last 30 seconds of a round the acid climbs from the floor to about the middle of the map.
+Everything below the surface burns at the usual 30 HP/s, so a round cannot end with everyone hiding on
+the ground floor. Nobody spawns under it.
 
 ### Teams
 
@@ -131,7 +147,7 @@ one-way platforms: you can jump up through them and bullets pass through them.
 - **Jetpack fuel:** 100 fuel, ~2.9 s of flight, refills after 0.12 s on the ground (a full tank in ~1.4 s). Tap for a hop, hold to fly.
 - **Blast-jumping:** shotgun recoil (520) and grenade knockback (700) push you; chain them with the jetpack to move fast.
 - **Bounty:** a 3-kill streak makes you glow gold and worth +50 to whoever stops you.
-- **Frenzy:** the last 60 s: damage ×1.5, fuel refills twice as fast, red edge tint, FRENZY banner, faster music.
+- **Frenzy:** the last 60 s: damage ×1.5, fuel refills twice as fast, red edge tint, FRENZY banner, faster music. Sudden death takes over from the last 30 s.
 - **Modes and house rules:** four loadouts plus host-set health, fuel, ammo, pickups, acid and Frenzy. Respawn is always 5 s.
 - **Emotes:** press Q (or tap the button beside the leaderboard) and pick one of eight Hinglish stickers. They pop above you and follow you while you move. The picker only opens when you ask for it and stays usable while dead; your sticker then stays at the death spot while you wait to respawn.
 - **Acid hazard:** the pit in the middle burns 30 HP/s while you're in it. You can fly out.

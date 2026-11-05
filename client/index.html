@@ -130,6 +130,7 @@
           <div class="card-title"><svg class="ic"><use href="#i-sliders" /></svg>Match settings<span id="host-note" class="count">Host only</span></div>
           <div class="set-scroll" id="room-settings">
             <div class="set-row"><span class="lbl"><svg class="ic"><use href="#i-users" /></svg>Match</span><div id="seg-teams" class="seg"></div></div>
+            <div class="set-row"><span class="lbl"><svg class="ic"><use href="#i-crown" /></svg>Objective</span><div id="seg-objective" class="seg"></div></div>
             <div id="mode-cards" class="mode-cards">
               <button data-mode="0" class="mode"><svg class="ic"><use href="#i-gun" /></svg><b>Arms</b><small>All weapons</small></button>
               <button data-mode="1" class="mode"><svg class="ic"><use href="#i-knife" /></svg><b>Blades</b><small>Melee only</small></button>
@@ -144,6 +145,7 @@
               <label class="tog"><input type="checkbox" data-rule="infiniteAmmo" /><span class="sw"></span><svg class="ic"><use href="#i-ammo" /></svg>Infinite ammo</label>
               <label class="tog"><input type="checkbox" data-rule="pickups" /><span class="sw"></span><svg class="ic"><use href="#i-box" /></svg>Pickups</label>
               <label class="tog"><input type="checkbox" data-match="airdrops" /><span class="sw"></span><svg class="ic"><use href="#i-box" /></svg>Airdrops</label>
+              <label class="tog"><input type="checkbox" data-match="suddenDeath" /><span class="sw"></span><svg class="ic"><use href="#i-acid" /></svg>Sudden death</label>
               <label class="tog"><input type="checkbox" data-rule="acid" /><span class="sw"></span><svg class="ic"><use href="#i-acid" /></svg>Acid hazard</label>
               <label class="tog"><input type="checkbox" data-rule="frenzy" /><span class="sw"></span><svg class="ic"><use href="#i-bolt" /></svg>Final-minute Frenzy</label>
               <label class="tog" id="tog-ff"><input type="checkbox" data-rule="friendlyFire" /><span class="sw"></span><svg class="ic"><use href="#i-users" /></svg>Friendly fire</label>
@@ -175,6 +177,7 @@
           </div>
         </div>
         <div id="team-score" class="team-score hidden"></div>
+        <div id="hill-chip" class="hill-chip hidden"></div>
         <div class="netstat"><span id="net-ping" class="ping good"><svg class="ic"><use href="#i-wifi" /></svg><b>--</b><i>ms</i></span><span id="net-fps"><b>--</b><i>FPS</i></span></div>
       </div>
       <div class="hud-tr">

@@ -70,6 +70,24 @@ export const Grenade = __t.object("Grenade", {
 });
 export type Grenade = __Infer<typeof Grenade>;
 
+export const Hill = __t.object("Hill", {
+  roomId: __t.u64(),
+  idx: __t.u8(),
+  state: __t.u8(),
+  holder: __t.option(__t.identity()),
+  team: __t.u8(),
+  movesAtMicros: __t.i64(),
+});
+export type Hill = __Infer<typeof Hill>;
+
+export const HillJob = __t.object("HillJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  roomId: __t.u64(),
+  roundNo: __t.u32(),
+});
+export type HillJob = __Infer<typeof HillJob>;
+
 export const HitClaim = __t.object("HitClaim", {
   target: __t.identity(),
   pellets: __t.u8(),
@@ -122,6 +140,8 @@ export type LobbyJob = __Infer<typeof LobbyJob>;
 
 export const MatchRules = __t.object("MatchRules", {
   airdrops: __t.bool(),
+  suddenDeath: __t.bool(),
+  objective: __t.u8(),
 });
 export type MatchRules = __Infer<typeof MatchRules>;
 

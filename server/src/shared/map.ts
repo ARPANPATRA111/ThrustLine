@@ -72,6 +72,11 @@ export interface TilePos {
 export interface PickupMarker extends TilePos {
   kind: number;
 }
+/** A rectangle of tiles: a King of the Hill zone. */
+export interface Zone extends TilePos {
+  tw: number;
+  th: number;
+}
 
 export interface GameMap {
   cols: number;
@@ -82,10 +87,12 @@ export interface GameMap {
   pickups: PickupMarker[];
   /** Where airdrop crates may land. */
   drops: TilePos[];
+  /** King of the Hill zones, each resting on a platform or the floor. */
+  hills: Zone[];
 }
 
 /** Parse ASCII rows into a GameMap. Throws if any row has the wrong width or an unknown char. */
-export function parseMap(rows: readonly string[], cols = MAP_COLS): GameMap {
+export function parseMap(rows: readonly string[], cols = MAP_COLS, hills: Zone[] = []): GameMap {
   const tiles = new Uint8Array(cols * rows.length);
   const spawns: TilePos[] = [];
   const pickups: PickupMarker[] = [];
@@ -113,11 +120,25 @@ export function parseMap(rows: readonly string[], cols = MAP_COLS): GameMap {
       tiles[ty * cols + tx] = code;
     }
   });
-  return { cols, rows: rows.length, tiles, spawns, pickups, drops };
+  return { cols, rows: rows.length, tiles, spawns, pickups, drops, hills };
 }
 
 /** The parsed RIG-7 map, shared by server and client. */
-export const RIG7: GameMap = parseMap(RIG7_ROWS);
+export const RIG7: GameMap = parseMap(RIG7_ROWS, MAP_COLS, [
+  { tx: 38, ty: 1, tw: 20, th: 5 }, // top gantry
+  { tx: 14, ty: 4, tw: 17, th: 5 }, // upper wings
+  { tx: 65, ty: 4, tw: 17, th: 5 },
+  { tx: 17, ty: 18, tw: 13, th: 5 }, // mid platforms
+  { tx: 66, ty: 18, tw: 13, th: 5 },
+  { tx: 39, ty: 26, tw: 18, th: 5 }, // above the pit
+  { tx: 7, ty: 31, tw: 12, th: 5 }, // floor corners
+  { tx: 77, ty: 31, tw: 12, th: 5 },
+]);
+
+/** Is a body centre (world px) inside a zone? */
+export function inZone(z: Zone, x: number, y: number): boolean {
+  return x >= z.tx * TILE && x < (z.tx + z.tw) * TILE && y >= z.ty * TILE && y < (z.ty + z.th) * TILE;
+}
 
 /** Tile code at tile coordinates. Everything outside the map counts as solid. */
 export function tileAt(map: GameMap, tx: number, ty: number): number {
