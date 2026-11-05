@@ -255,6 +255,21 @@ export const PongEv = __t.object("PongEv", {
 });
 export type PongEv = __Infer<typeof PongEv>;
 
+export const Profile = __t.object("Profile", {
+  identity: __t.identity(),
+  name: __t.string(),
+  xp: __t.u32(),
+  kills: __t.u32(),
+  deaths: __t.u32(),
+  wins: __t.u32(),
+  rounds: __t.u32(),
+  bestKills: __t.u32(),
+  season: __t.u32(),
+  seasonScore: __t.u32(),
+  lastPlayed: __t.timestamp(),
+});
+export type Profile = __Infer<typeof Profile>;
+
 export const Pstate = __t.object("Pstate", {
   identity: __t.identity(),
   roomId: __t.u64(),
@@ -326,6 +341,15 @@ export const Rules = __t.object("Rules", {
   floatingGrenades: __t.bool(),
 });
 export type Rules = __Infer<typeof Rules>;
+
+export const SeasonBoard = __t.object("SeasonBoard", {
+  identity: __t.identity(),
+  name: __t.string(),
+  level: __t.u16(),
+  season: __t.u32(),
+  score: __t.u32(),
+});
+export type SeasonBoard = __Infer<typeof SeasonBoard>;
 
 export const ShotEv = __t.object("ShotEv", {
   roomId: __t.u64(),

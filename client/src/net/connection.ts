@@ -3,12 +3,14 @@
 import type { Identity } from 'spacetimedb';
 import { DbConnection, tables, type EventContext, type SubscriptionHandle } from '../module_bindings';
 import type {
-  BoomEv, EmoteEv, Grenade, Hill, HitEv, KickEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, PongEv, Pstate, Room, ShotEv,
+  BoomEv, EmoteEv, Grenade, Hill, HitEv, KickEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, PongEv, Profile, Pstate, Room, SeasonBoard, ShotEv,
 } from '../module_bindings/types';
 
 export const STDB_URI: string = import.meta.env.VITE_STDB_URI ?? 'ws://localhost:3000';
 export const STDB_DB: string = import.meta.env.VITE_STDB_DB ?? 'thrustline-dev';
 const TOKEN_KEY = `tl:token:${STDB_URI}/${STDB_DB}`;
+/** Held for the life of the page by the one tab that owns the saved identity. */
+const OWNER_LOCK = `tl:owner:${STDB_URI}/${STDB_DB}`;
 const ROOM_KEY = 'tl:room';
 /** Initial-connection retry delays (ms), then every 8 s. */
 const BACKOFF = [500, 1000, 2000, 4000, 8000];
@@ -38,6 +40,8 @@ export interface NetHandlers {
   notice?: (e: NoticeEv) => void;
   pong?: (e: PongEv) => void;
   kicked?: (e: KickEv) => void;
+  profile?: (p: Profile, old: Profile | undefined) => void;
+  seasonBoard?: (rows: SeasonBoard[]) => void;
   state?: (s: ConnState) => void;
   reconnected?: () => void;
 }
@@ -48,16 +52,50 @@ export class Net {
   h: NetHandlers = {};
   private roomSub: SubscriptionHandle | null = null;
   private roomSubId: bigint | null = null;
+  /** True when this tab owns the saved identity, so its token should outlive the tab. */
+  private ownsSaved = false;
+  private ownerChecked = false;
 
   get myKey(): string {
     return this.identity ? this.identity.toHexString() : '';
+  }
+
+  /**
+   * Which identity this tab plays as. Levels live on the identity, so the first tab reuses the
+   * saved one; further tabs stay separate players on their own session identity (handy for
+   * testing). A tab that already has a session identity keeps it across reloads.
+   */
+  private async pickToken(): Promise<string | undefined> {
+    const session = sessionStorage.getItem(TOKEN_KEY) ?? undefined;
+    const saved = localStorage.getItem(TOKEN_KEY) ?? undefined;
+    if (!this.ownerChecked) {
+      this.ownerChecked = true;
+      // Web Locks need a secure context; plain-http LAN play simply stays per-tab.
+      if ('locks' in navigator) {
+        this.ownsSaved = await new Promise<boolean>((resolve) => {
+          void navigator.locks.request(OWNER_LOCK, { ifAvailable: true }, (lock) => {
+            resolve(!!lock);
+            return lock ? new Promise<void>(() => {}) : undefined; // hold until the page closes
+          });
+        });
+      }
+    }
+    if (!this.ownsSaved) return session;
+    if (session && saved && session !== saved) this.ownsSaved = false; // a guest tab reloading
+    return session ?? saved;
+  }
+
+  private saveToken(token: string): void {
+    sessionStorage.setItem(TOKEN_KEY, token);
+    if (this.ownsSaved) localStorage.setItem(TOKEN_KEY, token);
   }
 
   /** Connect (retrying with backoff until it works). Resolves on the first successful connection. */
   connect(): Promise<void> {
     return new Promise((resolve) => {
       let attempt = 0;
-      const tryOnce = () => {
+      const tryOnce = async () => {
+        const savedToken = await this.pickToken();
         this.h.state?.(attempt === 0 ? 'connecting' : 'reconnecting');
         // Maincloud pauses idle databases; if the handshake is slow, say so.
         const wake = setTimeout(() => this.h.state?.('waking'), 3000);
@@ -65,13 +103,13 @@ export class Net {
         DbConnection.builder()
           .withUri(STDB_URI)
           .withDatabaseName(STDB_DB)
-          .withToken(sessionStorage.getItem(TOKEN_KEY) ?? undefined)
+          .withToken(savedToken)
           .withConfirmedReads(false) // updates arrive as soon as they commit in memory
           .withAutomaticReconnect({ minDelayMs: 500, maxDelayMs: 8000 })
           .onConnect((conn, identity, token) => {
             established = true;
             clearTimeout(wake);
-            sessionStorage.setItem(TOKEN_KEY, token);
+            this.saveToken(token);
             this.conn = conn;
             this.identity = identity;
             this.register(conn);
@@ -80,7 +118,7 @@ export class Net {
             resolve();
           })
           .onAutomaticReconnect((_conn, _identity, token) => {
-            sessionStorage.setItem(TOKEN_KEY, token);
+            this.saveToken(token);
             this.h.state?.('connected');
             this.h.reconnected?.();
           })
@@ -92,22 +130,25 @@ export class Net {
               this.roomSub = null;
               this.roomSubId = null;
               attempt = 1;
-              setTimeout(tryOnce, 1000);
+              setTimeout(() => void tryOnce(), 1000);
             }
           })
           .onConnectError((_ctx, err) => {
             clearTimeout(wake);
             if (established) return; // the SDK's automatic reconnect handles established connections
             console.warn('connect failed', err);
-            if (/token|auth|401|403/i.test(String(err))) sessionStorage.removeItem(TOKEN_KEY);
+            if (/token|auth|401|403/i.test(String(err))) {
+              sessionStorage.removeItem(TOKEN_KEY);
+              localStorage.removeItem(TOKEN_KEY);
+            }
             const delay = BACKOFF[Math.min(attempt, BACKOFF.length - 1)];
             attempt++;
             this.h.state?.('reconnecting');
-            setTimeout(tryOnce, delay);
+            setTimeout(() => void tryOnce(), delay);
           })
           .build();
       };
-      tryOnce();
+      void tryOnce();
     });
   }
 
@@ -142,13 +183,22 @@ export class Net {
     db.noticeEv.onInsert((_c: EventContext, e) => h().notice?.(e));
     db.pongEv.onInsert((_c: EventContext, e) => h().pong?.(e));
     db.kickEv.onInsert((_c: EventContext, e) => h().kicked?.(e));
+    db.profile.onInsert((_c: EventContext, p) => h().profile?.(p, undefined));
+    db.profile.onUpdate((_c: EventContext, o, p) => h().profile?.(p, o));
+    const board = () => h().seasonBoard?.([...db.seasonBoard.iter()]);
+    db.seasonBoard.onInsert(board);
+    db.seasonBoard.onUpdate(board);
+    db.seasonBoard.onDelete(board);
   }
 
   /** Always-on subscription: my own player row (tells me my room), pongs and kick notices for me. */
   private subscribeSelf(conn: DbConnection, me: Identity): void {
     conn.subscriptionBuilder()
       .onError((ctx) => console.error('self subscription failed', ctx.event))
-      .subscribe([tables.player.where((r) => r.identity.eq(me)), tables.pongEv.where((r) => r.to.eq(me)), tables.kickEv.where((r) => r.to.eq(me))]);
+      .subscribe([tables.player.where((r) => r.identity.eq(me)), tables.pongEv.where((r) => r.to.eq(me)), tables.kickEv.where((r) => r.to.eq(me)), tables.profile.where((r) => r.identity.eq(me))]);
+    conn.subscriptionBuilder()
+      .onError((ctx) => console.error('season board subscription failed', ctx.event))
+      .subscribe('SELECT * FROM season_board');
   }
 
   /** Subscribe to exactly one room's rows and events; switching rooms swaps the subscription. */

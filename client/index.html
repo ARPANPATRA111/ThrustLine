@@ -82,7 +82,10 @@
           </ul>
         </div>
         <div class="card home-card">
-          <label class="lbl" for="in-name">Your callsign</label>
+          <div class="name-head">
+            <label class="lbl" for="in-name">Your callsign</label>
+            <div id="profile-chip" class="profile-chip hidden"><b id="pf-level">LV 1</b><span class="pf-bar"><i id="pf-fill"></i></span></div>
+          </div>
           <div class="field-row">
             <input id="in-name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Callsign" />
             <button id="btn-dice" class="btn ghost icon" title="Random callsign" aria-label="Random callsign"><svg class="ic"><use href="#i-dice" /></svg></button>
@@ -96,6 +99,7 @@
           </div>
           <div class="foot-row">
             <button id="btn-howto" class="btn ghost sm"><svg class="ic"><use href="#i-help" /></svg>How to play</button>
+            <button id="btn-season" class="btn ghost sm"><svg class="ic"><use href="#i-trophy" /></svg>Season</button>
             <button id="btn-settings" class="btn ghost sm"><svg class="ic"><use href="#i-gear" /></svg>Settings</button>
           </div>
           <p id="conn-status" class="status"></p>
@@ -201,7 +205,7 @@
       <!-- Desktop-only cheat sheet: tiny, in the bottom-left corner, never over the play area. -->
       <div id="key-hints" class="key-hints" aria-hidden="true">
         <div class="kh-row"><kbd>WASD</kbd> move <kbd>Space</kbd> jet <kbd>LMB</kbd> fire <kbd>RMB</kbd> knife</div>
-        <div class="kh-row"><kbd>Q</kbd> emote <kbd>E</kbd> fire <kbd>R</kbd> knife <kbd>G</kbd> nade <kbd>F</kbd> swap <kbd>T</kbd> reload</div>
+        <div class="kh-row"><kbd>Q</kbd> emote <kbd>1-4</kbd> sticker <kbd>E</kbd> fire <kbd>R</kbd> knife <kbd>G</kbd> nade <kbd>F</kbd> swap <kbd>T</kbd> reload</div>
       </div>
       <div id="touch" class="touch hidden">
         <div id="stick-l" class="stick stick-l"><div class="ring"></div><div class="knob"><svg class="ic"><use href="#i-jet" /></svg></div></div>
@@ -329,6 +333,22 @@
             <div class="rule"><svg class="ic c-cyan"><use href="#i-jet" /></svg><b>Blast-jump</b><span>Shotgun recoil &amp; blasts launch you</span></div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Season board -->
+    <section id="scr-season" class="overlay center hidden">
+      <div class="card season-card">
+        <div class="panel-head">
+          <h2 id="season-title">Season</h2>
+          <button id="btn-season-close" class="btn ghost icon" aria-label="Close"><svg class="ic"><use href="#i-close" /></svg></button>
+        </div>
+        <p class="muted small">Points come from rounds with other people in the room. The board restarts every month.</p>
+        <p id="season-empty" class="muted">Nobody has scored this season yet. Be the first.</p>
+        <table id="season-table" class="board hidden">
+          <thead><tr><th>#</th><th>Pilot</th><th class="num">Level</th><th class="num">Points</th></tr></thead>
+          <tbody id="season-body"></tbody>
+        </table>
       </div>
     </section>
 

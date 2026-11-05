@@ -8,7 +8,7 @@ import './style.css';
 import { Application } from 'pixi.js';
 import * as C from '@shared/config';
 import { PRIMARIES } from '@shared/weapons';
-import type { Player, Room } from './module_bindings/types';
+import type { Player, Profile, Room, SeasonBoard } from './module_bindings/types';
 import { Net, errorText } from './net/connection';
 import { TimeSync } from './net/timesync';
 import { buildAtlas } from './render/atlas';
@@ -170,8 +170,22 @@ async function boot(): Promise<void> {
   }
   window.addEventListener('resize', placeEmoteDock);
   new ResizeObserver(placeEmoteDock).observe($('mini-board'));
+  let myLevel = 1;
+  /** Dim the stickers this player has not earned yet. */
+  const paintStickerLocks = (): void => {
+    emoteBar.querySelectorAll<HTMLButtonElement>('button[data-emote]').forEach((b) => {
+      const need = C.STICKER_LEVELS[Number(b.dataset.emote)];
+      b.classList.toggle('locked', myLevel < need);
+      b.title = myLevel < need ? `Reach level ${need} to unlock` : b.getAttribute('aria-label') ?? '';
+    });
+  };
+  paintStickerLocks();
   const sendEmote = (index: number): void => {
     if (myRoom()?.state !== 1) return;
+    if (myLevel < C.STICKER_LEVELS[index]) {
+      toast(`Reach level ${C.STICKER_LEVELS[index]} to unlock that sticker`, 'info');
+      return;
+    }
     audio.play('click');
     game.localEmote(index); // instant locally; the server echo reaches everyone else
     void call(net.conn?.reducers.emote({ emote: index }));
@@ -212,6 +226,30 @@ async function boot(): Promise<void> {
     if (b) sendEmote(Number(b.dataset.emote));
   });
 
+  // ---------------------------------------------------------------- profile and season
+  function renderProfile(p: Profile): void {
+    myLevel = C.levelOf(p.xp);
+    const from = C.xpForLevel(myLevel);
+    const to = C.xpForLevel(myLevel + 1);
+    $('pf-level').textContent = `LV ${myLevel}`;
+    $('pf-fill').style.transform = `scaleX(${(p.xp - from) / (to - from)})`;
+    $('profile-chip').title = `${p.xp} XP · ${p.wins} wins · ${p.kills} kills · best round ${p.bestKills} kills`;
+    $('profile-chip').classList.remove('hidden');
+    paintStickerLocks();
+  }
+  let boardRows: SeasonBoard[] = [];
+  function renderSeason(): void {
+    const season = C.seasonOf(Date.now());
+    $('season-title').textContent = `Season · ${C.seasonName(season)}`;
+    const rows = boardRows.filter((r) => r.season === season).sort((a, b) => b.score - a.score);
+    $('season-empty').classList.toggle('hidden', rows.length > 0);
+    $('season-table').classList.toggle('hidden', rows.length === 0);
+    $('season-body').innerHTML = rows.map((r, i) => {
+      const me = r.identity.toHexString() === net.myKey ? ' class="me"' : '';
+      return `<tr${me}><td><span class="rank r${i + 1}">${i + 1}</span></td><td>${escapeHtml(r.name)}</td><td class="num">${r.level}</td><td class="num">${r.score}</td></tr>`;
+    }).join('');
+  }
+
   const lobby = new LobbyView({
     send: (mode, roundSec, teams, rules, match) => void call(net.conn?.reducers.updateRoomSettings({ mode, roundSec, teams, rules, match })),
     kick: (target) => {
@@ -239,6 +277,21 @@ async function boot(): Promise<void> {
       leaveLocal(false);
     },
     pong: (e) => time.onPong(e.clientMs, e.serverMicros),
+    profile: (p, old) => {
+      if (p.identity.toHexString() !== net.myKey) return;
+      const was = myLevel;
+      renderProfile(p);
+      if (old && p.xp > old.xp) toast(`+${p.xp - old.xp} XP`, 'info');
+      if (old && myLevel > was) {
+        audio.play('sting', 0.6);
+        const opened = C.STICKER_LEVELS.findIndex((need) => need === myLevel);
+        toast(opened >= 0 ? `LEVEL ${myLevel}! ${C.EMOTES[opened]} sticker unlocked` : `LEVEL ${myLevel}!`, 'info');
+      }
+    },
+    seasonBoard: (rows) => {
+      boardRows = rows;
+      renderSeason();
+    },
     roomChanged: (r) => {
       if (r && r.id === myRoomId) game.setRoom(r);
       queueRoute();
@@ -510,6 +563,9 @@ async function boot(): Promise<void> {
     queueRoute();
   };
   input.onMenu = () => openMenu(!menuOpen);
+  input.onQuickEmote = (slot) => {
+    if (!$('emote-dock').classList.contains('hidden')) sendEmote(settings.quickStickers[slot] ?? slot);
+  };
   input.onEmote = () => {
     if ($('emote-dock').classList.contains('hidden')) return;
     setEmoteOpen(emoteBar.classList.contains('hidden'));
@@ -527,9 +583,11 @@ async function boot(): Promise<void> {
   $('btn-menu-howto').addEventListener('click', () => showOverlay('scr-howto', true));
   $('btn-settings').addEventListener('click', () => { audio.play('click'); showOverlay('scr-settings', true); });
   $('btn-howto').addEventListener('click', () => { audio.play('click'); showOverlay('scr-howto', true); });
+  $('btn-season').addEventListener('click', () => { audio.play('click'); renderSeason(); showOverlay('scr-season', true); });
+  $('btn-season-close').addEventListener('click', () => showOverlay('scr-season', false));
   $('btn-howto-close').addEventListener('click', () => showOverlay('scr-howto', false));
   $('btn-settings-close').addEventListener('click', () => showOverlay('scr-settings', false));
-  for (const id of ['scr-howto', 'scr-settings']) {
+  for (const id of ['scr-howto', 'scr-settings', 'scr-season']) {
     $(id).addEventListener('click', (e) => { if (e.target === $(id)) showOverlay(id, false); });
   }
   const bindRange = (id: string, key: 'master' | 'music' | 'sfx') => {
@@ -649,6 +707,21 @@ async function boot(): Promise<void> {
   const unlock = () => audio.unlock();
   window.addEventListener('pointerdown', unlock);
   window.addEventListener('keydown', unlock);
+  /**
+   * The connection opens during boot, before the handlers above exist, so rows that arrived in
+   * that window never fired a callback. Read what the client cache already holds.
+   */
+  function catchUp(): void {
+    const db = net.conn?.db;
+    if (!db || !net.identity) return;
+    const pf = db.profile.identity.find(net.identity);
+    if (pf) renderProfile(pf);
+    boardRows = [...db.seasonBoard.iter()];
+    renderSeason();
+    const mine = db.player.identity.find(net.identity);
+    if (mine && mine.roomId !== myRoomId) enterRoom(mine.roomId);
+  }
+
   $('btn-tap').addEventListener('click', async () => {
     audio.unlock();
     audio.play('click');
@@ -656,6 +729,7 @@ async function boot(): Promise<void> {
     $('btn-tap').classList.add('hidden');
     $('load-text').textContent = 'Connecting…';
     await connected;
+    catchUp();
     if (isTouchDevice && document.fullscreenEnabled) {
       try { await document.documentElement.requestFullscreen({ navigationUI: 'hide' }); } catch { /* optional */ }
     }

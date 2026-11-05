@@ -16,6 +16,8 @@ export class Input {
   onDebug: () => void = () => {};
   /** Q: open/close the emote picker (also reachable by touch). */
   onEmote: () => void = () => {};
+  /** Number keys send a sticker straight away, without opening the picker. */
+  onQuickEmote: (slot: number) => void = () => {};
 
   // Written by the touch controls.
   touch = { moveX: 0, thrust: false, thrustAmount: 1, down: false, aim: null as number | null, fire: false };
@@ -47,6 +49,8 @@ export class Input {
     if (k === 'F3' && down) { e.preventDefault(); this.onDebug(); return; }
     if (k === 'Escape' && down) { if (this.enabled) this.onMenu(); return; }
     if (k === 'KeyQ' && down && !e.repeat) { if (this.enabled) this.onEmote(); return; }
+    const digit = /^Digit([1-4])$/.exec(k);
+    if (digit && down && !e.repeat) { if (this.enabled) this.onQuickEmote(Number(digit[1]) - 1); return; }
     if (!this.enabled) return;
     if (k === 'Space') e.preventDefault();
     if (down && !this.keys.has(k)) {
