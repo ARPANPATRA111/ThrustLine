@@ -6,7 +6,7 @@
 import { schema, table, t, SenderError, type Infer, type InferSchema, type ReducerCtx } from 'spacetimedb/server';
 import { ScheduleAt, type Identity } from 'spacetimedb';
 import * as C from './shared/config';
-import { MAP_H, MAP_W, inZone, PICKUP_AMMO, PICKUP_DROP, PICKUP_GRENADE, PICKUP_HEALTH, PICKUP_SHIELD, RIG7, T_ACID, T_SOLID, boxTouchesTile, spawnWorldPos } from './shared/map';
+import { MAPS, MAP_H, MAP_W, inZone, PICKUP_AMMO, PICKUP_DROP, PICKUP_GRENADE, PICKUP_HEALTH, PICKUP_SHIELD, T_ACID, T_SOLID, boxTouchesTile, spawnWorldPos } from './shared/map';
 import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, PRIMARIES, allowedWeapons, canThrow, damageAtDistance, defaultWeapon, effectivePrimary, grenadeDamage, isGun, isPrimary, pickupActive } from './shared/weapons';
 import { fuseTicks, simulateGrenade } from './shared/grenade';
 import { pickSpawn, shuffledSpawnOrder, type Point } from './shared/spawn';
@@ -51,6 +51,8 @@ const MatchRules = t.object('MatchRules', {
   suddenDeath: t.bool(),
   /** C.OBJECTIVE_KILLS or C.OBJECTIVE_HILL. */
   objective: t.u8(),
+  /** An index into MAPS, or C.MAP_ROTATE. */
+  map: t.u8(),
 });
 
 const room = table(
@@ -75,6 +77,8 @@ const room = table(
     /** Quick Play: open to anyone, no lobby, rounds run on a loop. */
     quick: t.bool().default(false),
     match: MatchRules.default({ ...C.DEFAULT_MATCH }),
+    /** The map being played (index into MAPS). */
+    mapId: t.u8().default(0),
   },
 );
 
@@ -417,6 +421,7 @@ type PStateRow = Infer<typeof pstate.rowType>;
 // ============================================================================
 
 const SEC = 1_000_000n; // microseconds per second
+const mapOf = (r: { mapId: number }) => MAPS[r.mapId] ?? MAPS[0];
 const secToMicros = (s: number) => BigInt(Math.round(s * 1e6));
 const nowMicros = (ctx: Ctx) => ctx.timestamp.microsSinceUnixEpoch;
 const nowMs = (ctx: Ctx) => Number(ctx.timestamp.microsSinceUnixEpoch) / 1000;
@@ -540,7 +545,7 @@ function clampVel(vx: number, vy: number): { vx: number; vy: number } {
 /** Put a player into the world at a spawn point with a fresh life and loadout. */
 function spawnAt(ctx: Ctx, r: RoomRow, p: PlayerRow, spawnIdx: number): PlayerRow {
   const now = nowMicros(ctx);
-  const pos = spawnWorldPos(RIG7.spawns[spawnIdx]);
+  const pos = spawnWorldPos(mapOf(r).spawns[spawnIdx]);
   const updated: PlayerRow = {
     ...p,
     alive: true,
@@ -582,7 +587,7 @@ function respawnPlayer(ctx: Ctx, r: RoomRow, p: PlayerRow): void {
     }
   }
   // Never spawn under the rising acid (leave a player's height of margin).
-  const idx = pickSpawn(RIG7.spawns, death, enemies, () => ctx.random(), acidLine(r, nowMicros(ctx)) - C.PLAYER_H);
+  const idx = pickSpawn(mapOf(r).spawns, death, enemies, () => ctx.random(), acidLine(r, nowMicros(ctx)) - C.PLAYER_H);
   spawnAt(ctx, r, p, idx);
 }
 
@@ -695,7 +700,7 @@ function assignTeams(ctx: Ctx, r: RoomRow, on: boolean): void {
 
 function addPlayerToRoom(ctx: Ctx, r: RoomRow, name: string, isBot: boolean): void {
   const now = nowMicros(ctx);
-  const start = spawnWorldPos(RIG7.spawns[0]);
+  const start = spawnWorldPos(mapOf(r).spawns[0]);
   const primary = PRIMARIES[0];
   ctx.db.player.insert({
     identity: ctx.sender,
@@ -887,12 +892,9 @@ function openRoom(ctx: Ctx, name: string, mode: number, roundSec: number, dev: b
     createdAt: ctx.timestamp,
     quick,
     // Short test rounds would otherwise spend all their time under the acid.
-    match: { ...C.DEFAULT_MATCH, suddenDeath: !dev },
+    match: { ...C.DEFAULT_MATCH, suddenDeath: !dev, map: quick ? C.MAP_ROTATE : C.DEFAULT_MATCH.map },
+    mapId: 0,
   });
-  // Seed pickups from the map markers.
-  for (const m of RIG7.pickups) {
-    ctx.db.pickup.insert({ id: 0n, roomId: r.id, kind: m.kind, tx: m.tx, ty: m.ty, availableAtMicros: 0n });
-  }
   addPlayerToRoom(ctx, r, name, false);
   console.info(`room ${code} created`);
   return r;
@@ -1011,8 +1013,12 @@ export const updateRoomSettings = spacetimedb.reducer(
     if (mode > C.MODE_SNIPERS) throw new SenderError('Unknown mode');
     if (!validRoundSec(roundSec, r.dev)) throw new SenderError('Invalid round length');
     if (!validRules(rules)) throw new SenderError('Invalid house rules');
+    if (match.map !== C.MAP_ROTATE && match.map >= MAPS.length) throw new SenderError('Unknown map');
+    if (match.objective > C.OBJECTIVE_HILL) throw new SenderError('Unknown objective');
     // Respawn delay is fixed at five seconds, whatever an older client sends.
-    const updated = { ...r, mode, roundSec, teams, match, rules: { ...rules, respawnSec: C.RESPAWN_SEC } };
+    // Show the chosen map behind the lobby straight away.
+    const mapId = match.map === C.MAP_ROTATE ? r.mapId : match.map;
+    const updated = { ...r, mode, roundSec, teams, match, mapId, rules: { ...rules, respawnSec: C.RESPAWN_SEC } };
     ctx.db.room.id.update(updated);
     if (teams !== r.teams) assignTeams(ctx, updated, teams);
   },
@@ -1057,26 +1063,35 @@ function beginRound(ctx: Ctx, r: RoomRow): void {
   const now = nowMicros(ctx);
 
   clearRoomJobs(ctx, r.id, true);
-  for (const pk of [...ctx.db.pickup.roomId.filter(r.id)]) {
-    if (pk.kind === PICKUP_DROP) ctx.db.pickup.id.delete(pk.id);
-    else ctx.db.pickup.id.update({ ...pk, availableAtMicros: 0n });
-  }
 
+  // Rotation walks through the maps; public rooms also alternate what each round is played for.
+  const roundNo = r.roundNo + 1;
+  const mapId = r.match.map === C.MAP_ROTATE ? r.roundNo % MAPS.length : r.match.map;
+  const objective = r.quick ? (roundNo % 2 === 0 ? C.OBJECTIVE_HILL : C.OBJECTIVE_KILLS) : r.match.objective;
   const started: RoomRow = {
     ...r,
     state: ROOM_PLAYING,
     startedAtMicros: now,
     endsAtMicros: now + BigInt(r.roundSec) * SEC,
     lobbyAtMicros: 0n,
-    roundNo: r.roundNo + 1,
+    roundNo,
+    mapId,
+    match: { ...r.match, objective },
   };
   ctx.db.room.id.update(started);
 
+  // Pickups come from the markers of the map about to be played.
+  for (const pk of [...ctx.db.pickup.roomId.filter(r.id)]) ctx.db.pickup.id.delete(pk.id);
+  for (const m of mapOf(started).pickups) {
+    ctx.db.pickup.insert({ id: 0n, roomId: r.id, kind: m.kind, tx: m.tx, ty: m.ty, availableAtMicros: 0n });
+  }
+
   // Reset stats and spawn everyone at distinct points. Team match: red starts on the left half
   // of the map, blue on the right.
-  const order = shuffledSpawnOrder(RIG7.spawns.length, () => ctx.random());
-  const left = order.filter((i) => spawnWorldPos(RIG7.spawns[i]).x < MAP_W / 2);
-  const right = order.filter((i) => spawnWorldPos(RIG7.spawns[i]).x >= MAP_W / 2);
+  const spawns = mapOf(started).spawns;
+  const order = shuffledSpawnOrder(spawns.length, () => ctx.random());
+  const left = order.filter((i) => spawnWorldPos(spawns[i]).x < MAP_W / 2);
+  const right = order.filter((i) => spawnWorldPos(spawns[i]).x >= MAP_W / 2);
   let li = 0, ri = 0, ai = 0;
   for (const p of roomPlayers(ctx, r.id)) {
     const reset: PlayerRow = { ...p, kills: 0, deaths: 0, score: 0, streak: 0 };
@@ -1094,7 +1109,7 @@ function beginRound(ctx: Ctx, r: RoomRow): void {
   ctx.db.roundEndJob.insert({ scheduledId: 0n, scheduledAt: atMicros(started.endsAtMicros), roomId: r.id, roundNo: started.roundNo });
   ctx.db.hill.roomId.delete(r.id);
   if (started.match.objective === C.OBJECTIVE_HILL) {
-    const idx = ctx.random.integerInRange(0, RIG7.hills.length - 1);
+    const idx = ctx.random.integerInRange(0, mapOf(started).hills.length - 1);
     ctx.db.hill.insert({ roomId: r.id, idx, state: C.HILL_EMPTY, holder: undefined, team: C.TEAM_NONE, movesAtMicros: now + hillMoveMicros(started) });
     ctx.db.hillJob.insert({ scheduledId: 0n, scheduledAt: atMicros(now + SEC), roomId: r.id, roundNo: started.roundNo });
   }
@@ -1152,7 +1167,7 @@ export const devTeleport = spacetimedb.reducer({ x: t.f32(), y: t.f32() }, (ctx,
   const { p, r } = requireMember(ctx);
   if (!r.dev) throw new SenderError('Teleport is only allowed in dev rooms');
   if (!p.alive) throw new SenderError('Dead players cannot teleport');
-  if (!isValidPosition(RIG7, x, y)) throw new SenderError('Invalid position');
+  if (!isValidPosition(mapOf(r), x, y)) throw new SenderError('Invalid position');
   const now = nowMicros(ctx);
   const ps = ctx.db.pstate.identity.find(ctx.sender);
   if (ps) ctx.db.pstate.identity.update({ ...ps, x, y, vx: 0, vy: 0, serverMicros: now, sentMs: nowMs(ctx) });
@@ -1278,7 +1293,7 @@ export const sync = spacetimedb.reducer(
         if (w && (s.weapon === p.weapon || s.weapon === a.weapon) && w.recoil > 0 && fireRateOk(meta.lastFire[s.weapon] ?? 0n, now, w.rate)) addBoost(credit, w.recoil);
       }
       const runMul = r.mode === C.MODE_BLADES ? C.BLADES_RUN_MUL : 1;
-      const legal = validateMove(RIG7, pos, { x: a.x, y: a.y }, dt) && spendMove(credit, a.x - pos.x, a.y - pos.y, dt, runMul);
+      const legal = validateMove(mapOf(r), pos, { x: a.x, y: a.y }, dt) && spendMove(credit, a.x - pos.x, a.y - pos.y, dt, runMul);
       meta.creditX = credit.x;
       meta.creditUp = credit.up;
       meta.boost = credit.boost;
@@ -1327,7 +1342,7 @@ export const sync = spacetimedb.reducer(
     // ---- 4. Acid hazard ----
     const hazardDt = Math.min(Number(now - meta.lastHazardMicros) / 1e6, C.SYNC_MAX_DT_SEC);
     meta.lastHazardMicros = now;
-    const inPit = r.rules.acid && boxTouchesTile(RIG7, pos.x - C.PLAYER_W / 2, pos.y - C.PLAYER_H, pos.x + C.PLAYER_W / 2, pos.y, T_ACID);
+    const inPit = r.rules.acid && boxTouchesTile(mapOf(r), pos.x - C.PLAYER_W / 2, pos.y - C.PLAYER_H, pos.x + C.PLAYER_W / 2, pos.y, T_ACID);
     if (inPit || pos.y > acidLine(r, now)) {
       applyDamage(ctx, p, C.ACID_DPS * hazardDt, p.identity, C.CAUSE_ACID);
       // `meta` is written back at the end of this reducer, so it must carry the death spot too.
@@ -1497,11 +1512,11 @@ function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x:
     const tmeta = ctx.db.pmeta.identity.find(target.identity) ?? null;
     if (!tps) continue;
     // Cover wins: some part of the target's CURRENT body must be exposed to the shot.
-    if (!canSeeBody(RIG7, shot.ox, shot.oy, tps)) { rejected(r, 'hit claim: target is behind cover now'); continue; }
+    if (!canSeeBody(mapOf(r), shot.ox, shot.oy, tps)) { rejected(r, 'hit claim: target is behind cover now'); continue; }
     // The ray and range are checked against where the shooter saw the target (lag compensation).
     let d = -1;
     for (const at of lagCompPositions(tmeta, tps, claim.viewMs, nowMs_)) {
-      d = hitClaimDistance(RIG7, w, shot.ox, shot.oy, claim.angle, at);
+      d = hitClaimDistance(mapOf(r), w, shot.ox, shot.oy, claim.angle, at);
       if (d >= 0) break;
     }
     if (d < 0) { rejected(r, 'hit claim: out of range or off the ray'); continue; }
@@ -1530,7 +1545,7 @@ function handleMelee(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x
     if (!tps) continue;
     const targetPositions = [{ x: tps.x, y: tps.y }];
     if (tmeta) targetPositions.push({ x: tmeta.prevX, y: tmeta.prevY });
-    const hit = attackerPositions.some((ap) => targetPositions.some((tp) => meleeHits(RIG7, ap, angle, tp)));
+    const hit = attackerPositions.some((ap) => targetPositions.some((tp) => meleeHits(mapOf(r), ap, angle, tp)));
     if (!hit) continue;
     const res = damageOther(ctx, r, p, target, knife.damage * fmul, W_KNIFE);
     if (res.killed) creditKill(p, res);
@@ -1558,7 +1573,7 @@ function handleThrow(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x
   let y0 = cy + dy * C.HAND_OFFSET;
   // Never start a grenade inside a wall: fall back to the player's centre.
   const R = C.GRENADE_RADIUS;
-  if (boxTouchesTile(RIG7, x0 - R, y0 - R, x0 + R, y0 + R, T_SOLID) || !lineOfSight(RIG7, cx, cy, x0, y0)) {
+  if (boxTouchesTile(mapOf(r), x0 - R, y0 - R, x0 + R, y0 + R, T_SOLID) || !lineOfSight(mapOf(r), cx, cy, x0, y0)) {
     x0 = cx;
     y0 = cy;
   }
@@ -1612,7 +1627,7 @@ export const airdrop = spacetimedb.reducer({ onSchedule: airdropJob }, { job: ai
   if (!r || r.roundNo !== job.roundNo || r.state !== ROOM_PLAYING) return;
   const now = nowMicros(ctx);
   if (![...ctx.db.pickup.roomId.filter(r.id)].some((pk) => pk.kind === PICKUP_DROP)) {
-    const spot = RIG7.drops[ctx.random.integerInRange(0, RIG7.drops.length - 1)];
+    const spot = mapOf(r).drops[ctx.random.integerInRange(0, mapOf(r).drops.length - 1)];
     const landAt = now + secToMicros(C.AIRDROP_FALL_SEC);
     const pk = ctx.db.pickup.insert({ id: 0n, roomId: r.id, kind: PICKUP_DROP, tx: spot.tx, ty: spot.ty, availableAtMicros: landAt });
     ctx.db.pickupJob.insert({ scheduledId: 0n, scheduledAt: atMicros(landAt), pickupId: pk.id, roomId: r.id });
@@ -1634,8 +1649,8 @@ export const hillTick = spacetimedb.reducer({ onSchedule: hillJob }, { job: hill
   // Move on schedule, or early if the acid has reached the zone.
   const surface = acidLine(r, now);
   const zoneBottom = (z: { ty: number; th: number }) => (z.ty + z.th) * C.TILE;
-  if (now >= h.movesAtMicros || zoneBottom(RIG7.hills[h.idx]) > surface) {
-    const options = RIG7.hills.map((z, i) => ({ z, i })).filter(({ z, i }) => i !== h.idx && zoneBottom(z) <= surface);
+  if (now >= h.movesAtMicros || zoneBottom(mapOf(r).hills[h.idx]) > surface) {
+    const options = mapOf(r).hills.map((z, i) => ({ z, i })).filter(({ z, i }) => i !== h.idx && zoneBottom(z) <= surface);
     if (options.length > 0) {
       const pick = options[ctx.random.integerInRange(0, options.length - 1)];
       next.idx = pick.i;
@@ -1645,7 +1660,7 @@ export const hillTick = spacetimedb.reducer({ onSchedule: hillJob }, { job: hill
   }
 
   // Who is standing in it? One player (or one team) scores; two sides contest it.
-  const zone = RIG7.hills[next.idx];
+  const zone = mapOf(r).hills[next.idx];
   const inside: PlayerRow[] = [];
   for (const p of roomPlayers(ctx, r.id)) {
     const c = p.alive ? centreOf(ctx, p.identity) : null;
@@ -1678,7 +1693,7 @@ export const detonate = spacetimedb.reducer({ onSchedule: detonateJob }, { job: 
   const now = nowMicros(ctx);
 
   // Re-run the exact client simulation on the stored f32 start values to find the blast point.
-  const end = simulateGrenade(RIG7, g.x0, g.y0, g.vx0, g.vy0, fuseTicks(g.fuseMs), { x: 0, y: 0, vx: 0, vy: 0 }, g.zeroG);
+  const end = simulateGrenade(mapOf(r), g.x0, g.y0, g.vx0, g.vy0, fuseTicks(g.fuseMs), { x: 0, y: 0, vx: 0, vy: 0 }, g.zeroG);
   const bx = Math.min(Math.max(end.x, 0), MAP_W);
   const by = Math.min(Math.max(end.y, 0), MAP_H);
   ctx.db.boomEv.insert({ roomId: r.id, owner: g.owner, x: bx, y: by });
@@ -1700,7 +1715,7 @@ export const detonate = spacetimedb.reducer({ onSchedule: detonateJob }, { job: 
     const c = centreOf(ctx, target.identity);
     if (!c) continue;
     const d = Math.hypot(c.x - bx, c.y - by);
-    if (d >= C.GRENADE_BLAST_RADIUS || !lineOfSight(RIG7, bx, by, c.x, c.y)) continue;
+    if (d >= C.GRENADE_BLAST_RADIUS || !lineOfSight(mapOf(r), bx, by, c.x, c.y)) continue;
     const own = target.identity.isEqual(g.owner);
     const dmg = grenadeDamage(C.GRENADE_MAX_DAMAGE, C.GRENADE_BLAST_RADIUS, d) * fmul * (own ? C.GRENADE_SELF_DAMAGE_MUL : 1);
     if (!owner) {

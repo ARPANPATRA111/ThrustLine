@@ -36,4 +36,5 @@ export default __t.row({
   get match() {
     return MatchRules;
   },
+  mapId: __t.u8().name("map_id"),
 });

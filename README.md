@@ -1,7 +1,7 @@
 # THRUSTLINE
 
 A side-view jetpack shooter (free-for-all or red vs blue teams) for 1–8 players, playable in the browser on phones and laptops.
-Riggers, jetpack contractors, fight over **RIG-7**, an abandoned sky refinery above an acid sea.
+Riggers, jetpack contractors, fight over abandoned sky refineries above an acid sea.
 
 **Play:** https://thrustline-drab.vercel.app · **Database:** SpacetimeDB Maincloud, `thrustline-zhtm`
 
@@ -48,6 +48,15 @@ and FPS are always shown under the timer; everyone's ping is on the mini leaderb
 
 Touch buttons sit on an arc around the aim stick and only appear when the mode uses them.
 
+### Maps
+
+| Map | Layout |
+| --- | --- |
+| **RIG-7** | The refinery: long catwalks, a low central pit and open air between the decks |
+| **HELIOS-9** | Two shores around a wide acid well, with towers, a centre pillar and islands to fight over |
+
+Quick Play rotates through the maps and alternates Deathmatch with King of the Hill.
+
 ### Modes (host chooses in the lobby)
 
 | Mode | Loadout | Pickups |
@@ -73,6 +82,7 @@ Touch buttons sit on an arc around the aim stick and only appear when the mode u
 | Final-minute Frenzy | On or off |
 | Match type | Free-for-all, or Red vs Blue teams (1v1, 2v2 … 4v4; up to 8 players) |
 | Objective | Deathmatch, or King of the Hill |
+| Map | RIG-7, HELIOS-9, or Rotate (a different map every round) |
 | Friendly fire | Teams only, on by default: teammates' hits count (a teamkill costs 50) |
 | Floating grenades | Zero-g: grenades drift where you throw them and slow to a stop |
 

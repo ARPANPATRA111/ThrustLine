@@ -29,9 +29,42 @@ export class Radar {
   private arrows: Sprite[] = [];
   private mmW = 180;
   private mmH = 75;
+  private bg = new Sprite();
+  /** One baked minimap per arena. */
+  private baked = new Map<number, Texture>();
 
-  constructor(tex: Record<string, Texture>, map: GameMap) {
-    // Bake the minimap image once: 2 px per tile.
+  constructor(tex: Record<string, Texture>) {
+    this.bg.alpha = 0.92;
+    this.mini.addChild(this.bg);
+    for (let i = 0; i < POOL; i++) {
+      const d = new Sprite(tex.pip);
+      d.anchor.set(0.5);
+      d.visible = false;
+      this.dots.push(d);
+      this.mini.addChild(d);
+      const a = new Sprite(tex.arrow);
+      a.anchor.set(0.5);
+      a.visible = false;
+      this.arrows.push(a);
+      this.root.addChild(a);
+    }
+    this.root.addChild(this.mini);
+  }
+
+  /** Show an arena on the minimap, baking it the first time. */
+  setMap(id: number, map: GameMap): void {
+    let t = this.baked.get(id);
+    if (!t) {
+      t = this.bake(map);
+      this.baked.set(id, t);
+    }
+    this.bg.texture = t;
+    this.bg.width = this.mmW;
+    this.bg.height = this.mmH;
+  }
+
+  /** 2 px per tile. */
+  private bake(map: GameMap): Texture {
     const c = document.createElement('canvas');
     c.width = map.cols * 2;
     c.height = map.rows * 2;
@@ -51,22 +84,7 @@ export class Radar {
     g.strokeStyle = 'rgba(34,211,238,0.6)';
     g.lineWidth = 1;
     g.strokeRect(0.5, 0.5, c.width - 1, c.height - 1);
-    const bg = new Sprite(Texture.from(c));
-    bg.alpha = 0.92;
-    this.mini.addChild(bg);
-    for (let i = 0; i < POOL; i++) {
-      const d = new Sprite(tex.pip);
-      d.anchor.set(0.5);
-      d.visible = false;
-      this.dots.push(d);
-      this.mini.addChild(d);
-      const a = new Sprite(tex.arrow);
-      a.anchor.set(0.5);
-      a.visible = false;
-      this.arrows.push(a);
-      this.root.addChild(a);
-    }
-    this.root.addChild(this.mini);
+    return Texture.from(c);
   }
 
   /** Place the minimap (top-left, under the health bars). */
@@ -74,9 +92,8 @@ export class Radar {
     const phone = screenH <= 520;
     this.mmW = phone ? 132 : 180;
     this.mmH = (this.mmW * MAP_H) / MAP_W;
-    const bg = this.mini.children[0] as Sprite;
-    bg.width = this.mmW;
-    bg.height = this.mmH;
+    this.bg.width = this.mmW;
+    this.bg.height = this.mmH;
     this.mini.position.set(12, phone ? 58 : 72);
   }
 
