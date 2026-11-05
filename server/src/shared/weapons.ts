@@ -1,5 +1,6 @@
 // Weapon table shared by client (feel, prediction) and server (authoritative damage).
 import { MODE_ARMS, MODE_BLADES, MODE_BOOM, MODE_SNIPERS } from './config';
+import { PICKUP_DROP, PICKUP_SHIELD } from './map';
 
 export const W_PISTOL = 0;
 export const W_AR = 1;
@@ -9,6 +10,8 @@ export const W_KNIFE = 4;
 export const W_FRAG = 5;
 /** The SMG was added after the first release, so it takes the next free id (old rows keep 0..3). */
 export const W_SMG = 6;
+/** Airdrop power weapon: never a loadout choice, only found in crates. */
+export const W_RAIL = 7;
 
 export type FireKind = 'semi' | 'auto' | 'bolt' | 'melee' | 'thrown';
 
@@ -50,24 +53,30 @@ export const WEAPONS: WeaponDef[] = [
   // Latency-friendly primary: many forgiving shots, so a quarter-second of lag costs a few bullets
   // rather than a whole marksman's shot. Falls off at range; the AR still wins mid-to-long fights.
   { id: W_SMG, name: 'SMG', kind: 'auto', damage: 8, rate: 14, mag: 35, reserve: 140, reloadSec: 1.3, range: 900, spreadStill: 2.5, spreadMoving: 5.5, pellets: 1, falloffStart: 450, falloffMul: 0.55, recoil: 0, shake: 1.5 },
+  // A few shots that go through every body on the line. Walls still stop them.
+  { id: W_RAIL, name: 'Railgun', kind: 'bolt', damage: 150, rate: 0.9, mag: 3, reserve: 0, reloadSec: 0, range: 2400, spreadStill: 0, spreadMoving: 0.5, pellets: 1, falloffStart: 2400, falloffMul: 1, recoil: 240, shake: 12 },
 ];
 
 export const PRIMARIES = [W_AR, W_SHOTGUN, W_SNIPER, W_SMG];
 
 export function isGun(w: number): boolean {
-  return w === W_PISTOL || w === W_AR || w === W_SHOTGUN || w === W_SNIPER || w === W_SMG;
+  return w === W_PISTOL || w === W_AR || w === W_SHOTGUN || w === W_SNIPER || w === W_SMG || w === W_RAIL;
 }
 
 export function isPrimary(w: number): boolean {
   return w === W_AR || w === W_SHOTGUN || w === W_SNIPER || w === W_SMG;
 }
 
-/** Weapons a player may hold (equip) in each mode. Grenades in Arms are thrown with their own key. */
-export function allowedWeapons(mode: number, primary: number): number[] {
+/**
+ * Weapons a player may hold (equip) in each mode. Grenades in Arms are thrown with their own key.
+ * `power` is the railgun shots left from an airdrop.
+ */
+export function allowedWeapons(mode: number, primary: number, power = 0): number[] {
   if (mode === MODE_BLADES) return [W_KNIFE];
   if (mode === MODE_BOOM) return [W_FRAG, W_KNIFE];
-  if (mode === MODE_SNIPERS) return [W_SNIPER, W_KNIFE];
-  return [primary, W_PISTOL, W_KNIFE];
+  const rail = power > 0 ? [W_RAIL] : [];
+  if (mode === MODE_SNIPERS) return [...rail, W_SNIPER, W_KNIFE];
+  return [...rail, primary, W_PISTOL, W_KNIFE];
 }
 
 /** The primary gun actually carried: Snipers mode forces the sniper rifle. */
@@ -81,8 +90,10 @@ export function defaultWeapon(mode: number, primary: number): number {
   return effectivePrimary(mode, primary);
 }
 
-/** Which pickup kinds (0 health, 1 ammo, 2 grenade) are active in a mode. */
+/** Which pickup kinds (0 health, 1 ammo, 2 grenade, 3 shield, 4 airdrop) are active in a mode. */
 export function pickupActive(mode: number, kind: number): boolean {
+  if (kind === PICKUP_SHIELD) return true;
+  if (kind === PICKUP_DROP) return mode === MODE_ARMS || mode === MODE_SNIPERS;
   if (mode === MODE_ARMS) return true;
   if (mode === MODE_SNIPERS) return kind !== 2;
   return kind === 0;

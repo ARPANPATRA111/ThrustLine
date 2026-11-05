@@ -3,7 +3,7 @@
 import type { Identity } from 'spacetimedb';
 import { DbConnection, tables, type EventContext, type SubscriptionHandle } from '../module_bindings';
 import type {
-  BoomEv, EmoteEv, Grenade, HitEv, KickEv, KillEv, MeleeEv, Pickup, PickupEv, Player, PongEv, Pstate, Room, ShotEv,
+  BoomEv, EmoteEv, Grenade, HitEv, KickEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, PongEv, Pstate, Room, ShotEv,
 } from '../module_bindings/types';
 
 export const STDB_URI: string = import.meta.env.VITE_STDB_URI ?? 'ws://localhost:3000';
@@ -33,6 +33,7 @@ export interface NetHandlers {
   boom?: (e: BoomEv) => void;
   pickupTaken?: (e: PickupEv) => void;
   emote?: (e: EmoteEv) => void;
+  notice?: (e: NoticeEv) => void;
   pong?: (e: PongEv) => void;
   kicked?: (e: KickEv) => void;
   state?: (s: ConnState) => void;
@@ -133,6 +134,7 @@ export class Net {
     db.boomEv.onInsert((_c: EventContext, e) => h().boom?.(e));
     db.pickupEv.onInsert((_c: EventContext, e) => h().pickupTaken?.(e));
     db.emoteEv.onInsert((_c: EventContext, e) => h().emote?.(e));
+    db.noticeEv.onInsert((_c: EventContext, e) => h().notice?.(e));
     db.pongEv.onInsert((_c: EventContext, e) => h().pong?.(e));
     db.kickEv.onInsert((_c: EventContext, e) => h().kicked?.(e));
   }
@@ -167,6 +169,7 @@ export class Net {
           tables.boomEv.where((r) => r.roomId.eq(roomId)),
           tables.pickupEv.where((r) => r.roomId.eq(roomId)),
           tables.emoteEv.where((r) => r.roomId.eq(roomId)),
+          tables.noticeEv.where((r) => r.roomId.eq(roomId)),
         ]);
     }
     if (old && !old.isEnded()) old.unsubscribe();

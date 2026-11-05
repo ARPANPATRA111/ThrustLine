@@ -39,4 +39,6 @@ export default __t.row({
   cy: __t.f32(),
   pingMs: __t.u16().name("ping_ms"),
   connected: __t.bool(),
+  shield: __t.f32(),
+  power: __t.u8(),
 });

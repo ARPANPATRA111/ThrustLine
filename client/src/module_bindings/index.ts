@@ -60,6 +60,7 @@ import HitEvRow from "./hit_ev_table";
 import KickEvRow from "./kick_ev_table";
 import KillEvRow from "./kill_ev_table";
 import MeleeEvRow from "./melee_ev_table";
+import NoticeEvRow from "./notice_ev_table";
 import PickupRow from "./pickup_table";
 import PickupEvRow from "./pickup_ev_table";
 import PlayerRow from "./player_table";
@@ -137,6 +138,14 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, MeleeEvRow),
+  noticeEv: __table({
+    name: 'notice_ev',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, NoticeEvRow),
   pickup: __table({
     name: 'pickup',
     indexes: [

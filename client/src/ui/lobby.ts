@@ -8,9 +8,19 @@ import { TEAM_CSS, TEAM_NAMES, playerCss } from '../render/soldier';
 import { escapeHtml } from './hud';
 
 export type Rules = Room['rules'];
+export type Match = Room['match'];
+
+/** The host's editable settings, as one snapshot. */
+interface Draft {
+  mode: number;
+  roundSec: number;
+  teams: boolean;
+  rules: Rules;
+  match: Match;
+}
 
 export interface LobbyActions {
-  send(mode: number, roundSec: number, teams: boolean, rules: Rules): void;
+  send(mode: number, roundSec: number, teams: boolean, rules: Rules, match: Match): void;
   kick(target: Identity): void;
   moveTeam(target: Identity): void;
   click(): void;
@@ -30,7 +40,7 @@ export class LobbyView {
    * two clicks in the same round trip clobbered each other and the next render reverted the
    * checkbox. The draft is the source of truth for the controls while an edit is in flight.
    */
-  private draft: { mode: number; roundSec: number; teams: boolean; rules: Rules } | null = null;
+  private draft: Draft | null = null;
   private pending = false;
   private pendingAt = 0;
   private roomId = '';
@@ -41,6 +51,9 @@ export class LobbyView {
     });
     document.querySelectorAll<HTMLInputElement>('#room-settings [data-rule]').forEach((el) => {
       el.addEventListener('change', () => this.change({ rules: { [el.dataset.rule!]: el.checked } }));
+    });
+    document.querySelectorAll<HTMLInputElement>('#room-settings [data-match]').forEach((el) => {
+      el.addEventListener('change', () => this.change({ match: { [el.dataset.match!]: el.checked } }));
     });
     // Kick / move buttons inside the player list (event delegation: the list is re-rendered).
     $('lobby-players').addEventListener('click', (e) => {
@@ -54,8 +67,8 @@ export class LobbyView {
     });
   }
 
-  private fromRoom(room: Room): { mode: number; roundSec: number; teams: boolean; rules: Rules } {
-    return { mode: room.mode, roundSec: room.roundSec, teams: room.teams, rules: { ...room.rules } };
+  private fromRoom(room: Room): Draft {
+    return { mode: room.mode, roundSec: room.roundSec, teams: room.teams, rules: { ...room.rules }, match: { ...room.match } };
   }
 
   /** Does the server row now carry everything we last asked for? */
@@ -64,11 +77,12 @@ export class LobbyView {
     if (!d) return true;
     if (d.mode !== room.mode || d.roundSec !== room.roundSec || d.teams !== room.teams) return false;
     for (const k of Object.keys(d.rules) as (keyof Rules)[]) if (d.rules[k] !== room.rules[k]) return false;
+    for (const k of Object.keys(d.match) as (keyof Match)[]) if (d.match[k] !== room.match[k]) return false;
     return true;
   }
 
   /** Apply a partial change to the current settings and send it (host only). */
-  private change(c: { mode?: number; roundSec?: number; teams?: boolean; rules?: Partial<Rules> }): void {
+  private change(c: { mode?: number; roundSec?: number; teams?: boolean; rules?: Partial<Rules>; match?: Partial<Match> }): void {
     const r = this.room;
     if (!r || !this.host) return;
     const base = this.draft ?? this.fromRoom(r);
@@ -77,6 +91,7 @@ export class LobbyView {
       roundSec: c.roundSec ?? base.roundSec,
       teams: c.teams ?? base.teams,
       rules: { ...base.rules, ...c.rules },
+      match: { ...base.match, ...c.match },
     };
     this.pending = true;
     this.pendingAt = performance.now();
@@ -84,7 +99,7 @@ export class LobbyView {
     // Paint immediately from the draft so a second fast click merges with the first instead
     // of reading the stale server row.
     if (this.room) this.paint(this.room, this.draft, this.host);
-    this.act.send(this.draft.mode, this.draft.roundSec, this.draft.teams, this.draft.rules);
+    this.act.send(this.draft.mode, this.draft.roundSec, this.draft.teams, this.draft.rules, this.draft.match);
   }
 
   /** Build a segmented control once per option list; then just move the highlight. */
@@ -129,7 +144,7 @@ export class LobbyView {
   }
 
   /** Paint the controls from a settings snapshot (the server row, or the local draft). */
-  private paint(room: Room, d: { mode: number; roundSec: number; teams: boolean; rules: Rules }, isHost: boolean): void {
+  private paint(room: Room, d: Draft, isHost: boolean): void {
     $('mode-cards').classList.toggle('locked', !isHost);
     $('mode-cards').querySelectorAll<HTMLButtonElement>('.mode').forEach((b) => b.classList.toggle('on', Number(b.dataset.mode) === d.mode));
     this.seg('seg-teams', [{ v: 0, label: 'Free-for-all' }, { v: 1, label: 'Red vs Blue' }], d.teams ? 1 : 0, (v) => this.change({ teams: v === 1 }));
@@ -139,6 +154,10 @@ export class LobbyView {
     this.seg('seg-bot', SKILL_LABELS.map((label, v) => ({ v, label })), d.rules.botSkill, (v) => this.change({ rules: { botSkill: v } }));
     document.querySelectorAll<HTMLInputElement>('#room-settings [data-rule]').forEach((el) => {
       el.checked = Boolean(d.rules[el.dataset.rule as keyof Rules]);
+      el.disabled = !isHost;
+    });
+    document.querySelectorAll<HTMLInputElement>('#room-settings [data-match]').forEach((el) => {
+      el.checked = Boolean(d.match[el.dataset.match as keyof Match]);
       el.disabled = !isHost;
     });
     $('tog-ff').classList.toggle('hidden', !d.teams);

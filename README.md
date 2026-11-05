@@ -51,10 +51,10 @@ Touch buttons sit on an arc around the aim stick and only appear when the mode u
 
 | Mode | Loadout | Pickups |
 | --- | --- | --- |
-| **Arms** (default) | Pistol, one primary (AR, SMG, shotgun or sniper, picked on the respawn screen), knife, 2 frags | Health, ammo, grenade |
-| **Blades** (melee only) | Knife only, +15 % run speed | Health |
-| **Boom** (grenades only) | Unlimited frags (0.85 s cooldown, max 3 live), knife backup | Health |
-| **Snipers** | Sniper rifle and knife | Health, ammo |
+| **Arms** (default) | Pistol, one primary (AR, SMG, shotgun or sniper, picked on the respawn screen), knife, 2 frags | Health, ammo, grenade, shield, airdrops |
+| **Blades** (melee only) | Knife only, +15 % run speed | Health, shield |
+| **Boom** (grenades only) | Unlimited frags (0.85 s cooldown, max 3 live), knife backup | Health, shield |
+| **Snipers** | Sniper rifle and knife | Health, ammo, shield, airdrops |
 
 ### House rules (host sets them in the lobby)
 
@@ -66,6 +66,7 @@ Touch buttons sit on an arc around the aim stick and only appear when the mode u
 | Infinite jetpack | Fuel never runs out |
 | Infinite ammo | No reloading; unlimited grenades in Arms |
 | Pickups | Crates on or off |
+| Airdrops | A railgun crate parachutes in every minute (needs Pickups) |
 | Acid hazard | The pit burns, or is harmless |
 | Final-minute Frenzy | On or off |
 | Match type | Free-for-all, or Red vs Blue teams (1v1, 2v2 … 4v4; up to 8 players) |
@@ -73,7 +74,7 @@ Touch buttons sit on an arc around the aim stick and only appear when the mode u
 | Floating grenades | Zero-g: grenades drift where you throw them and slow to a stop |
 
 Everyone in the room sees the settings; only the host can change them. Every toggle starts **on**
-(infinite jetpack, infinite ammo, pickups, acid, Frenzy, floating grenades), so a fresh room is the
+(infinite jetpack, infinite ammo, pickups, airdrops, acid, Frenzy, floating grenades), so a fresh room is the
 fastest, most chaotic version; the host turns off whatever the group does not want. The server
 enforces every rule. The host can also **kick** a player (✕ on their row; they can't rejoin that
 room) and move players between teams (⇄). In a team match each player can press **Switch team**.
@@ -113,6 +114,14 @@ one setup script on the server, then change `VITE_STDB_URI` and run `npm run dep
 | Sniper | 100 | 0.85/s | 4 / 16 | One clean body hit kills; pinpoint while still; camera leads 320 px |
 | Knife | 55 | 2/s | — | Short lunge |
 | Frag | up to 100 | — | 2 per life | 1.5 s fuse, bounces, knockback, half damage to yourself |
+| Railgun | 150 | 0.9/s | 3 shots | Airdrop only; pierces every body on the line, walls still stop it; infinite ammo does not apply |
+
+### Power-ups
+
+| Pickup | Effect |
+| --- | --- |
+| **Shield** | +50 shield. Damage takes the shield first, so a shield survives a one-shot sniper hit. Acid goes straight through. Back after 30 s. |
+| **Airdrop** | First crate 30 s into the round, then one a minute (one at a time). It is announced, shown on the minimap, and marked with an arrow when off-screen. It lands 4 s later and whoever reaches it gets the railgun. |
 
 Solid metal (glowing cyan edges) blocks bullets. The see-through mesh catwalks (yellow top rail) are
 one-way platforms: you can jump up through them and bullets pass through them.
@@ -211,7 +220,8 @@ outcome that matters:
   distance.
 - **Actions:** only the equipped weapon from the mode's loadout can fire, and the primary can only
   change while respawning; shots, knives, reloads and grenade throws are rate-limited per player and
-  per weapon.
+  per weapon. A pellet stops at one body, so a shot cannot claim more targets than it has pellets;
+  only the railgun pierces.
 - **Replays:** every sync carries a monotonically increasing sequence number. Replayed, duplicated or
   late packets are dropped before they can act, and a reconnecting page starts a fresh sequence.
 - **Identity:** room codes must match the alphabet exactly, room creation/joins and pings are

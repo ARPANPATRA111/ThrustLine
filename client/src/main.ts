@@ -38,6 +38,8 @@ const TIPS = [
   'The last minute is FRENZY: 1.5x damage, 2x fuel.',
   'Stay out of the green acid.',
   'Grenades bounce: bank them off walls.',
+  'Shields soak damage before your health does.',
+  'Airdrops carry a railgun that pierces everyone on the line.',
   'Hosts can add CPU players and change the house rules.',
 ];
 
@@ -99,7 +101,7 @@ async function boot(): Promise<void> {
   const audio = new Audio();
   const input = new Input();
   const hud = new Hud();
-  hud.causeIcons = { 0: atlas.iconURL('w0'), 1: atlas.iconURL('w1'), 2: atlas.iconURL('w2'), 3: atlas.iconURL('w3'), 4: atlas.iconURL('w4'), 5: atlas.iconURL('w5'), 6: atlas.iconURL('w6'), [C.CAUSE_ACID]: atlas.iconURL('bubbleAcid', 3) };
+  hud.causeIcons = { 0: atlas.iconURL('w0'), 1: atlas.iconURL('w1'), 2: atlas.iconURL('w2'), 3: atlas.iconURL('w3'), 4: atlas.iconURL('w4'), 5: atlas.iconURL('w5'), 6: atlas.iconURL('w6'), 7: atlas.iconURL('w7'), [C.CAUSE_ACID]: atlas.iconURL('bubbleAcid', 3) };
   const game = new Game(app, atlas, audio, net, time, input, hud);
   game.setQuality(settings.quality);
   game.debug = settings.showDebug;
@@ -210,7 +212,7 @@ async function boot(): Promise<void> {
   });
 
   const lobby = new LobbyView({
-    send: (mode, roundSec, teams, rules) => void call(net.conn?.reducers.updateRoomSettings({ mode, roundSec, teams, rules })),
+    send: (mode, roundSec, teams, rules, match) => void call(net.conn?.reducers.updateRoomSettings({ mode, roundSec, teams, rules, match })),
     kick: (target) => {
       // Kicking one of our own CPU players: also close its connection.
       const bot = game.bots.get(target.toHexString());
@@ -273,6 +275,7 @@ async function boot(): Promise<void> {
     boom: (e) => game.onBoom(e),
     pickupTaken: (e) => game.onPickup(e),
     emote: (e) => game.onEmote(e),
+    notice: (e) => game.onNotice(e),
   };
   // The connection may already be up (it was started during loading): start the clock sync now.
   if (net.conn) time.start();

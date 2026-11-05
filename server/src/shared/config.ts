@@ -51,6 +51,18 @@ export const GRENADE_CRATE_MAX = 3;
 /** Pickup hit box is one tile centred on its marker tile. */
 export const PICKUP_SIZE = 32;
 
+// ---------- Power-ups ----------
+export const SHIELD_MAX = 50;
+export const SHIELD_RESPAWN_SEC = 30;
+/** Railgun shots in an airdrop crate. */
+export const RAIL_SHOTS = 3;
+export const AIRDROP_FIRST_SEC = 30;
+export const AIRDROP_FIRST_DEV_SEC = 3;
+export const AIRDROP_EVERY_SEC = 60;
+/** How long a crate parachutes down after it is announced, and how fast it falls. */
+export const AIRDROP_FALL_SEC = 4;
+export const AIRDROP_FALL_PX_PER_SEC = 240;
+
 // ---------- Scoring ----------
 export const SCORE_KILL = 100;
 export const SCORE_BOUNTY_BONUS = 50;
@@ -114,6 +126,11 @@ export const DEFAULT_RULES = {
   friendlyFire: true,
   /** Grenades ignore gravity and drift where they are thrown (zero-g). */
   floatingGrenades: true,
+};
+/** Arena options, stored in `room.match` next to the original house rules. */
+export const DEFAULT_MATCH = {
+  /** Crates with a power weapon parachute in during the round. */
+  airdrops: true,
 };
 
 // ---------- Grenades ----------
@@ -237,6 +254,9 @@ export const EMOTE_SHOW_SEC = 2.6;
 
 // ---------- kill causes (weapon ids 0..6 are reused as causes) ----------
 export const CAUSE_ACID = 10;
+
+// ---------- Room-wide announcements (notice_ev.kind) ----------
+export const NOTICE_AIRDROP = 0;
 
 /** Frenzy is computed from the round end time on both sides; nothing is stored. */
 export function isFrenzy(nowMs: number, endsAtMs: number): boolean {

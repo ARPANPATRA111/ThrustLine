@@ -11,7 +11,7 @@ import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
 import { MAP_W, RIG7, T_ACID, T_SOLID, spawnWorldPos, tileAt } from '@shared/map';
 import { lineOfSight } from '@shared/raycast';
-import { PRIMARIES, WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_SMG, W_SNIPER, canThrow, isGun } from '@shared/weapons';
+import { PRIMARIES, WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, W_SMG, W_SNIPER, canThrow, isGun } from '@shared/weapons';
 import { tables, type DbConnection } from '../module_bindings';
 import type { Player, Pstate } from '../module_bindings/types';
 import { openBotConnection } from '../net/connection';
@@ -137,7 +137,7 @@ export class BotBrain {
       // Distance keeping per weapon.
       let ideal = 280;
       if (world.mode === C.MODE_BLADES || w === W_KNIFE) ideal = 10;
-      else if (w === W_SNIPER) ideal = 600;
+      else if (w === W_SNIPER || w === W_RAIL) ideal = 600;
       else if (w === 2) ideal = 170;
       else if (w === W_SMG) ideal = 220;
       else if (world.mode === C.MODE_BOOM) ideal = 320;
@@ -163,7 +163,7 @@ export class BotBrain {
         if (isGun(w)) {
           const def = WEAPONS[w];
           if (this.burstOn && dist < def.range * 0.85 && aimErr < 0.25) {
-            const left = w === W_PISTOL ? a.pistolMag : a.mag;
+            const left = w === W_RAIL ? a.power : w === W_PISTOL ? a.pistolMag : a.mag;
             if (left === 0 && !world.rules.infiniteAmmo) inp.reload = true;
             else {
               inp.fire = true;
@@ -171,7 +171,7 @@ export class BotBrain {
               inp.firePressed = def.kind === 'auto' || Math.random() < DT * def.rate * 0.8;
             }
           }
-          if (a.mag === 0 && a.reserve === 0 && w !== W_PISTOL && !world.rules.infiniteAmmo) inp.swap = true;
+          if (a.mag === 0 && a.reserve === 0 && w !== W_PISTOL && w !== W_RAIL && !world.rules.infiniteAmmo) inp.swap = true;
         } else if (w === W_KNIFE) {
           if (dist < 70 && this.burstOn) inp.firePressed = true;
         } else if (w === W_FRAG && dist < 520 && aimErr < 0.5 && this.burstOn) {
@@ -189,8 +189,10 @@ export class BotBrain {
       this.seenFor = 0;
       this.huntFor -= DT;
       const hunting = this.huntFor > 0;
-      const gx = hunting ? this.seenX : this.waypoint.x;
-      const gy = hunting ? this.seenY + C.PLAYER_H / 2 : this.waypoint.y;
+      // Crates and shields are worth a detour; otherwise hunt, then patrol.
+      const goal = world.goal(cx, b.y);
+      const gx = goal ? goal.x : hunting ? this.seenX : this.waypoint.x;
+      const gy = goal ? goal.y : hunting ? this.seenY + C.PLAYER_H / 2 : this.waypoint.y;
       const dx = gx - cx;
       const dy = gy - b.y;
       if (hunting && Math.abs(dx) < 40 && Math.abs(dy) < 60) this.huntFor = 0;

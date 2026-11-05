@@ -233,6 +233,7 @@ input[type='range'] { width: 100%; accent-color: var(--cyan); height: 28px; }
 .meter.hp .fill { background: linear-gradient(90deg, #ff3d6a, #ff8fa3); box-shadow: 0 0 10px rgba(255, 77, 109, 0.6); }
 .meter.hp.low .fill { background: linear-gradient(90deg, #ff2a2a, #ff6b6b); }
 .meter.fuel .fill { background: linear-gradient(90deg, #22d3ee, #9ff3ff); }
+.meter .shield { position: absolute; left: 0; right: 0; top: 0; height: 5px; transform: scaleX(0); transform-origin: left; background: linear-gradient(90deg, #22d3ee, #e0fbff); box-shadow: 0 0 8px rgba(34, 211, 238, 0.9); }
 .vnum { font-family: var(--display); font-size: 16px; min-width: 34px; }
 .hud-tc { position: absolute; left: 50%; top: calc(8px + var(--safe-t)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .timer { font-family: var(--display); font-size: 24px; letter-spacing: 0.06em; padding: 3px 16px; background: rgba(7, 11, 24, 0.7); border: 1px solid var(--line); border-radius: 10px; }
@@ -288,6 +289,8 @@ body.touch-mode .crosshair { display: none; }
 .dmg-arc { position: absolute; left: 50%; top: 50%; width: 240px; height: 240px; margin: -120px; border-radius: 50%; border-top: 6px solid rgba(255, 60, 80, 0.9); opacity: 0; transition: opacity 0.5s; }
 .banner { position: absolute; left: 50%; top: 24%; transform: translate(-50%, -50%) scale(0.8); font-family: var(--display); font-size: clamp(28px, 6vw, 58px); letter-spacing: 0.16em; opacity: 0; transition: opacity 0.25s, transform 0.25s; text-shadow: 0 0 24px currentColor; white-space: nowrap; }
 .banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.notice-line { position: absolute; left: 50%; top: calc(74px + var(--safe-t)); transform: translateX(-50%); padding: 3px 12px; border-radius: 8px; background: rgba(7, 11, 24, 0.6); font-family: var(--display); font-size: 15px; letter-spacing: 0.1em; white-space: nowrap; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+.notice-line.show { opacity: 1; }
 /* Menu + fullscreen sit beside the timer, above the touch layer so thumbs can always reach them. */
 .tc-row { display: flex; align-items: center; gap: 6px; }
 .hud-tools { display: flex; gap: 6px; }

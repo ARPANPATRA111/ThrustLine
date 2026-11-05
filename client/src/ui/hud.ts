@@ -1,10 +1,11 @@
 // In-game HUD written as plain DOM over the canvas. Every setter compares with the last value
 // and touches the DOM only when something changed; animations use transform/opacity only.
+import { SHIELD_MAX } from '@shared/config';
 import { WEAPON_DRAW, WEAPON_SIZE } from '../render/atlas';
 import { playerCss } from '../render/soldier';
 import type { Player } from '../module_bindings/types';
 
-const CAUSE_NAMES: Record<number, string> = { 0: 'pistol', 1: 'AR', 2: 'shotgun', 3: 'sniper', 4: 'knife', 5: 'frag', 6: 'SMG', 10: 'acid' };
+const CAUSE_NAMES: Record<number, string> = { 0: 'pistol', 1: 'AR', 2: 'shotgun', 3: 'sniper', 4: 'knife', 5: 'frag', 6: 'SMG', 7: 'railgun', 10: 'acid' };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -26,6 +27,7 @@ export class Hud {
   private hpMeter = document.querySelector<HTMLElement>('.meter.hp')!;
   private hpFill = $('hp-fill');
   private hpText = $('hp-text');
+  private shieldFill = $('shield-fill');
   private fuelFill = $('fuel-fill');
   private fuelText = $('fuel-text');
   private timer = $('timer');
@@ -45,12 +47,14 @@ export class Hud {
   private arc = $('dmg-arc');
   private tint = $('frenzy-tint');
   private banner = $('banner');
+  private notice = $('notice');
   private debugEl = $('debug');
   private teamEl = $('team-score');
   private last: Record<string, string | number | boolean> = {};
   private hitTimer = 0;
   private vigTimer = 0;
   private bannerTimer = 0;
+  private noticeTimer = 0;
   /** Kill-feed icons by cause (weapon id, or acid), as data URLs from the atlas. */
   causeIcons: Record<number, string> = {};
 
@@ -71,6 +75,11 @@ export class Hud {
     this.hpFill.style.transform = `scaleX(${Math.min(1, v / maxHp)})`;
     this.hpText.textContent = String(v);
     this.hpMeter.classList.toggle('low', v / maxHp < 0.3);
+  }
+
+  setShield(v: number): void {
+    const s = Math.max(0, Math.ceil(v));
+    if (this.changed('shield', s)) this.shieldFill.style.transform = `scaleX(${Math.min(1, s / SHIELD_MAX)})`;
   }
 
   setFuel(f: number, infinite: boolean): void {
@@ -203,6 +212,14 @@ export class Hud {
     this.bannerTimer = seconds;
   }
 
+  /** A smaller line for routine announcements: it must never sit where players are aiming. */
+  showNotice(text: string, color = '#eef2ff', seconds = 2): void {
+    this.notice.textContent = text;
+    this.notice.style.color = color;
+    this.notice.classList.add('show');
+    this.noticeTimer = seconds;
+  }
+
   setDebug(text: string | null): void {
     const show = text !== null;
     if (this.changed('dbgShow', show)) this.debugEl.classList.toggle('hidden', !show);
@@ -217,5 +234,6 @@ export class Hud {
       this.arc.style.opacity = '0';
     }
     if (this.bannerTimer > 0 && (this.bannerTimer -= dt) <= 0) this.banner.classList.remove('show');
+    if (this.noticeTimer > 0 && (this.noticeTimer -= dt) <= 0) this.notice.classList.remove('show');
   }
 }

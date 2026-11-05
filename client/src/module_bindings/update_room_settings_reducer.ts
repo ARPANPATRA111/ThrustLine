@@ -12,6 +12,7 @@ import {
 
 import {
   Rules,
+  MatchRules,
 } from "./types";
 
 export default {
@@ -20,5 +21,8 @@ export default {
   teams: __t.bool(),
   get rules() {
     return Rules;
+  },
+  get match() {
+    return MatchRules;
   },
 };

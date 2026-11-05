@@ -10,6 +10,14 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const AirdropJob = __t.object("AirdropJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  roomId: __t.u64(),
+  roundNo: __t.u32(),
+});
+export type AirdropJob = __Infer<typeof AirdropJob>;
+
 export const BoomEv = __t.object("BoomEv", {
   roomId: __t.u64(),
   owner: __t.identity(),
@@ -112,6 +120,11 @@ export const LobbyJob = __t.object("LobbyJob", {
 });
 export type LobbyJob = __Infer<typeof LobbyJob>;
 
+export const MatchRules = __t.object("MatchRules", {
+  airdrops: __t.bool(),
+});
+export type MatchRules = __Infer<typeof MatchRules>;
+
 export const MeleeEv = __t.object("MeleeEv", {
   roomId: __t.u64(),
   attacker: __t.identity(),
@@ -120,6 +133,14 @@ export const MeleeEv = __t.object("MeleeEv", {
   dir: __t.f32(),
 });
 export type MeleeEv = __Infer<typeof MeleeEv>;
+
+export const NoticeEv = __t.object("NoticeEv", {
+  roomId: __t.u64(),
+  kind: __t.u8(),
+  x: __t.f32(),
+  y: __t.f32(),
+});
+export type NoticeEv = __Infer<typeof NoticeEv>;
 
 export const Pickup = __t.object("Pickup", {
   id: __t.u64(),
@@ -176,6 +197,8 @@ export const Player = __t.object("Player", {
   cy: __t.f32(),
   pingMs: __t.u16(),
   connected: __t.bool(),
+  shield: __t.f32(),
+  power: __t.u8(),
 });
 export type Player = __Infer<typeof Player>;
 
@@ -254,6 +277,9 @@ export const Room = __t.object("Room", {
   roundNo: __t.u32(),
   createdAt: __t.timestamp(),
   quick: __t.bool(),
+  get match() {
+    return MatchRules;
+  },
 });
 export type Room = __Infer<typeof Room>;
 

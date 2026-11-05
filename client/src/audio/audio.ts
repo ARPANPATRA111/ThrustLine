@@ -3,7 +3,7 @@
 // the oldest voice, and stereo panning + distance attenuation for world sounds.
 
 type SoundName =
-  | 'pistol' | 'ar' | 'smg' | 'shotgun' | 'sniper' | 'reload' | 'empty' | 'jet' | 'boom' | 'knife'
+  | 'pistol' | 'ar' | 'smg' | 'rail' | 'shotgun' | 'sniper' | 'reload' | 'empty' | 'jet' | 'boom' | 'knife'
   | 'hit' | 'hurt' | 'death' | 'pickup' | 'click' | 'beep' | 'alarm' | 'sting' | 'music' | 'musicFrenzy';
 
 const SR = 44100;
@@ -75,6 +75,8 @@ const RECIPES: Record<Exclude<SoundName, 'music' | 'musicFrenzy'>, [number, (c: 
   ar: [0.09, (c) => { burst(c, 0, 0.07, 0.85, 'lowpass', 6000, 1500, c.destination); tone(c, 'square', 2600, 1200, 0, 0.01, 0.25, c.destination); }],
   // Tighter and higher than the AR: a rapid tick that stays readable at 14 shots a second.
   smg: [0.07, (c) => { burst(c, 0, 0.05, 0.7, 'lowpass', 7500, 2000, c.destination); tone(c, 'square', 3200, 1500, 0, 0.008, 0.18, c.destination); }],
+  // A charged crack with a falling whine, unmistakable across the map.
+  rail: [0.9, (c) => { tone(c, 'sawtooth', 2400, 160, 0, 0.5, 0.35, c.destination); burst(c, 0, 0.05, 1, 'highpass', 4000, 2500, c.destination); burst(c, 0.02, 0.8, 0.5, 'lowpass', 3000, 180, c.destination); tone(c, 'sine', 90, 40, 0, 0.4, 0.8, c.destination); }],
   shotgun: [0.34, (c) => { burst(c, 0, 0.3, 1, 'lowpass', 3500, 500, c.destination, 0.5); tone(c, 'sine', 90, 40, 0, 0.25, 0.9, c.destination); }],
   sniper: [0.75, (c) => { burst(c, 0, 0.03, 1, 'highpass', 3000, 2000, c.destination); burst(c, 0.01, 0.7, 0.6, 'lowpass', 2500, 200, c.destination); tone(c, 'sine', 120, 50, 0, 0.3, 0.7, c.destination); }],
   reload: [0.32, (c) => { tone(c, 'square', 3200, 2400, 0, 0.03, 0.25, c.destination); burst(c, 0, 0.04, 0.4, 'bandpass', 4000, 3000, c.destination, 4); tone(c, 'square', 2600, 2000, 0.2, 0.04, 0.3, c.destination); burst(c, 0.2, 0.05, 0.5, 'bandpass', 3500, 2500, c.destination, 4); }],

@@ -11,7 +11,8 @@ export interface RadarEntry {
   x: number;
   y: number;
   color: number;
-  kind: 'me' | 'ally' | 'enemy';
+  /** 'objective' is something everyone should find: always on the minimap, arrow when off-screen. */
+  kind: 'me' | 'ally' | 'enemy' | 'objective';
   /** ms since this player last fired (Infinity if never). */
   firedAgo: number;
 }
@@ -97,11 +98,12 @@ export class Radar {
         s.visible = true;
         s.position.set(e.x * sxk, e.y * syk);
         s.tint = e.kind === 'me' ? 0xffffff : e.color;
-        s.scale.set(e.kind === 'me' ? 1.1 : 0.9);
+        s.scale.set(e.kind === 'me' || e.kind === 'objective' ? 1.1 : 0.9);
         s.alpha = e.kind === 'enemy' ? Math.max(0.25, 1 - e.firedAgo / REVEAL_MS) : 1;
       }
       // Edge arrow: an off-screen enemy that just fired.
-      if (e.kind === 'enemy' && !inView && e.firedAgo < ARROW_MS && a < POOL) {
+      const wanted = e.kind === 'objective' || (e.kind === 'enemy' && e.firedAgo < ARROW_MS);
+      if (wanted && !inView && a < POOL) {
         const p = toScreen(e.x, e.y);
         const cx = screenW / 2;
         const cy = screenH / 2;

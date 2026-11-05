@@ -14,13 +14,16 @@ describe('RIG-7 map', () => {
     expect(count('H')).toBe(2);
     expect(count('A')).toBe(4);
     expect(count('G')).toBe(2);
+    expect(count('P')).toBe(2);
+    expect(count('D')).toBe(8);
     expect(count('~')).toBe(32);
     expect(RIG7.spawns.length).toBe(8);
-    expect(RIG7.pickups.length).toBe(8);
+    expect(RIG7.pickups.length).toBe(10);
+    expect(RIG7.drops.length).toBe(8);
   });
 
   it('only uses supported characters', () => {
-    for (const row of RIG7_ROWS) expect(row).toMatch(/^[#=~.SHAG]+$/);
+    for (const row of RIG7_ROWS) expect(row).toMatch(/^[#=~.SHAGPD]+$/);
   });
 
   it('is mirror-symmetric', () => {
@@ -28,7 +31,7 @@ describe('RIG-7 map', () => {
   });
 
   it('puts every marker directly above a solid or one-way tile', () => {
-    for (const m of [...RIG7.spawns, ...RIG7.pickups]) {
+    for (const m of [...RIG7.spawns, ...RIG7.pickups, ...RIG7.drops]) {
       const below = tileAt(RIG7, m.tx, m.ty + 1);
       expect([T_SOLID, T_ONEWAY]).toContain(below);
     }
