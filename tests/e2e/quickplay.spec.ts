@@ -38,7 +38,7 @@ test('Quick Play puts strangers in one running room and rounds loop', async ({ b
   await a.waitForSelector('#scr-game:not(.hidden)', { timeout: 15_000 });
   const room = (await roomOf(a))!;
   expect(room.quick).toBe(true);
-  expect(room.state, 'no lobby: the round is already running').toBe(1);
+  await expect.poll(async () => (await roomOf(a))!.state, { message: 'no lobby: a round starts by itself', timeout: 4000 }).toBe(1);
 
   // Alone in the room, the host's client fills it with CPU players.
   await expect.poll(async () => (await roster(a)).length, { timeout: 20_000 }).toBe(4);

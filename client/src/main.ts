@@ -7,6 +7,7 @@ import '@fontsource/chakra-petch/latin-700.css';
 import './style.css';
 import { Application } from 'pixi.js';
 import * as C from '@shared/config';
+import { MAP_NAMES } from '@shared/map';
 import { GRENADES, PRIMARIES, effectiveNade, nadeOptions } from '@shared/weapons';
 import type { Player, Profile, Room, SeasonBoard } from './module_bindings/types';
 import { Net, errorText } from './net/connection';
@@ -43,6 +44,9 @@ const TIPS = [
   'In the last 30 seconds the acid rises: get high.',
   'Hosts can add CPU players and change the house rules.',
 ];
+
+/** Indexed by the room's objective. */
+const OBJECTIVE_NAMES = ['Deathmatch', 'King of the Hill'];
 
 const SCREENS = ['scr-loading', 'scr-home', 'scr-lobby', 'scr-game'];
 function showScreen(id: string): void {
@@ -300,7 +304,10 @@ async function boot(): Promise<void> {
     playerUpsert: (p, old) => {
       const mine = p.identity.toHexString() === net.myKey;
       if (mine) {
-        if (p.roomId !== myRoomId) enterRoom(p.roomId);
+        if (p.roomId !== myRoomId) {
+          enterRoom(p.roomId);
+          restoreLoadout();
+        }
         if (old && old.alive && !p.alive) game.killedBy = game.killedBy || 'Eliminated';
         if (pendingPrimary !== null && p.primary === pendingPrimary) pendingPrimary = null;
         if (pendingNade !== null && p.nade === pendingNade) pendingNade = null;
@@ -402,7 +409,7 @@ async function boot(): Promise<void> {
     document.body.classList.toggle('dev-room', !!room?.dev);
     if (!room || !me || me.roomId !== room.id) {
       showScreen('scr-home');
-      for (const id of ['scr-respawn', 'scr-board', 'scr-menu']) showOverlay(id, false);
+      for (const id of ['scr-respawn', 'scr-loadout', 'scr-board', 'scr-menu']) showOverlay(id, false);
       game.stop();
       game.setAttract(true);
       input.enabled = false;
@@ -418,7 +425,7 @@ async function boot(): Promise<void> {
       game.stop();
       game.setAttract(true);
       input.enabled = false;
-      for (const id of ['scr-respawn', 'scr-board']) showOverlay(id, false);
+      for (const id of ['scr-respawn', 'scr-loadout', 'scr-board']) showOverlay(id, false);
       setEmoteOpen(false);
       $('emote-dock').classList.add('hidden');
       wasDead = false;
@@ -433,20 +440,23 @@ async function boot(): Promise<void> {
     game.start();
     void acquireWakeLock();
     const ended = room.state === 2;
-    const dead = !me.alive && !ended;
-    input.enabled = !ended && !menuOpen;
+    const choosing = room.state === 3;
+    const dead = !me.alive && !ended && !choosing;
+    input.enabled = !ended && !choosing && !menuOpen;
     showOverlay('scr-respawn', dead && !menuOpen);
+    showOverlay('scr-loadout', choosing && !menuOpen);
+    if (choosing) renderLoadout(me, room);
     // Emotes are for the match only; the dock stays above the respawn overlay while dead.
-    $('emote-dock').classList.toggle('hidden', ended || menuOpen);
-    if (ended || menuOpen) setEmoteOpen(false);
+    $('emote-dock').classList.toggle('hidden', ended || choosing || menuOpen);
+    if (ended || choosing || menuOpen) setEmoteOpen(false);
     // The picker only ever opens from the button/key; dying leaves it closed. Close it on respawn
     // so it does not cover the weapon picker when the next death screen appears.
     else if (!dead && wasDead) setEmoteOpen(false);
     wasDead = dead;
     if (dead) renderRespawn(me, room);
     else game.killedBy = '';
-    showOverlay('scr-board', ended || boardHeld);
-    if (ended || boardHeld) renderBoard(ended);
+    showOverlay('scr-board', ended || (boardHeld && !choosing));
+    if (ended || (boardHeld && !choosing)) renderBoard(ended);
     placeEmoteDock();
     checkRotate();
     fillQuickRoom(room);
@@ -485,11 +495,19 @@ async function boot(): Promise<void> {
   function renderRespawn(me: Player, room: Room): void {
     $('killed-by').textContent = me.deaths === 0 && me.kills === 0 && !game.killedBy ? 'Deploying…' : game.killedBy || 'Eliminated';
     $('kill-recap').textContent = game.killedBy ? game.killRecap : '';
-    $('primary-pick').classList.toggle('hidden', room.mode !== C.MODE_ARMS);
+    renderPicks(me, room);
+  }
+
+  /** The respawn screen and the loadout screen offer the same choices and stay in step. */
+  function renderPicks(me: Player, room: Room): void {
+    const guns = room.mode === C.MODE_ARMS;
+    $('primary-pick').classList.toggle('hidden', !guns);
+    $('lo-guns-wrap').classList.toggle('hidden', !guns);
     const sel = pendingPrimary ?? me.primary;
     document.querySelectorAll<HTMLButtonElement>('.pick[data-w]').forEach((b) => b.classList.toggle('sel', Number(b.dataset.w) === sel));
     const nades = nadeOptions(room.mode);
     $('nade-pick').classList.toggle('hidden', nades.length === 0);
+    $('lo-nades-wrap').classList.toggle('hidden', nades.length === 0);
     const nade = effectiveNade(room.mode, pendingNade ?? me.nade);
     document.querySelectorAll<HTMLButtonElement>('.pick[data-n]').forEach((b) => {
       const n = Number(b.dataset.n);
@@ -497,6 +515,30 @@ async function boot(): Promise<void> {
       b.classList.toggle('hidden', !nades.includes(n));
     });
   }
+  function renderLoadout(me: Player, room: Room): void {
+    $('lo-map').textContent = MAP_NAMES[room.mapId] ?? '';
+    const objective = OBJECTIVE_NAMES[room.match.objective] ?? '';
+    $('lo-objective').textContent = room.teams && me.team ? `${objective} · ${TEAM_NAMES[me.team]} team` : objective;
+    renderPicks(me, room);
+  }
+  /** Rooms start everyone on the defaults, so bring the last choice along. */
+  function restoreLoadout(): void {
+    const me = myRow();
+    if (!me || !net.conn) return;
+    if (PRIMARIES.includes(settings.primary) && me.primary !== settings.primary) void net.conn.reducers.choosePrimary({ weapon: settings.primary }).catch(() => {});
+    if (GRENADES[settings.nade] && me.nade !== settings.nade) void net.conn.reducers.chooseGrenade({ kind: settings.nade }).catch(() => {});
+  }
+  let loadoutBeep = -1;
+  setInterval(() => {
+    const room = myRoom();
+    if (!room || room.state !== 3) return;
+    const left = Math.max(0, Number(room.startedAtMicros) / 1000 - time.serverNow());
+    const secs = Math.ceil(left / 1000);
+    $('lo-count').textContent = String(secs);
+    $('lo-ring-fg').style.strokeDashoffset = String(276.5 * (1 - Math.min(1, left / (C.LOADOUT_SEC * 1000))));
+    if (secs <= 3 && secs >= 1 && secs !== loadoutBeep) audio.play('beep', 0.5);
+    loadoutBeep = secs;
+  }, 100);
   setInterval(() => {
     if ($('scr-respawn').classList.contains('hidden')) return;
     const left = game.respawnLeft();
@@ -510,9 +552,11 @@ async function boot(): Promise<void> {
       if (!GRENADES[kind]) return;
       audio.play('click');
       pendingNade = kind;
+      settings.nade = kind;
+      saveSettings(settings);
       const me = myRow();
       const room = myRoom();
-      if (me && room) renderRespawn(me, room);
+      if (me && room) renderPicks(me, room);
       void call(net.conn?.reducers.chooseGrenade({ kind })).then((ok) => {
         if (!ok && pendingNade === kind) { pendingNade = null; queueRoute(); }
       });
@@ -525,9 +569,11 @@ async function boot(): Promise<void> {
       audio.play('click');
       // Show the pick at once instead of waiting for the server row to come back.
       pendingPrimary = w;
+      settings.primary = w;
+      saveSettings(settings);
       const me = myRow();
       const room = myRoom();
-      if (me && room) renderRespawn(me, room);
+      if (me && room) renderPicks(me, room);
       void call(net.conn?.reducers.choosePrimary({ weapon: w })).then((ok) => {
         if (!ok && pendingPrimary === w) { pendingPrimary = null; queueRoute(); }
       });
