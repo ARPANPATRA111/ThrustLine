@@ -64,6 +64,8 @@ const room = table(
     lobbyAtMicros: t.i64(),
     roundNo: t.u32(),
     createdAt: t.timestamp(),
+    /** Quick Play: open to anyone, no lobby, rounds run on a loop. */
+    quick: t.bool().default(false),
   },
 );
 
@@ -100,6 +102,8 @@ const player = table(
     cy: t.f32(),
     /** Round-trip time reported by the player's client, shown to everyone. */
     pingMs: t.u16(),
+    /** False while the slot is being held for a dropped player (see RECONNECT_GRACE_SEC). */
+    connected: t.bool().default(true),
   },
 );
 
@@ -266,6 +270,14 @@ const pickupJob = table(
     roomId: t.u64().index('btree'),
   },
 );
+const dropJob = table(
+  { name: 'drop_job' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+    identity: t.identity().index('btree'),
+  },
+);
 
 // ---------- Event tables: broadcast on commit, never stored ----------
 const shotEv = table(
@@ -325,6 +337,7 @@ const spacetimedb = schema({
   lobbyJob,
   detonateJob,
   pickupJob,
+  dropJob,
   shotEv,
   hitEv,
   killEv,
@@ -642,6 +655,7 @@ function addPlayerToRoom(ctx: Ctx, r: RoomRow, name: string, isBot: boolean): vo
     cx: start.x,
     cy: start.y,
     pingMs: 0,
+    connected: true,
   });
   ctx.db.pstate.insert({ identity: ctx.sender, roomId: r.id, x: start.x, y: start.y, vx: 0, vy: 0, aim: 0, flags: 0, weapon: 0, seq: 0, serverMicros: now, sentMs: nowMs(ctx) });
   ctx.db.pmeta.insert({
@@ -680,6 +694,7 @@ function removePlayer(ctx: Ctx, identity: Identity): void {
     ctx.db.grenade.id.delete(g.id);
   }
   for (const job of [...ctx.db.respawnJob.identity.filter(identity)]) ctx.db.respawnJob.scheduledId.delete(job.scheduledId);
+  for (const job of [...ctx.db.dropJob.identity.filter(identity)]) ctx.db.dropJob.scheduledId.delete(job.scheduledId);
   if (!p) return;
   ctx.db.player.identity.delete(identity);
 
@@ -691,10 +706,30 @@ function removePlayer(ctx: Ctx, identity: Identity): void {
     for (const b of rest) removePlayer(ctx, b.identity);
     deleteRoom(ctx, r.id);
   } else if (r.hostIdentity.isEqual(identity)) {
-    // Hand host to the earliest-joined remaining human.
-    const humans = rest.filter((q) => !q.isBot).sort((a, b) => (a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch ? -1 : 1));
-    ctx.db.room.id.update({ ...r, hostIdentity: humans[0].identity });
+    passHost(ctx, r, rest);
   }
+}
+
+/** Hand host to the earliest-joined human who is still connected (or any human if none is). */
+function passHost(ctx: Ctx, r: RoomRow, players: PlayerRow[]): void {
+  const humans = players.filter((q) => !q.isBot).sort((a, b) => (a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch ? -1 : 1));
+  const next = humans.find((q) => q.connected) ?? humans[0];
+  if (next) ctx.db.room.id.update({ ...r, hostIdentity: next.identity });
+}
+
+/**
+ * The connection dropped: take the soldier out of the world (so nobody farms a frozen player) and
+ * hold the slot and stats. The drop job removes them if they do not come back.
+ */
+function holdForReconnect(ctx: Ctx, p: PlayerRow): void {
+  for (const job of [...ctx.db.respawnJob.identity.filter(p.identity)]) ctx.db.respawnJob.scheduledId.delete(job.scheduledId);
+  ctx.db.player.identity.update({ ...p, connected: false, alive: false, respawnAtMicros: 0n, reloadUntilMicros: 0n });
+  const r = ctx.db.room.id.find(p.roomId);
+  if (!r) return;
+  const grace = r.dev ? C.RECONNECT_GRACE_DEV_SEC : C.RECONNECT_GRACE_SEC;
+  ctx.db.dropJob.insert({ scheduledId: 0n, scheduledAt: atMicros(nowMicros(ctx) + secToMicros(grace)), identity: p.identity });
+  // The room must not wait for an absent host: the lobby start button lives on their screen.
+  if (r.hostIdentity.isEqual(p.identity)) passHost(ctx, r, roomPlayers(ctx, r.id).filter((q) => !q.identity.isEqual(p.identity)));
 }
 
 function clearRoomJobs(ctx: Ctx, roomId: bigint, includePickups: boolean): void {
@@ -747,6 +782,55 @@ function toLobby(ctx: Ctx, r: RoomRow): void {
 // Lobby reducers
 // ============================================================================
 
+/** Create a room with a unique code, seed its pickups and add the sender as its host. */
+function openRoom(ctx: Ctx, name: string, mode: number, roundSec: number, dev: boolean, quick: boolean): RoomRow {
+  // Unique 4-letter code from letters without O, I or L.
+  let code = '';
+  for (let attempt = 0; attempt < 100; attempt++) {
+    code = '';
+    for (let i = 0; i < C.ROOM_CODE_LEN; i++) {
+      code += C.ROOM_CODE_LETTERS[ctx.random.integerInRange(0, C.ROOM_CODE_LETTERS.length - 1)];
+    }
+    if (!ctx.db.room.code.find(code)) break;
+  }
+  if (ctx.db.room.code.find(code)) throw new SenderError('Could not allocate a room code, try again');
+
+  const r = ctx.db.room.insert({
+    id: 0n,
+    code,
+    hostIdentity: ctx.sender,
+    state: ROOM_LOBBY,
+    mode,
+    roundSec,
+    dev,
+    teams: false,
+    rules: { ...C.DEFAULT_RULES },
+    startedAtMicros: 0n,
+    endsAtMicros: 0n,
+    lobbyAtMicros: 0n,
+    roundNo: 0,
+    createdAt: ctx.timestamp,
+    quick,
+  });
+  // Seed pickups from the map markers.
+  for (const m of RIG7.pickups) {
+    ctx.db.pickup.insert({ id: 0n, roomId: r.id, kind: m.kind, tx: m.tx, ty: m.ty, availableAtMicros: 0n });
+  }
+  addPlayerToRoom(ctx, r, name, false);
+  console.info(`room ${code} created`);
+  return r;
+}
+
+/** Put the sender into a room that is already running: they deploy a moment later. */
+function joinInProgress(ctx: Ctx, r: RoomRow, name: string, isBot: boolean): void {
+  addPlayerToRoom(ctx, r, name, isBot);
+  if (r.state === ROOM_PLAYING) {
+    const p = ctx.db.player.identity.find(ctx.sender)!;
+    const at = scheduleRespawn(ctx, p, C.JOIN_SPAWN_SEC);
+    ctx.db.player.identity.update({ ...p, respawnAtMicros: at });
+  }
+}
+
 export const createRoom = spacetimedb.reducer(
   { name: t.string(), mode: t.u8(), roundSec: t.u32(), dev: t.bool() },
   (ctx, { name, mode, roundSec, dev }) => {
@@ -755,42 +839,41 @@ export const createRoom = spacetimedb.reducer(
     // Creating, leaving and creating again churns rooms and pickup rows; one room per 5 s is plenty.
     if (!throttleOk(ctx, 'room', secToMicros(C.ROOM_CREATE_COOLDOWN_SEC))) throw new SenderError('Slow down: try again in a few seconds');
     removePlayer(ctx, ctx.sender); // leave any current room first
-
-    // Unique 4-letter code from letters without O, I or L.
-    let code = '';
-    for (let attempt = 0; attempt < 100; attempt++) {
-      code = '';
-      for (let i = 0; i < C.ROOM_CODE_LEN; i++) {
-        code += C.ROOM_CODE_LETTERS[ctx.random.integerInRange(0, C.ROOM_CODE_LETTERS.length - 1)];
-      }
-      if (!ctx.db.room.code.find(code)) break;
-    }
-    if (ctx.db.room.code.find(code)) throw new SenderError('Could not allocate a room code, try again');
-
-    const r = ctx.db.room.insert({
-      id: 0n,
-      code,
-      hostIdentity: ctx.sender,
-      state: ROOM_LOBBY,
-      mode,
-      roundSec,
-      dev,
-      teams: false,
-      rules: { ...C.DEFAULT_RULES },
-      startedAtMicros: 0n,
-      endsAtMicros: 0n,
-      lobbyAtMicros: 0n,
-      roundNo: 0,
-      createdAt: ctx.timestamp,
-    });
-    // Seed pickups from the map markers.
-    for (const m of RIG7.pickups) {
-      ctx.db.pickup.insert({ id: 0n, roomId: r.id, kind: m.kind, tx: m.tx, ty: m.ty, availableAtMicros: 0n });
-    }
-    addPlayerToRoom(ctx, r, name, false);
-    console.info(`room ${code} created`);
+    openRoom(ctx, name, mode, roundSec, dev, false);
   },
 );
+
+/**
+ * Quick Play: join the busiest public room with space, or open one. Public rooms skip the lobby,
+ * so a player who arrives alone is in a match seconds later (their client adds CPU players).
+ */
+export const quickPlay = spacetimedb.reducer({ name: t.string(), dev: t.bool() }, (ctx, { name, dev }) => {
+  if (!throttleOk(ctx, 'join', secToMicros(C.ROOM_JOIN_COOLDOWN_SEC))) throw new SenderError('Slow down: try again in a moment');
+  let best: RoomRow | undefined;
+  let most = -1;
+  for (const r of ctx.db.room.iter()) {
+    if (!r.quick || r.dev !== dev) continue;
+    const humans = roomPlayers(ctx, r.id).filter((p) => !p.isBot).length;
+    if (humans < C.QUICK_MAX_HUMANS && humans > most) {
+      best = r;
+      most = humans;
+    }
+  }
+  const current = ctx.db.player.identity.find(ctx.sender);
+  if (current && best && current.roomId === best.id) return;
+  removePlayer(ctx, ctx.sender);
+  if (best) {
+    // Humans outrank CPU players: a full room gives up a bot (its host's client closes it).
+    const players = roomPlayers(ctx, best.id);
+    if (players.length >= C.MAX_PLAYERS) {
+      const bot = players.find((p) => p.isBot);
+      if (bot) removePlayer(ctx, bot.identity);
+    }
+    joinInProgress(ctx, best, name, false);
+    return;
+  }
+  beginRound(ctx, openRoom(ctx, name, C.MODE_ARMS, dev ? C.DEV_ROUND_SEC : C.QUICK_ROUND_SEC, dev, true));
+});
 
 export const joinRoom = spacetimedb.reducer(
   { code: t.string(), name: t.string(), bot: t.bool() },
@@ -810,17 +893,18 @@ export const joinRoom = spacetimedb.reducer(
       // The new page starts its packet counter at zero; accept it again.
       const ps = ctx.db.pstate.identity.find(ctx.sender);
       if (ps) ctx.db.pstate.identity.update({ ...ps, seq: 0 });
+      if (!existing.connected) {
+        for (const job of [...ctx.db.dropJob.identity.filter(ctx.sender)]) ctx.db.dropJob.scheduledId.delete(job.scheduledId);
+        const back = { ...existing, connected: true };
+        if (r.state === ROOM_PLAYING && !back.alive) back.respawnAtMicros = scheduleRespawn(ctx, back, C.JOIN_SPAWN_SEC);
+        ctx.db.player.identity.update(back);
+      }
       return;
     }
     if (!throttleOk(ctx, 'join', secToMicros(C.ROOM_JOIN_COOLDOWN_SEC))) throw new SenderError('Slow down: try again in a moment');
     if (roomPlayers(ctx, r.id).length >= C.MAX_PLAYERS) throw new SenderError('Room is full');
     removePlayer(ctx, ctx.sender);
-    addPlayerToRoom(ctx, r, name, bot);
-    if (r.state === ROOM_PLAYING) {
-      const p = ctx.db.player.identity.find(ctx.sender)!;
-      const at = scheduleRespawn(ctx, p, C.JOIN_SPAWN_SEC);
-      ctx.db.player.identity.update({ ...p, respawnAtMicros: at });
-    }
+    joinInProgress(ctx, r, name, bot);
   },
 );
 
@@ -831,6 +915,8 @@ export const leaveRoom = spacetimedb.reducer((ctx) => {
 /** Host only: remove a player (or CPU) from the room; they can't rejoin this room. */
 export const kickPlayer = spacetimedb.reducer({ target: t.identity() }, (ctx, { target }) => {
   const { r } = requireHost(ctx);
+  // Hosts of public rooms are just whoever arrived first.
+  if (r.quick) throw new SenderError('Quick Play rooms have no kicks');
   if (target.isEqual(ctx.sender)) throw new SenderError("You can't kick yourself");
   const victim = ctx.db.player.identity.find(target);
   if (!victim || victim.roomId !== r.id) throw new SenderError('That player is not in your room');
@@ -843,6 +929,7 @@ export const updateRoomSettings = spacetimedb.reducer(
   { mode: t.u8(), roundSec: t.u32(), teams: t.bool(), rules: Rules },
   (ctx, { mode, roundSec, teams, rules }) => {
     const { r } = requireHost(ctx);
+    if (r.quick) throw new SenderError('Quick Play rooms use the standard rules');
     if (r.state === ROOM_PLAYING) throw new SenderError('Round in progress');
     if (mode > C.MODE_SNIPERS) throw new SenderError('Unknown mode');
     if (!validRoundSec(roundSec, r.dev)) throw new SenderError('Invalid round length');
@@ -876,12 +963,18 @@ export const movePlayerTeam = spacetimedb.reducer({ target: t.identity() }, (ctx
 export const backToLobby = spacetimedb.reducer((ctx) => {
   const { r } = requireHost(ctx);
   if (r.state !== ROOM_ENDED) throw new SenderError('The round is not over');
+  if (r.quick) throw new SenderError('Quick Play rooms have no lobby');
   toLobby(ctx, r);
 });
 
 export const startRound = spacetimedb.reducer((ctx) => {
   const { r } = requireHost(ctx);
   if (r.state === ROOM_PLAYING) throw new SenderError('Round already running');
+  beginRound(ctx, r);
+});
+
+/** Reset the map and everyone's stats, spawn the players and start the clock. */
+function beginRound(ctx: Ctx, r: RoomRow): void {
   const now = nowMicros(ctx);
 
   clearRoomJobs(ctx, r.id, true);
@@ -905,6 +998,11 @@ export const startRound = spacetimedb.reducer((ctx) => {
   let li = 0, ri = 0, ai = 0;
   for (const p of roomPlayers(ctx, r.id)) {
     const reset: PlayerRow = { ...p, kills: 0, deaths: 0, score: 0, streak: 0 };
+    // A player mid-reconnect deploys when they return.
+    if (!p.connected) {
+      ctx.db.player.identity.update(reset);
+      continue;
+    }
     let idx: number;
     if (r.teams && p.team === C.TEAM_RED) idx = left[li++ % left.length];
     else if (r.teams && p.team === C.TEAM_BLUE) idx = right[ri++ % right.length];
@@ -912,7 +1010,7 @@ export const startRound = spacetimedb.reducer((ctx) => {
     spawnAt(ctx, started, reset, idx);
   }
   ctx.db.roundEndJob.insert({ scheduledId: 0n, scheduledAt: atMicros(started.endsAtMicros), roomId: r.id, roundNo: started.roundNo });
-});
+}
 
 export const choosePrimary = spacetimedb.reducer({ weapon: t.u8() }, (ctx, { weapon }) => {
   const { p, r } = requireMember(ctx);
@@ -1387,7 +1485,15 @@ export const returnToLobby = spacetimedb.reducer({ onSchedule: lobbyJob }, { job
   if (!ctx.senderAuth.isInternal) throw new SenderError('Scheduler only');
   const r = ctx.db.room.id.find(job.roomId);
   if (!r || r.roundNo !== job.roundNo || r.state !== ROOM_ENDED) return;
-  toLobby(ctx, r);
+  if (r.quick) beginRound(ctx, r);
+  else toLobby(ctx, r);
+});
+
+/** The grace period ran out: the player is not coming back. */
+export const dropPlayer = spacetimedb.reducer({ onSchedule: dropJob }, { job: dropJob.rowType }, (ctx, { job }) => {
+  if (!ctx.senderAuth.isInternal) throw new SenderError('Scheduler only');
+  const p = ctx.db.player.identity.find(job.identity);
+  if (p && !p.connected) removePlayer(ctx, job.identity);
 });
 
 export const detonate = spacetimedb.reducer({ onSchedule: detonateJob }, { job: detonateJob.rowType }, (ctx, { job }) => {
@@ -1463,6 +1569,10 @@ export const onDisconnect = spacetimedb.clientDisconnected((ctx) => {
   // Only clean up if this connection is the one that owns the player row. A page reload may
   // already have rejoined on a new connection before the old one's disconnect arrives.
   if (meta && meta.connId && ctx.connectionId && !meta.connId.isEqual(ctx.connectionId)) return;
-  removePlayer(ctx, ctx.sender);
   ctx.db.throttle.identity.delete(ctx.sender);
+  const p = ctx.db.player.identity.find(ctx.sender);
+  if (!p) return;
+  // CPU players never reconnect; people on phones usually do.
+  if (p.isBot) removePlayer(ctx, ctx.sender);
+  else holdForReconnect(ctx, p);
 });

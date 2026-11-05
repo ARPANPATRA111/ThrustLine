@@ -5,10 +5,12 @@ Riggers, jetpack contractors, fight over **RIG-7**, an abandoned sky refinery ab
 
 **Play:** https://thrustline-drab.vercel.app · **Database:** SpacetimeDB Maincloud, `thrustline-zhtm`
 
-Open the link and create a room. Press **Share** (or **Copy invite**) in the lobby and send the link to
-your group: anyone who opens it lands straight in your room with an automatic callsign (a number is
-added if two people pick the same name). No accounts: closing the tab removes you. Playing alone?
-Press **Add CPU** in the lobby.
+Open the link and press **Quick Play** to drop into a public match straight away: there is no lobby,
+rounds run back to back, and CPU players fill any empty seats. To play with friends, **Create room**,
+then press **Share** (or **Copy invite**) in the lobby and send the link to your group: anyone who opens
+it lands straight in your room with an automatic callsign (a new one is picked if two people choose the
+same name). No accounts. If your connection drops, your slot and score are held for 30 seconds so you
+can come back; your soldier leaves the map while you are away, so nobody can farm you.
 
 ![Gameplay](docs/screenshots/gameplay.png)
 

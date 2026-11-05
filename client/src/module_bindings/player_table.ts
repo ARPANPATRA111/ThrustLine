@@ -38,4 +38,5 @@ export default __t.row({
   cx: __t.f32(),
   cy: __t.f32(),
   pingMs: __t.u16().name("ping_ms"),
+  connected: __t.bool(),
 });

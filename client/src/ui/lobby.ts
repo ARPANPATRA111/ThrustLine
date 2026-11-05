@@ -105,7 +105,7 @@ export class LobbyView {
     const isHostRow = room.hostIdentity.isEqual(p.identity);
     const host = isHostRow ? `<img class="crown" src="${crownURL}" width="18" height="12" alt="host">` : '';
     const you = key === myKey ? '<span class="you-tag">YOU</span>' : '';
-    const cpu = p.isBot ? '<span class="cpu-tag">CPU</span>' : '';
+    const cpu = p.isBot ? '<span class="cpu-tag">CPU</span>' : !p.connected ? '<span class="lost-tag">LOST</span>' : '';
     const ping = !p.isBot ? `<span class="ping-tag" data-ping="${key}"></span>` : '';
     const color = playerCss(p.colorIdx, room.teams ? p.team : 0);
     const initial = escapeHtml(p.name.replace(/^CPU /, '').charAt(0).toUpperCase() || '?');

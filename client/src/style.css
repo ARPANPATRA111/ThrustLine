@@ -348,6 +348,8 @@ body.touch-mode .weapon-box canvas { width: 78px; height: 29px; }
 body.touch-mode .ammo { font-size: 21px; }
 body.touch-mode .nades { font-size: 11px; }
 
+.lost-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; color: #ffd0d6; background: rgba(255, 77, 94, 0.25); border-radius: 4px; padding: 1px 4px; }
+
 /* ---------- Emotes ---------- */
 /* Positioned by main.ts just left of the mini leaderboard; stays clickable while dead. */
 .emote-dock { position: fixed; right: calc(12px + var(--safe-r) + 206px); top: calc(10px + var(--safe-t)); z-index: 30; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }

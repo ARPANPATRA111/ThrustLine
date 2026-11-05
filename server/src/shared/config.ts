@@ -63,6 +63,15 @@ export const BOUNTY_STREAK = 3;
 export const MAX_PLAYERS = 8;
 /** After a round ends, everyone returns to the lobby automatically after this many seconds. */
 export const LOBBY_RETURN_SEC = 12;
+/** A dropped player keeps their slot and stats this long, so a phone can come back. */
+export const RECONNECT_GRACE_SEC = 30;
+export const RECONNECT_GRACE_DEV_SEC = 15;
+
+// ---------- Quick Play (public rooms that run on a loop, no lobby) ----------
+export const QUICK_ROUND_SEC = 180;
+export const QUICK_MAX_HUMANS = 6;
+/** The host's client tops the room up with CPU players to this many. */
+export const QUICK_MIN_PLAYERS = 4;
 
 // ---------- Teams ----------
 export const TEAM_NONE = 0;
