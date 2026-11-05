@@ -1,6 +1,6 @@
 // The match: fixed-step simulation of the local player (and any CPU bots hosted here),
 // interpolation of remote players, server events turned into effects, and rendering.
-import { type Application, Container, Graphics, Sprite, type Texture, TilingSprite } from 'pixi.js';
+import { type Application, Container, Graphics, Sprite, Texture, TilingSprite } from 'pixi.js';
 import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
 import { MAPS, MAP_H, MAP_NAMES, MAP_W, PICKUP_DROP, PICKUP_SHIELD, inZone, movesAround } from '@shared/map';
@@ -12,7 +12,7 @@ import type { TimeSync } from '../net/timesync';
 import { LagEstimator, SnapshotBuffer, type Sample } from '../net/interp';
 import { Radar, type RadarEntry } from '../render/radar';
 import type { Atlas } from '../render/atlas';
-import { bakeMap, acidRect, makeAcid, makeParallaxTextures } from '../render/mapbake';
+import { THEMES, type Rect, acidRects, bakeMap, makeAcid, makeParallaxTextures } from '../render/mapbake';
 import { stickerTextures } from '../render/stickers';
 import { Particles } from '../render/particles';
 import { Effects } from '../render/effects';
@@ -69,6 +69,14 @@ interface GrenadeView {
   ticks: number;
   thrownMs: number;
   sprite: Sprite;
+}
+
+/** A map's acid: one scrolling sheet and one glow per pool. */
+interface AcidView {
+  layer: Container;
+  sheets: TilingSprite[];
+  glows: Sprite[];
+  pools: Rect[];
 }
 
 interface FlagView {
@@ -137,13 +145,15 @@ export class Game implements WorldView {
   private world = new Container();
   private bg = new Container();
   private parallax: TilingSprite[] = [];
-  private acid: TilingSprite;
-  private acidGlow: Sprite;
+  /** Colour laid over the backdrop, so each map has its own sky. */
+  private skyWash = new Sprite(Texture.WHITE);
+  private acidLayer = new Container();
+  private acid: AcidView | null = null;
+  private acids = new Map<number, AcidView>();
   private mapId = -1;
   /** The map being shown; each map is baked once, the first time it is played. */
   private mapLayer = new Container();
   private baked = new Map<number, Container>();
-  private acidR = acidRect(MAPS[0]);
   /** Sudden death: a sheet of acid across the whole map, rising from the floor. */
   private acidSheet: TilingSprite;
   private wasSuddenDeath = false;
@@ -215,20 +225,14 @@ export class Game implements WorldView {
     this.aimLine.anchor.set(0, 0.5);
     this.aimLine.alpha = 0.25;
     this.aimLine.scale.set(240 / 8, 0.6);
-    this.acid = makeAcid(this.acidR);
-    this.acidGlow = new Sprite(this.tex.dot);
-    this.acidGlow.anchor.set(0.5);
-    this.acidGlow.tint = 0x7cff4f;
-    this.acidGlow.blendMode = 'add';
-    this.acidGlow.alpha = 0.35;
-    this.acidGlow.position.set(this.acidR.x + this.acidR.w / 2, this.acidR.y);
-    this.acidGlow.scale.set((this.acidR.w * 1.4) / 32, 90 / 32);
+    this.skyWash.blendMode = 'add';
+    this.bg.addChild(this.skyWash);
     this.acidSheet = makeAcid({ x: 0, y: 0, w: MAP_W, h: MAP_H });
     this.acidSheet.alpha = 0.72;
     this.acidSheet.visible = false;
     this.hillGfx.visible = false;
     this.world.addChild(
-      this.mapLayer, this.acid, this.acidGlow, this.hillGfx, this.baseGfx, this.pickupLayer, this.grenadeLayer, this.playerLayer, this.flagLayer, this.emoteLayer, this.acidSheet,
+      this.mapLayer, this.acidLayer, this.hillGfx, this.baseGfx, this.pickupLayer, this.grenadeLayer, this.playerLayer, this.flagLayer, this.emoteLayer, this.acidSheet,
       this.particles.normal, this.aimLine, this.effects.layer, this.particles.additive, this.effects.textLayer,
     );
     this.radar = new Radar(this.tex);
@@ -318,21 +322,45 @@ export class Game implements WorldView {
     this.mapId = id;
     this.map = MAPS[id] ?? MAPS[0];
     let layer = this.baked.get(id);
+    const theme = THEMES[id] ?? THEMES[0];
     if (!layer) {
-      layer = bakeMap(this.map);
+      layer = bakeMap(this.map, theme);
       this.baked.set(id, layer);
     }
     this.mapLayer.removeChildren();
     this.mapLayer.addChild(layer);
-    this.acidR = acidRect(this.map);
-    this.acid.position.set(this.acidR.x, this.acidR.y);
-    this.acid.width = this.acidR.w;
-    this.acid.height = this.acidR.h;
-    this.acidGlow.position.set(this.acidR.x + this.acidR.w / 2, this.acidR.y);
-    this.acidGlow.scale.set((this.acidR.w * 1.4) / 32, 90 / 32);
+    this.acidLayer.removeChildren();
+    this.acid = this.acidFor(id);
+    this.acidLayer.addChild(this.acid.layer);
+    this.skyWash.tint = theme.wash;
+    this.skyWash.alpha = theme.washAlpha;
+    this.parallax[1].renderable = theme.girders;
     this.radar.setMap(id, this.map);
     this.drawHill();
     this.drawBases();
+  }
+
+  /** Built the first time a map is played. */
+  private acidFor(id: number): AcidView {
+    let view = this.acids.get(id);
+    if (!view) {
+      const pools = acidRects(this.map);
+      const layer = new Container();
+      const sheets = pools.map((p) => makeAcid(p));
+      const glows = pools.map((p) => {
+        const glow = new Sprite(this.tex.dot);
+        glow.anchor.set(0.5);
+        glow.tint = 0x7cff4f;
+        glow.blendMode = 'add';
+        glow.position.set(p.x + p.w / 2, p.y);
+        glow.scale.set((p.w * 1.4) / 32, 90 / 32);
+        return glow;
+      });
+      layer.addChild(...sheets, ...glows);
+      view = { layer, sheets, glows, pools };
+      this.acids.set(id, view);
+    }
+    return view;
   }
 
   get frenzy(): boolean {
@@ -1134,10 +1162,14 @@ export class Game implements WorldView {
     this.wasSuddenDeath = suddenDeath;
 
     // --- Acid ---
-    this.acid.tilePosition.x += dt * 18;
-    this.acidGlow.alpha = (this.rules.acid ? 0.3 : 0.12) + Math.sin(tSec * 2) * 0.08;
-    if (Math.random() < dt * 8) {
-      this.particles.emit({ tex: this.tex.bubbleAcid, x: this.acidR.x + Math.random() * this.acidR.w, y: this.acidR.y + 6, vx: 0, vy: -20 - Math.random() * 30, life: 0.8, scale0: 0.6, scale1: 1.4, color: 0xb8ff9a, additive: true });
+    const acid = this.acid;
+    if (acid) {
+      for (const sheet of acid.sheets) sheet.tilePosition.x += dt * 18;
+      for (const glow of acid.glows) glow.alpha = (this.rules.acid ? 0.3 : 0.12) + Math.sin(tSec * 2) * 0.08;
+      if (Math.random() < dt * 8) {
+        const pool = acid.pools[Math.floor(Math.random() * acid.pools.length)];
+        this.particles.emit({ tex: this.tex.bubbleAcid, x: pool.x + Math.random() * pool.w, y: pool.y + 6, vx: 0, vy: -20 - Math.random() * 30, life: 0.8, scale0: 0.6, scale1: 1.4, color: 0xb8ff9a, additive: true });
+      }
     }
 
     // --- Camera, world transform, parallax ---
@@ -1170,6 +1202,8 @@ export class Game implements WorldView {
       p.width = sw;
       p.height = sh;
     });
+    this.skyWash.width = sw;
+    this.skyWash.height = sh;
 
     this.particles.update(dt, cam.left, cam.top, cam.right, cam.bottom);
     this.effects.update(dt);

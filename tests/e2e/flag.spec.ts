@@ -161,11 +161,14 @@ test('three captures win the round, and a carrier can still be stopped by death 
   await expect(blue.locator('#winner-name')).not.toContainText('VICTORY');
 });
 
-test('CPU players capture flags on their own', async ({ browser }) => {
+// Every map must be playable by CPU players. The test renderer is slow and tunnels are contested, so
+// taking a flag is the bar everywhere; the open map has to see a full capture too.
+for (const [mapId, mapName] of [[0, 'RIG-7'], [1, 'HELIOS-9'], [2, 'KILN-3'], [3, 'SKYREACH'], [4, 'CRYO-12']] as const) test(`CPU players reach the flag on their own on ${mapName}`, async ({ browser }) => {
   const a = await openClient(browser, '?dev=1', 'Alpha');
   await a.click('#btn-create');
   await a.waitForSelector('#scr-lobby:not(.hidden)');
   await a.click('#seg-round [data-v="300"]');
+  await a.click(`#seg-map [data-v="${mapId}"]`);
   await a.click('#seg-objective [data-v="2"]');
   await expect(a.locator('#seg-teams [data-v="1"]')).toHaveClass(/on/);
   for (let i = 0; i < 5; i++) {
@@ -176,10 +179,9 @@ test('CPU players capture flags on their own', async ({ browser }) => {
   await a.waitForSelector('#scr-game:not(.hidden)');
   await expect.poll(async () => (await st(a)).flags.length, { timeout: 8000 }).toBe(2);
   // Watching only: this player stays put while the bots play.
-  await expect.poll(async () => {
-    const f = (await st(a)).flags;
-    return f.reduce((n: number, q: any) => n + q.caps, 0);
-  }, { timeout: 150_000, intervals: [2000] }).toBeGreaterThan(0);
+  const began = Date.now();
+  await expect.poll(async () => (await st(a)).flags.some((q: any) => q.state === CARRIED || q.caps > 0), { timeout: 120_000, intervals: [500] }).toBe(true);
+  if (mapId === 0) await expect.poll(async () => (await st(a)).flags.reduce((n: number, q: any) => n + q.caps, 0), { timeout: 120_000, intervals: [2000] }).toBeGreaterThan(0);
   const f = (await st(a)).flags;
-  console.log('captures', f.map((q: any) => `${q.team}:${q.caps}`).join(' '));
+  console.log(mapName, 'captures', f.map((q: any) => `${q.team}:${q.caps}`).join(' '), 'in', Math.round((Date.now() - began) / 1000), 's');
 });
