@@ -307,6 +307,35 @@ const seasonBoard = table(
   },
 );
 
+/**
+ * A secret each player's browser keeps. A new server cannot read this server's login tokens, so
+ * this is what proves who owns which progress after a move (see scripts/move-data.mjs). Private.
+ */
+const transferKey = table(
+  { name: 'transfer_key' },
+  {
+    identity: t.identity().primaryKey(),
+    key: t.string().unique(),
+  },
+);
+
+/** Profiles brought over from an old server, each waiting for the browser that holds its key. */
+const legacyProfile = table(
+  { name: 'legacy_profile' },
+  {
+    key: t.string().primaryKey(),
+    name: t.string(),
+    xp: t.u32(),
+    kills: t.u32(),
+    deaths: t.u32(),
+    wins: t.u32(),
+    rounds: t.u32(),
+    bestKills: t.u32(),
+    season: t.u32(),
+    seasonScore: t.u32(),
+  },
+);
+
 /** Private per-player cooldown for emotes (keeps a held key from flooding the room). */
 const emoteLog = table(
   { name: 'emote_log' },
@@ -471,6 +500,8 @@ const spacetimedb = schema({
   kicked,
   profile,
   seasonBoard,
+  transferKey,
+  legacyProfile,
   emoteLog,
   respawnJob,
   roundEndJob,
@@ -1934,6 +1965,39 @@ function awardRound(ctx: Ctx, r: RoomRow): void {
     if (contested) postToBoard(ctx, next);
   }
 }
+
+/**
+ * Sent by a player's main browser on connecting. If this key has progress waiting from an old
+ * server, it joins this identity's profile, once. The key is then kept for the next move.
+ */
+export const registerTransfer = spacetimedb.reducer({ key: t.string() }, (ctx, { key }) => {
+  if (!/^[0-9a-f]{32}$/.test(key)) throw new SenderError('Invalid transfer key');
+  const old = ctx.db.legacyProfile.key.find(key);
+  if (old) {
+    ctx.db.legacyProfile.key.delete(key);
+    const season = C.seasonOf(nowMs(ctx));
+    const mine = ctx.db.profile.identity.find(ctx.sender);
+    const merged: ProfileRow = {
+      identity: ctx.sender,
+      name: mine?.name ?? old.name,
+      xp: (mine?.xp ?? 0) + old.xp,
+      kills: (mine?.kills ?? 0) + old.kills,
+      deaths: (mine?.deaths ?? 0) + old.deaths,
+      wins: (mine?.wins ?? 0) + old.wins,
+      rounds: (mine?.rounds ?? 0) + old.rounds,
+      bestKills: Math.max(mine?.bestKills ?? 0, old.bestKills),
+      season,
+      seasonScore: (mine?.season === season ? mine.seasonScore : 0) + (old.season === season ? old.seasonScore : 0),
+      lastPlayed: ctx.timestamp,
+    };
+    if (mine) ctx.db.profile.identity.update(merged);
+    else ctx.db.profile.insert(merged);
+    if (merged.seasonScore > 0) postToBoard(ctx, merged);
+  }
+  // Only progress is worth carrying, which also keeps drive-by visitors out of the table.
+  if (!ctx.db.profile.identity.find(ctx.sender) || ctx.db.transferKey.identity.find(ctx.sender) || ctx.db.transferKey.key.find(key)) return;
+  ctx.db.transferKey.insert({ identity: ctx.sender, key });
+});
 
 /** Keep the season board to the top scores of the current season. */
 function postToBoard(ctx: Ctx, pr: ProfileRow): void {

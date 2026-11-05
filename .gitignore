@@ -7,5 +7,6 @@ playwright-report/
 .env.local
 server/target/
 spacetime.local.json
+profiles-export.json
 
 .vercel

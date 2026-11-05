@@ -46,6 +46,7 @@ import LeaveRoomReducer from "./leave_room_reducer";
 import MovePlayerTeamReducer from "./move_player_team_reducer";
 import PingReducer from "./ping_reducer";
 import QuickPlayReducer from "./quick_play_reducer";
+import RegisterTransferReducer from "./register_transfer_reducer";
 import StartRoundReducer from "./start_round_reducer";
 import SwitchTeamReducer from "./switch_team_reducer";
 import SyncReducer from "./sync_reducer";
@@ -295,6 +296,7 @@ const reducersSchema = __reducers(
   __reducerSchema("move_player_team", MovePlayerTeamReducer),
   __reducerSchema("ping", PingReducer),
   __reducerSchema("quick_play", QuickPlayReducer),
+  __reducerSchema("register_transfer", RegisterTransferReducer),
   __reducerSchema("start_round", StartRoundReducer),
   __reducerSchema("switch_team", SwitchTeamReducer),
   __reducerSchema("sync", SyncReducer),
