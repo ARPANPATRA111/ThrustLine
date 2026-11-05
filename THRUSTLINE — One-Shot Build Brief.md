@@ -4,7 +4,7 @@ Oct 31, 2026 · @Arpan
 
 ## 1. How to use this brief
 
-You are Claude Opus 5.5 running as a coding agent (Claude Code) on the developer's laptop. Build THRUSTLINE from an empty folder to a deployed, playable web game in one continuous session, using this document as the complete specification.
+You are a coding agent running on the developer's laptop. Build THRUSTLINE from an empty folder to a deployed, playable web game in one continuous session, using this document as the complete specification.
 
 Operating rules:
 
@@ -225,7 +225,7 @@ Layout from the edges inward: two mirrored bases (ground floor, solid second flo
 
 The server is the referee: each client simulates and owns its own movement, and the server validates every update and owns everything that decides the match (HP, deaths, kills, score, ammo, pickups, grenades, spawns, the clock).
 
-Before writing the module, set up SpacetimeDB tooling for yourself by following https://spacetimedb.com/agent-setup.md: install the official Claude Code plugin `spacetimedb@spacetimedb-plugins`, or run `npx skills add clockworklabs/SpacetimeDB`. Read its `typescript-server`, `typescript-client` and `cli` skills before coding. Inside reducers, time comes only from `ctx.timestamp` and randomness only from `ctx.random`; `Date.now()` and `Math.random()` are not available in modules.
+Before writing the module, set up SpacetimeDB tooling for yourself by following https://spacetimedb.com/agent-setup.md: run `npx skills add clockworklabs/SpacetimeDB`. Read its `typescript-server`, `typescript-client` and `cli` skills before coding. Inside reducers, time comes only from `ctx.timestamp` and randomness only from `ctx.random`; `Date.now()` and `Math.random()` are not available in modules.
 
 **Tables.** Hot movement data is split from cold stats so a 20 Hz position write doesn't resend the whole player.
 

@@ -1,7 +1,9 @@
 // Publish the module to the production server named in client/.env.production.
 // VITE_STDB_URI decides where: https://maincloud.spacetimedb.com (SpacetimeDB's cloud, Virginia)
 // or https://<your-host> (a self-hosted SpacetimeDB, e.g. the Oracle Cloud server in India).
-// Usage: npm run publish:cloud            (add -- --delete-data=always after schema changes)
+// Usage: npm run publish:cloud
+// Never pass --delete-data here: it would erase every player's level and the season board.
+// Migrate instead: new tables, or new columns with .default().
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 
