@@ -6,10 +6,10 @@
 import { schema, table, t, SenderError, type Infer, type InferSchema, type ReducerCtx } from 'spacetimedb/server';
 import { ScheduleAt, type Identity } from 'spacetimedb';
 import * as C from './shared/config';
-import { MAPS, MAP_H, MAP_W, inZone, PICKUP_AMMO, PICKUP_DROP, PICKUP_GRENADE, PICKUP_HEALTH, PICKUP_SHIELD, T_ACID, T_SOLID, boxTouchesTile, spawnWorldPos } from './shared/map';
+import { MAPS, MAP_H, MAP_W, inZone, PICKUP_AMMO, PICKUP_DROP, PICKUP_GRENADE, PICKUP_HEALTH, PICKUP_SHIELD, T_ACID, T_SOLID, boxTouchesTile, movesAround, spawnWorldPos, type TilePos } from './shared/map';
 import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, PRIMARIES, allowedWeapons, canThrow, damageAtDistance, defaultWeapon, effectivePrimary, grenadeDamage, isGun, isPrimary, pickupActive } from './shared/weapons';
 import { fuseTicks, simulateGrenade } from './shared/grenade';
-import { pickSpawn, shuffledSpawnOrder, type Point } from './shared/spawn';
+import { pickSpawn, pickSpot, shuffledSpawnOrder, type Point } from './shared/spawn';
 import { lineOfSight } from './shared/raycast';
 import { randomCallsign, sanitizeName } from './shared/names';
 import { type MoveCredit, addBoost, canSeeBody, fireRateOk, freshMoveCredit, hitClaimDistance, isStaleSeq, isValidPosition, maxPelletsAt, meleeHits, shotOriginOk, spendMove, validateMove } from './shared/validate';
@@ -608,6 +608,23 @@ function spawnAt(ctx: Ctx, r: RoomRow, p: PlayerRow, spawnIdx: number): PlayerRo
   return updated;
 }
 
+/** Living players' feet, for keeping pickups from appearing right on top of someone. */
+function livePositions(ctx: Ctx, roomId: bigint): Point[] {
+  const out: Point[] = [];
+  for (const p of roomPlayers(ctx, roomId)) {
+    const ps = p.alive ? ctx.db.pstate.identity.find(p.identity) : null;
+    if (ps) out.push({ x: ps.x, y: ps.y });
+  }
+  return out;
+}
+
+/** A fresh spot for a pickup. `self` is the row being moved, if it already exists. */
+function freshSpot(ctx: Ctx, r: RoomRow, spots: readonly TilePos[], self?: bigint): TilePos {
+  const taken = [...ctx.db.pickup.roomId.filter(r.id)].filter((pk) => pk.id !== self);
+  // Leave a body's height of margin over the rising acid.
+  return pickSpot(spots, taken, livePositions(ctx, r.id), () => ctx.random(), acidLine(r, nowMicros(ctx)) - C.PLAYER_H);
+}
+
 /** Choose a spawn with the smart-spawn rules (section 4) and spawn the player there. */
 function respawnPlayer(ctx: Ctx, r: RoomRow, p: PlayerRow): void {
   const meta = ctx.db.pmeta.identity.find(p.identity);
@@ -1117,10 +1134,11 @@ function beginRound(ctx: Ctx, r: RoomRow): void {
   };
   ctx.db.room.id.update(started);
 
-  // Pickups come from the markers of the map about to be played.
+  // The map's markers say what is on it; health and shields then pick their own spot.
   for (const pk of [...ctx.db.pickup.roomId.filter(r.id)]) ctx.db.pickup.id.delete(pk.id);
   for (const m of mapOf(started).pickups) {
-    ctx.db.pickup.insert({ id: 0n, roomId: r.id, kind: m.kind, tx: m.tx, ty: m.ty, availableAtMicros: 0n });
+    const at = movesAround(m.kind) ? freshSpot(ctx, started, mapOf(started).spots) : m;
+    ctx.db.pickup.insert({ id: 0n, roomId: r.id, kind: m.kind, tx: at.tx, ty: at.ty, availableAtMicros: 0n });
   }
 
   // Reset stats and spawn everyone at distinct points. Team match: red starts on the left half
@@ -1718,7 +1736,7 @@ export const airdrop = spacetimedb.reducer({ onSchedule: airdropJob }, { job: ai
   if (!r || r.roundNo !== job.roundNo || r.state !== ROOM_PLAYING) return;
   const now = nowMicros(ctx);
   if (![...ctx.db.pickup.roomId.filter(r.id)].some((pk) => pk.kind === PICKUP_DROP)) {
-    const spot = mapOf(r).drops[ctx.random.integerInRange(0, mapOf(r).drops.length - 1)];
+    const spot = freshSpot(ctx, r, mapOf(r).drops);
     const landAt = now + secToMicros(C.AIRDROP_FALL_SEC);
     const pk = ctx.db.pickup.insert({ id: 0n, roomId: r.id, kind: PICKUP_DROP, tx: spot.tx, ty: spot.ty, availableAtMicros: landAt });
     ctx.db.pickupJob.insert({ scheduledId: 0n, scheduledAt: atMicros(landAt), pickupId: pk.id, roomId: r.id });
@@ -1831,7 +1849,10 @@ export const detonate = spacetimedb.reducer({ onSchedule: detonateJob }, { job: 
 export const restorePickup = spacetimedb.reducer({ onSchedule: pickupJob }, { job: pickupJob.rowType }, (ctx, { job }) => {
   if (!ctx.senderAuth.isInternal) throw new SenderError('Scheduler only');
   const pk = ctx.db.pickup.id.find(job.pickupId);
-  if (pk) ctx.db.pickup.id.update({ ...pk, availableAtMicros: 0n });
+  if (!pk) return;
+  const r = ctx.db.room.id.find(pk.roomId);
+  const at = r && movesAround(pk.kind) ? freshSpot(ctx, r, mapOf(r).spots, pk.id) : pk;
+  ctx.db.pickup.id.update({ ...pk, tx: at.tx, ty: at.ty, availableAtMicros: 0n });
 });
 
 // ============================================================================
