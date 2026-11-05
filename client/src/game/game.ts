@@ -878,7 +878,9 @@ export class Game implements WorldView {
     const frenzy = this.frenzy;
     const runMul = this.mode === C.MODE_BLADES ? C.BLADES_RUN_MUL : 1;
     const fuelMul = frenzy ? C.FRENZY_FUEL_MUL : 1;
-    if (!playing && !this.running) this.attractCamera(dt);
+    const choosing = this.room?.state === 3;
+    // The map about to be played drifts by behind the loadout screen.
+    if (!playing && (!this.running || choosing)) this.attractCamera(dt);
 
     // --- Fixed 60 Hz simulation with an accumulator ---
     const local = this.local;
@@ -1057,6 +1059,7 @@ export class Game implements WorldView {
     this.audio.hearing = cam.viewW / 2;
 
     // --- Music and Frenzy ---
+    if (choosing) this.audio.setMusic('music');
     if (playing) {
       this.audio.setMusic(frenzy ? 'musicFrenzy' : 'music');
       if (frenzy && !this.wasFrenzy) {

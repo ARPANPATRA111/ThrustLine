@@ -132,6 +132,14 @@ export const KillEv = __t.object("KillEv", {
 });
 export type KillEv = __Infer<typeof KillEv>;
 
+export const LoadoutJob = __t.object("LoadoutJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  roomId: __t.u64(),
+  roundNo: __t.u32(),
+});
+export type LoadoutJob = __Infer<typeof LoadoutJob>;
+
 export const LobbyJob = __t.object("LobbyJob", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),

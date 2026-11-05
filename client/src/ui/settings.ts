@@ -14,6 +14,9 @@ export interface Settings {
   shake: number;
   particles: number;
   colorblind: boolean;
+  /** The last loadout picked, used again in the next room. */
+  primary: number;
+  nade: number;
   /** Keys the player changed; everything else stays on the default. */
   keys: Partial<Record<Action, string>>;
 }
@@ -21,7 +24,7 @@ export interface Settings {
 const KEY = 'tl:settings';
 
 export function loadSettings(): Settings {
-  const defaults: Settings = { quality: 'auto', showDebug: false, lefty: false, name: '', quickStickers: [0, 1, 2, 3], shake: 1, particles: 1, colorblind: false, keys: {} };
+  const defaults: Settings = { quality: 'auto', showDebug: false, lefty: false, name: '', quickStickers: [0, 1, 2, 3], shake: 1, particles: 1, colorblind: false, primary: 1, nade: 0, keys: {} };
   try {
     return { ...defaults, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') };
   } catch {

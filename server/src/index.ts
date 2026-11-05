@@ -7,7 +7,7 @@ import { schema, table, t, SenderError, type Infer, type InferSchema, type Reduc
 import { ScheduleAt, type Identity } from 'spacetimedb';
 import * as C from './shared/config';
 import { MAPS, MAP_H, MAP_W, inZone, PICKUP_AMMO, PICKUP_DROP, PICKUP_GRENADE, PICKUP_HEALTH, PICKUP_SHIELD, T_ACID, T_SOLID, boxTouchesTile, movesAround, spawnWorldPos, type TilePos } from './shared/map';
-import { GRENADES, NADE_EMP, NADE_IMPACT, WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, PRIMARIES, allowedWeapons, canThrow, damageAtDistance, defaultWeapon, effectiveNade, effectivePrimary, grenadeDamage, isGun, isPrimary, nadeCooldownSec, pickupActive } from './shared/weapons';
+import { GRENADES, NADE_EMP, NADE_IMPACT, WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, PRIMARIES, allowedWeapons, canThrow, damageAtDistance, defaultWeapon, effectiveNade, effectivePrimary, grenadeDamage, isGun, isPrimary, nadeCooldownSec, nadeOptions, pickupActive } from './shared/weapons';
 import { bodyContact, firstTouchTick, fuseTicks, simulateGrenade, ticksToFuseMs } from './shared/grenade';
 import { pickSpawn, pickSpot, shuffledSpawnOrder, type Point } from './shared/spawn';
 import { lineOfSight } from './shared/raycast';
@@ -22,6 +22,8 @@ import { type MoveCredit, addBoost, canSeeBody, fireRateOk, freshMoveCredit, hit
 const ROOM_LOBBY = 0;
 const ROOM_PLAYING = 1;
 const ROOM_ENDED = 2;
+/** Everyone is choosing a loadout; the round starts when the timer runs out. */
+const ROOM_LOADOUT = 3;
 
 /** House rules the host can change in the lobby. */
 const Rules = t.object('Rules', {
@@ -342,6 +344,15 @@ const pickupJob = table(
     roomId: t.u64().index('btree'),
   },
 );
+const loadoutJob = table(
+  { name: 'loadout_job' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+    roomId: t.u64().index('btree'),
+    roundNo: t.u32(),
+  },
+);
 const airdropJob = table(
   { name: 'airdrop_job' },
   {
@@ -436,6 +447,7 @@ const spacetimedb = schema({
   lobbyJob,
   detonateJob,
   pickupJob,
+  loadoutJob,
   airdropJob,
   hillJob,
   dropJob,
@@ -561,6 +573,17 @@ function sameTeam(r: RoomRow, a: PlayerRow, b: PlayerRow): boolean {
 function canHurt(r: RoomRow, attacker: PlayerRow, target: PlayerRow): boolean {
   if (attacker.identity.isEqual(target.identity)) return true;
   return !sameTeam(r, attacker, target) || r.rules.friendlyFire;
+}
+
+/** A round is under way: settings and teams stay locked from the loadout screen onward. */
+function inRound(r: RoomRow): boolean {
+  return r.state === ROOM_PLAYING || r.state === ROOM_LOADOUT;
+}
+
+/** Seconds of loadout choice before a round. Modes with nothing to choose start straight away. */
+function loadoutSec(r: RoomRow): number {
+  if (r.mode !== C.MODE_ARMS && nadeOptions(r.mode).length === 0) return 0;
+  return r.dev ? C.LOADOUT_DEV_SEC : C.LOADOUT_SEC;
 }
 
 /** In dev rooms, log why an action was rejected (move rejections are logged everywhere). */
@@ -880,6 +903,7 @@ function clearRoomJobs(ctx: Ctx, roomId: bigint, includePickups: boolean): void 
   for (const g of [...ctx.db.grenade.roomId.filter(roomId)]) ctx.db.grenade.id.delete(g.id);
   if (includePickups) {
     for (const j of [...ctx.db.pickupJob.roomId.filter(roomId)]) ctx.db.pickupJob.scheduledId.delete(j.scheduledId);
+    for (const j of [...ctx.db.loadoutJob.roomId.filter(roomId)]) ctx.db.loadoutJob.scheduledId.delete(j.scheduledId);
     for (const j of [...ctx.db.airdropJob.roomId.filter(roomId)]) ctx.db.airdropJob.scheduledId.delete(j.scheduledId);
     for (const j of [...ctx.db.hillJob.roomId.filter(roomId)]) ctx.db.hillJob.scheduledId.delete(j.scheduledId);
     for (const j of [...ctx.db.roundEndJob.roomId.filter(roomId)]) ctx.db.roundEndJob.scheduledId.delete(j.scheduledId);
@@ -984,7 +1008,7 @@ function joinInProgress(ctx: Ctx, r: RoomRow, name: string, isBot: boolean): voi
   addPlayerToRoom(ctx, r, name, isBot);
   if (r.state === ROOM_PLAYING) {
     const p = ctx.db.player.identity.find(ctx.sender)!;
-    const at = scheduleRespawn(ctx, p, C.JOIN_SPAWN_SEC);
+    const at = scheduleRespawn(ctx, p, loadoutSec(r) > 0 && !r.dev ? C.JOIN_PICK_SEC : C.JOIN_SPAWN_SEC);
     ctx.db.player.identity.update({ ...p, respawnAtMicros: at });
   }
 }
@@ -1030,7 +1054,7 @@ export const quickPlay = spacetimedb.reducer({ name: t.string(), dev: t.bool() }
     joinInProgress(ctx, best, name, false);
     return;
   }
-  beginRound(ctx, openRoom(ctx, name, C.MODE_ARMS, dev ? C.DEV_ROUND_SEC : C.QUICK_ROUND_SEC, dev, true));
+  prepareRound(ctx, openRoom(ctx, name, C.MODE_ARMS, dev ? C.DEV_ROUND_SEC : C.QUICK_ROUND_SEC, dev, true));
 });
 
 export const joinRoom = spacetimedb.reducer(
@@ -1077,7 +1101,7 @@ export const updateRoomSettings = spacetimedb.reducer(
   (ctx, { mode, roundSec, teams, rules, match }) => {
     const { r } = requireHost(ctx);
     if (r.quick) throw new SenderError('Quick Play rooms use the standard rules');
-    if (r.state === ROOM_PLAYING) throw new SenderError('Round in progress');
+    if (inRound(r)) throw new SenderError('Round in progress');
     if (mode > C.MODE_SNIPERS) throw new SenderError('Unknown mode');
     if (!validRoundSec(roundSec, r.dev)) throw new SenderError('Invalid round length');
     if (!validRules(rules)) throw new SenderError('Invalid house rules');
@@ -1096,7 +1120,7 @@ export const updateRoomSettings = spacetimedb.reducer(
 export const switchTeam = spacetimedb.reducer((ctx) => {
   const { p, r } = requireMember(ctx);
   if (!r.teams) throw new SenderError('This room is free-for-all');
-  if (r.state === ROOM_PLAYING) throw new SenderError('Round in progress');
+  if (inRound(r)) throw new SenderError('Round in progress');
   ctx.db.player.identity.update({ ...p, team: p.team === C.TEAM_RED ? C.TEAM_BLUE : C.TEAM_RED });
 });
 
@@ -1104,7 +1128,7 @@ export const switchTeam = spacetimedb.reducer((ctx) => {
 export const movePlayerTeam = spacetimedb.reducer({ target: t.identity() }, (ctx, { target }) => {
   const { r } = requireHost(ctx);
   if (!r.teams) throw new SenderError('This room is free-for-all');
-  if (r.state === ROOM_PLAYING) throw new SenderError('Round in progress');
+  if (inRound(r)) throw new SenderError('Round in progress');
   const p = ctx.db.player.identity.find(target);
   if (!p || p.roomId !== r.id) throw new SenderError('That player is not in your room');
   ctx.db.player.identity.update({ ...p, team: p.team === C.TEAM_RED ? C.TEAM_BLUE : C.TEAM_RED });
@@ -1120,32 +1144,40 @@ export const backToLobby = spacetimedb.reducer((ctx) => {
 
 export const startRound = spacetimedb.reducer((ctx) => {
   const { r } = requireHost(ctx);
-  if (r.state === ROOM_PLAYING) throw new SenderError('Round already running');
-  beginRound(ctx, r);
+  if (inRound(r)) throw new SenderError('Round already running');
+  prepareRound(ctx, r);
 });
 
 const hillMoveMicros = (r: RoomRow) => secToMicros(r.dev ? C.HILL_MOVE_DEV_SEC : C.HILL_MOVE_SEC);
 
-/** Reset the map and everyone's stats, spawn the players and start the clock. */
-function beginRound(ctx: Ctx, r: RoomRow): void {
-  const now = nowMicros(ctx);
-
+/** Choose the next map and objective, and give everyone time to pick a loadout for them. */
+function prepareRound(ctx: Ctx, r: RoomRow): void {
   clearRoomJobs(ctx, r.id, true);
+  for (const pk of [...ctx.db.pickup.roomId.filter(r.id)]) ctx.db.pickup.id.delete(pk.id);
 
   // Rotation walks through the maps; public rooms also alternate what each round is played for.
   const roundNo = r.roundNo + 1;
   const mapId = r.match.map === C.MAP_ROTATE ? r.roundNo % MAPS.length : r.match.map;
   const objective = r.quick ? (roundNo % 2 === 0 ? C.OBJECTIVE_HILL : C.OBJECTIVE_KILLS) : r.match.objective;
-  const started: RoomRow = {
-    ...r,
-    state: ROOM_PLAYING,
-    startedAtMicros: now,
-    endsAtMicros: now + BigInt(r.roundSec) * SEC,
-    lobbyAtMicros: 0n,
-    roundNo,
-    mapId,
-    match: { ...r.match, objective },
-  };
+  const next: RoomRow = { ...r, roundNo, mapId, lobbyAtMicros: 0n, match: { ...r.match, objective } };
+  const wait = loadoutSec(next);
+  if (wait === 0) return beginRound(ctx, next);
+  // While choosing, startedAtMicros is when the round will begin.
+  const startAt = nowMicros(ctx) + secToMicros(wait);
+  ctx.db.room.id.update({ ...next, state: ROOM_LOADOUT, startedAtMicros: startAt, endsAtMicros: startAt });
+  ctx.db.loadoutJob.insert({ scheduledId: 0n, scheduledAt: atMicros(startAt), roomId: r.id, roundNo });
+}
+
+export const openRound = spacetimedb.reducer({ onSchedule: loadoutJob }, { job: loadoutJob.rowType }, (ctx, { job }) => {
+  if (!ctx.senderAuth.isInternal) throw new SenderError('Scheduler only');
+  const r = ctx.db.room.id.find(job.roomId);
+  if (r && r.roundNo === job.roundNo && r.state === ROOM_LOADOUT) beginRound(ctx, r);
+});
+
+/** Reset the map and everyone's stats, spawn the players and start the clock. */
+function beginRound(ctx: Ctx, r: RoomRow): void {
+  const now = nowMicros(ctx);
+  const started: RoomRow = { ...r, state: ROOM_PLAYING, startedAtMicros: now, endsAtMicros: now + BigInt(r.roundSec) * SEC };
   ctx.db.room.id.update(started);
 
   // The map's markers say what is on it; health and shields then pick their own spot.
@@ -1789,7 +1821,7 @@ export const returnToLobby = spacetimedb.reducer({ onSchedule: lobbyJob }, { job
   if (!ctx.senderAuth.isInternal) throw new SenderError('Scheduler only');
   const r = ctx.db.room.id.find(job.roomId);
   if (!r || r.roundNo !== job.roundNo || r.state !== ROOM_ENDED) return;
-  if (r.quick) beginRound(ctx, r);
+  if (r.quick) prepareRound(ctx, r);
   else toLobby(ctx, r);
 });
 

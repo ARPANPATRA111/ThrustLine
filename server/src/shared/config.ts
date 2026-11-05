@@ -38,6 +38,11 @@ export const SPAWN_PROTECT_SEC = 1.5;
 /** Fixed respawn delay: the host no longer configures it. */
 export const RESPAWN_SEC = 5;
 export const JOIN_SPAWN_SEC = 1;
+/** Joining a round in progress: long enough to pick a loadout on the deploy screen. */
+export const JOIN_PICK_SEC = 4;
+/** Everyone picks a gun and a grenade before each round. */
+export const LOADOUT_SEC = 8;
+export const LOADOUT_DEV_SEC = 1;
 export const SPAWN_MIN_DIST_FROM_DEATH = 200;
 export const SPAWN_RANDOM_TOP_N = 3;
 

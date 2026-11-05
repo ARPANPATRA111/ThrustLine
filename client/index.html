@@ -226,6 +226,7 @@
           <svg viewBox="0 0 100 100" class="ring"><circle cx="50" cy="50" r="44" class="ring-bg" /><circle id="ring-fg" cx="50" cy="50" r="44" class="ring-fg" /></svg>
           <span id="respawn-count">4</span>
         </div>
+        <div class="pick-rows">
         <div id="primary-pick" class="pick-row">
           <button data-w="1" class="pick"><img data-icon="w1" alt="" /><span>AR</span></button>
           <button data-w="2" class="pick"><img data-icon="w2" alt="" /><span>Shotgun</span></button>
@@ -237,7 +238,44 @@
           <button data-n="1" class="pick"><img data-icon="nade1" alt="" /><span>Impact</span></button>
           <button data-n="2" class="pick"><img data-icon="nade2" alt="" /><span>EMP</span></button>
         </div>
+        </div>
         <p class="look-hint muted">Use your movement controls to look around</p>
+      </div>
+    </section>
+
+    <!-- Before each round: everyone picks a gun and a grenade -->
+    <section id="scr-loadout" class="overlay center hidden">
+      <div class="loadout card">
+        <header class="lo-head">
+          <div>
+            <p id="lo-objective" class="lo-kicker">Deathmatch</p>
+            <h2 id="lo-map">RIG-7</h2>
+          </div>
+          <div class="ring-wrap lo-ring">
+            <svg viewBox="0 0 100 100" class="ring"><circle cx="50" cy="50" r="44" class="ring-bg" /><circle id="lo-ring-fg" cx="50" cy="50" r="44" class="ring-fg" /></svg>
+            <span id="lo-count">8</span>
+          </div>
+        </header>
+        <div class="lo-body">
+          <div id="lo-guns-wrap">
+            <p class="lo-label">Weapon</p>
+            <div id="lo-guns" class="lo-grid">
+              <button data-w="1" class="pick lo"><img data-icon="w1" alt="" /><b>AR</b><small>Full auto, reliable</small></button>
+              <button data-w="6" class="pick lo"><img data-icon="w6" alt="" /><b>SMG</b><small>Fast, forgiving</small></button>
+              <button data-w="2" class="pick lo"><img data-icon="w2" alt="" /><b>Shotgun</b><small>Huge up close</small></button>
+              <button data-w="3" class="pick lo"><img data-icon="w3" alt="" /><b>Sniper</b><small>One clean shot</small></button>
+            </div>
+          </div>
+          <div id="lo-nades-wrap">
+            <p class="lo-label">Grenade</p>
+            <div id="lo-nades" class="lo-grid">
+              <button data-n="0" class="pick lo"><img data-icon="w5" alt="" /><b>Frag</b><small>Bounces, big blast</small></button>
+              <button data-n="1" class="pick lo"><img data-icon="nade1" alt="" /><b>Impact</b><small>Bursts on contact</small></button>
+              <button data-n="2" class="pick lo"><img data-icon="nade2" alt="" /><b>EMP</b><small>Kills jetpacks 3 s</small></button>
+            </div>
+          </div>
+        </div>
+        <p class="lo-note muted">Locked in until you die. Change it on the respawn screen.</p>
       </div>
     </section>
 
