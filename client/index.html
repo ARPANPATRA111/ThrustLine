@@ -143,6 +143,7 @@
               <label class="tog"><input type="checkbox" data-rule="infiniteFuel" /><span class="sw"></span><svg class="ic"><use href="#i-jet" /></svg>Infinite jetpack</label>
               <label class="tog"><input type="checkbox" data-rule="infiniteAmmo" /><span class="sw"></span><svg class="ic"><use href="#i-ammo" /></svg>Infinite ammo</label>
               <label class="tog"><input type="checkbox" data-rule="pickups" /><span class="sw"></span><svg class="ic"><use href="#i-box" /></svg>Pickups</label>
+              <label class="tog"><input type="checkbox" data-match="airdrops" /><span class="sw"></span><svg class="ic"><use href="#i-box" /></svg>Airdrops</label>
               <label class="tog"><input type="checkbox" data-rule="acid" /><span class="sw"></span><svg class="ic"><use href="#i-acid" /></svg>Acid hazard</label>
               <label class="tog"><input type="checkbox" data-rule="frenzy" /><span class="sw"></span><svg class="ic"><use href="#i-bolt" /></svg>Final-minute Frenzy</label>
               <label class="tog" id="tog-ff"><input type="checkbox" data-rule="friendlyFire" /><span class="sw"></span><svg class="ic"><use href="#i-users" /></svg>Friendly fire</label>
@@ -161,7 +162,7 @@
     <section id="scr-game" class="screen hud hidden">
       <div class="hud-tl">
         <div class="vitals">
-          <div class="vrow"><svg class="ic hp-ic"><use href="#i-heart" /></svg><div class="meter hp"><div id="hp-fill" class="fill"></div></div><span id="hp-text" class="vnum">100</span></div>
+          <div class="vrow"><svg class="ic hp-ic"><use href="#i-heart" /></svg><div class="meter hp"><div id="hp-fill" class="fill"></div><div id="shield-fill" class="shield"></div></div><span id="hp-text" class="vnum">100</span></div>
           <div class="vrow"><svg class="ic fuel-ic"><use href="#i-jet" /></svg><div class="meter fuel"><div id="fuel-fill" class="fill"></div></div><span id="fuel-text" class="vnum small"></span></div>
         </div>
       </div>
@@ -192,6 +193,7 @@
       <div id="frenzy-tint" class="frenzy-tint"></div>
       <div id="dmg-arc" class="dmg-arc"></div>
       <div id="banner" class="banner"></div>
+      <div id="notice" class="notice-line"></div>
       <!-- Desktop-only cheat sheet: tiny, in the bottom-left corner, never over the play area. -->
       <div id="key-hints" class="key-hints" aria-hidden="true">
         <div class="kh-row"><kbd>WASD</kbd> move <kbd>Space</kbd> jet <kbd>LMB</kbd> fire <kbd>RMB</kbd> knife</div>
@@ -318,6 +320,8 @@
             <div class="rule"><img data-icon="pk0" alt="" /><b>+50 HP</b><span>Health pack</span></div>
             <div class="rule"><img data-icon="pk1" alt="" /><b>Ammo</b><span>Refills your reserve</span></div>
             <div class="rule"><img data-icon="pk2" alt="" /><b>+1 frag</b><span>Grenade crate</span></div>
+            <div class="rule"><img data-icon="pk3" alt="" /><b>+50 shield</b><span>Soaks damage before HP</span></div>
+            <div class="rule"><img data-icon="pk4" alt="" /><b>Airdrop</b><span>Railgun: 3 piercing shots</span></div>
             <div class="rule"><svg class="ic c-cyan"><use href="#i-jet" /></svg><b>Blast-jump</b><span>Shotgun recoil &amp; blasts launch you</span></div>
           </div>
         </div>

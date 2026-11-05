@@ -40,6 +40,8 @@ export class SoldierView {
   private armGroup = new Container();
   private gun: Sprite;
   private bubble: Sprite;
+  /** Cyan ring around anyone holding a shield; it fades as the shield runs down. */
+  private armor: Sprite;
   private crown: Sprite;
   private tag: BitmapText;
   /** Soft additive glow in the player colour: makes soldiers pop against the dark rig. */
@@ -67,6 +69,10 @@ export class SoldierView {
     this.gun.x = 9;
     this.bubble = part(tex.bubble, 0.5, 0.5);
     this.bubble.blendMode = 'add';
+    this.armor = part(tex.bubble, 0.5, 0.5);
+    this.armor.blendMode = 'add';
+    this.armor.tint = 0x22d3ee;
+    this.armor.scale.set(1.12);
     this.crown = part(tex.crown, 0.5, 1);
 
     // Layout relative to the feet at (0, 0); y grows downward.
@@ -81,6 +87,7 @@ export class SoldierView {
     this.body.addChild(this.flame, this.jet, this.legL, this.legR, this.torso, this.helmet, this.visor, this.armGroup);
 
     this.bubble.position.set(0, -PLAYER_H / 2);
+    this.armor.position.set(0, -PLAYER_H / 2);
     this.crown.position.set(0, -58);
     this.tag = new BitmapText({ text: name, style: { fontFamily: FONT, fontSize: 13 } });
     this.tag.anchor.set(0.5, 1);
@@ -94,7 +101,7 @@ export class SoldierView {
     this.ally = part(tex.chevron, 0.5, 1);
     this.ally.position.set(0, -76);
     this.ally.visible = false;
-    this.root.addChild(this.glow, this.body, this.bubble, this.crown, this.tag, this.ally);
+    this.root.addChild(this.glow, this.body, this.bubble, this.armor, this.crown, this.tag, this.ally);
     this.setColor(colorIdx);
   }
 
@@ -118,9 +125,10 @@ export class SoldierView {
 
   /**
    * Pose the soldier. (x, y) are the feet; aim in radians; flags from pstate.
-   * `dt` drives the walk cycle; `bounty` adds a gold glow; `shielded` shows the spawn bubble.
+   * `dt` drives the walk cycle; `bounty` adds a gold glow; `shielded` shows the spawn bubble;
+   * `armor` (0..1) is how much of a shield pickup is left.
    */
-  update(x: number, y: number, aim: number, vx: number, flags: number, weapon: number, dt: number, bounty: boolean, shielded: boolean): void {
+  update(x: number, y: number, aim: number, vx: number, flags: number, weapon: number, dt: number, bounty: boolean, shielded: boolean, armor: number): void {
     this.root.position.set(Math.round(x), Math.round(y));
     const facingRight = Math.cos(aim) >= 0;
     this.body.scale.x = facingRight ? 1 : -1;
@@ -161,6 +169,8 @@ export class SoldierView {
       this.flame.texture = this.tex[`flame${(this.flameTick / 3) | 0}`];
     }
     this.bubble.visible = shielded;
+    this.armor.visible = armor > 0;
+    if (armor > 0) this.armor.alpha = 0.45 + 0.55 * armor;
     this.crown.visible = bounty;
     this.torso.alpha = 1;
     if (bounty) this.helmet.tint = GOLD;

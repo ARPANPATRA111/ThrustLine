@@ -3,10 +3,10 @@
 import { type Application, Container, Sprite, type Texture, TilingSprite } from 'pixi.js';
 import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
-import { RIG7, MAP_H, MAP_W } from '@shared/map';
+import { PICKUP_DROP, PICKUP_SHIELD, RIG7, MAP_H, MAP_W } from '@shared/map';
 import { fuseTicks, grenadePath } from '@shared/grenade';
-import { W_FRAG, W_KNIFE, W_PISTOL, W_SMG, W_SNIPER, canThrow, isGun, pickupActive } from '@shared/weapons';
-import type { BoomEv, EmoteEv, Grenade, HitEv, KillEv, MeleeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
+import { W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, W_SMG, W_SNIPER, canThrow, isGun, pickupActive } from '@shared/weapons';
+import type { BoomEv, EmoteEv, Grenade, HitEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
 import type { Net } from '../net/connection';
 import type { TimeSync } from '../net/timesync';
 import { LagEstimator, SnapshotBuffer, type Sample } from '../net/interp';
@@ -27,13 +27,20 @@ import type { Quality } from '../ui/settings';
 
 const STEP = 1 / C.SIM_HZ;
 /** Gun id -> sound name (knife and frag have their own cues). */
-const WEAPON_SOUND: Record<number, 'pistol' | 'ar' | 'smg' | 'shotgun' | 'sniper'> = {
+const WEAPON_SOUND: Record<number, 'pistol' | 'ar' | 'smg' | 'shotgun' | 'sniper' | 'rail'> = {
   [W_PISTOL]: 'pistol',
   1: 'ar',
   2: 'shotgun',
   [W_SNIPER]: 'sniper',
   [W_SMG]: 'smg',
+  [W_RAIL]: 'rail',
 };
+/** Tracer colour and thickness per gun. */
+function tracerStyle(w: number): { color: number; width: number; fadeMs: number } {
+  if (w === W_RAIL) return { color: 0x67e8f9, width: 7, fadeMs: 420 }; // a beam that hangs in the air
+  if (w === W_SNIPER) return { color: 0xffffff, width: 3, fadeMs: C.TRACER_FADE_MS * 2 };
+  return { color: 0xfff2b0, width: 2, fadeMs: C.TRACER_FADE_MS };
+}
 /** Rapid-fire guns get a little pitch jitter so long bursts don't sound like a machine. */
 function gunPitch(w: number): number {
   return w === 1 || w === W_SMG ? 0.95 + Math.random() * 0.1 : 1;
@@ -66,6 +73,8 @@ interface PickupView {
   row: Pickup;
   sprite: Sprite;
   baseY: number;
+  /** Airdrop crates fall on a parachute. */
+  chute: Sprite | null;
 }
 
 /** An emote sticker floating above a player (or frozen at a dead player's death spot). */
@@ -374,8 +383,17 @@ export class Game implements WorldView {
       const baseY = p.ty * C.TILE + C.TILE / 2;
       sprite.position.set(p.tx * C.TILE + C.TILE / 2, baseY);
       this.pickupLayer.addChild(sprite);
-      v = { row: p, sprite, baseY };
+      let chute: Sprite | null = null;
+      if (p.kind === PICKUP_DROP) {
+        chute = new Sprite(this.tex.chute);
+        chute.anchor.set(0.5, 1);
+        chute.y = -12;
+        sprite.addChild(chute);
+      }
+      v = { row: p, sprite, baseY, chute };
       this.pickups.set(p.id, v);
+    } else if (p.kind === PICKUP_DROP && v.row.availableAtMicros !== 0n && p.availableAtMicros === 0n) {
+      this.effects.ring(v.sprite.x, v.baseY, 70, 0xffd54a, 0.5, true); // touchdown
     }
     v.row = p;
   }
@@ -406,9 +424,9 @@ export class Game implements WorldView {
     const key = e.shooter.toHexString();
     this.firedAt.set(key, this.serverNow());
     if (key === this.net.myKey) return; // our own tracers were drawn instantly
-    const tracerColor = e.weapon === W_SNIPER ? 0xffffff : 0xfff2b0;
+    const tr = tracerStyle(e.weapon);
     for (let i = 0; i + 1 < e.ends.length; i += 2) {
-      this.effects.tracer(e.x0, e.y0, e.ends[i], e.ends[i + 1], tracerColor, e.weapon === W_SNIPER ? 3 : 2);
+      this.effects.tracer(e.x0, e.y0, e.ends[i], e.ends[i + 1], tr.color, tr.width, tr.fadeMs);
       this.sparks(e.ends[i], e.ends[i + 1], 0xcfd8ff, 2);
     }
     const ang = e.ends.length >= 2 ? Math.atan2(e.ends[1] - e.y0, e.ends[0] - e.x0) : 0;
@@ -475,8 +493,39 @@ export class Game implements WorldView {
 
   onPickup(e: PickupEv): void {
     const v = this.pickups.get(e.pickupId);
-    if (v) this.effects.ring(v.sprite.x, v.sprite.y, 40, [0xff4d6d, 0xfbbf24, 0x7cff4f][e.kind] ?? 0xffffff, 0.4, true);
-    if (e.identity.toHexString() === this.net.myKey) this.audio.play('pickup', 0.7);
+    if (v) this.effects.ring(v.sprite.x, v.sprite.y, 40, [0xff4d6d, 0xfbbf24, 0x7cff4f, 0x22d3ee, 0xffd54a][e.kind] ?? 0xffffff, 0.4, true);
+    if (e.identity.toHexString() === this.net.myKey) {
+      this.audio.play('pickup', 0.7);
+      if (e.kind === PICKUP_DROP) this.hud.showNotice('RAILGUN · 3 SHOTS', '#67e8f9', 1.8);
+      if (e.kind === PICKUP_SHIELD) this.hud.showNotice('SHIELD UP', '#22d3ee', 1.2);
+    } else if (e.kind === PICKUP_DROP) {
+      this.hud.showNotice(`${this.rowOf(e.identity.toHexString())?.name ?? 'Someone'} has the railgun`, '#ffd54a', 2);
+    }
+  }
+
+  /** A room-wide announcement from the server. */
+  onNotice(e: NoticeEv): void {
+    if (e.kind === C.NOTICE_AIRDROP) {
+      this.hud.showNotice('AIRDROP INCOMING', '#ffd54a', 2.5);
+      this.audio.play('alarm', 0.5);
+    }
+  }
+
+  /** Where a CPU player with nothing to shoot should head: the crate, else a shield close by. */
+  goal(x: number, y: number): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null;
+    let bestD = 700;
+    for (const p of this.pickups.values()) {
+      if (p.row.availableAtMicros !== 0n || !this.pickupsOn || !pickupActive(this.mode, p.row.kind)) continue;
+      const at = { x: (p.row.tx + 0.5) * C.TILE, y: (p.row.ty + 1) * C.TILE };
+      if (p.row.kind === PICKUP_DROP) return at;
+      const d = Math.hypot(at.x - x, at.y - y);
+      if (p.row.kind === PICKUP_SHIELD && d < bestD) {
+        bestD = d;
+        best = at;
+      }
+    }
+    return best;
   }
 
   /** Someone in the room sent an emote: show it above their head (or at their death spot). */
@@ -634,7 +683,8 @@ export class Game implements WorldView {
     return {
       shot: (w, ox, oy, ends, wallHits) => {
         for (let i = 0; i + 1 < ends.length; i += 2) {
-          this.effects.tracer(ox, oy, ends[i], ends[i + 1], w === W_SNIPER ? 0xffffff : 0xfff2b0, w === W_SNIPER ? 3 : 2);
+          const tr = tracerStyle(w);
+          this.effects.tracer(ox, oy, ends[i], ends[i + 1], tr.color, tr.width, tr.fadeMs);
           if (wallHits[i / 2]) this.sparks(ends[i], ends[i + 1], 0xcfd8ff, 3);
         }
         const a = this.local ? this.local.aim : 0;
@@ -735,7 +785,7 @@ export class Game implements WorldView {
         const b = local.body;
         const flags = (b.grounded ? C.FLAG_GROUNDED : 0) | (b.jetting ? C.FLAG_JETTING : 0);
         const bounty = this.localRow.streak >= C.BOUNTY_STREAK;
-        this.localView.update(x, y, local.aim, b.vx, flags, local.weapon, dt, bounty, Number(this.localRow.spawnProtectUntilMicros) / 1000 > now);
+        this.localView.update(x, y, local.aim, b.vx, flags, local.weapon, dt, bounty, Number(this.localRow.spawnProtectUntilMicros) / 1000 > now, this.localRow.shield / C.SHIELD_MAX);
         this.localView.refreshColor(this.localRow.colorIdx, bounty);
         this.aimLine.position.set(x, y - 30);
         this.aimLine.rotation = local.aim;
@@ -769,7 +819,7 @@ export class Game implements WorldView {
       if (!show) continue;
       const bounty = r.row.streak >= C.BOUNTY_STREAK;
       if (bounty !== r.bounty) { r.bounty = bounty; r.view.refreshColor(r.row.colorIdx, bounty); }
-      r.view.update(r.s.x, r.s.y, r.s.aim, r.s.vx, r.s.flags, r.s.weapon, dt, bounty, Number(r.row.spawnProtectUntilMicros) / 1000 > now);
+      r.view.update(r.s.x, r.s.y, r.s.aim, r.s.vx, r.s.flags, r.s.weapon, dt, bounty, Number(r.row.spawnProtectUntilMicros) / 1000 > now, r.row.shield / C.SHIELD_MAX);
     }
 
     // --- Grenades: look up the precomputed path at the current server time ---
@@ -789,9 +839,17 @@ export class Game implements WorldView {
     // --- Pickups bob, hidden while respawning ---
     const tSec = now / 1000;
     for (const p of this.pickups.values()) {
-      const avail = this.pickupsOn && p.row.availableAtMicros === 0n && pickupActive(this.mode, p.row.kind);
-      p.sprite.visible = avail;
-      if (avail) p.sprite.y = p.baseY - 6 + Math.sin(tSec * 3 + p.row.tx) * 3;
+      const falling = p.row.kind === PICKUP_DROP && p.row.availableAtMicros !== 0n;
+      const avail = p.row.availableAtMicros === 0n || falling;
+      const show = this.pickupsOn && avail && pickupActive(this.mode, p.row.kind);
+      p.sprite.visible = show;
+      if (p.chute) p.chute.visible = falling;
+      if (falling) {
+        p.sprite.y = p.baseY - Math.max(0, Number(p.row.availableAtMicros) / 1000 - now) / 1000 * C.AIRDROP_FALL_PX_PER_SEC;
+        // Mark the landing spot: the crate itself is above the screen for most of its fall.
+        if (Math.floor(tSec * 1.5) !== Math.floor((tSec - dt) * 1.5)) this.effects.ring(p.sprite.x, p.baseY, 46, 0xffd54a, 0.6, true);
+      }
+      else if (show) p.sprite.y = p.baseY - 6 + Math.sin(tSec * 3 + p.row.tx) * 3;
     }
 
     // --- Acid ---
@@ -870,10 +928,13 @@ export class Game implements WorldView {
     }
     if (local && row) {
       this.hud.setHP(row.alive ? row.hp : 0, this.maxHp);
+      this.hud.setShield(row.alive ? row.shield : 0);
       this.hud.setFuel(local.body.fuel, this.rules.infiniteFuel);
       this.hud.setWeapon(local.weapon);
       const w = local.weapon;
-      if (isGun(w)) {
+      if (w === W_RAIL) {
+        this.hud.setAmmo(String(local.power), '');
+      } else if (isGun(w)) {
         if (this.rules.infiniteAmmo) this.hud.setAmmo('∞', '');
         else this.hud.setAmmo(String(w === W_PISTOL ? local.pistolMag : local.mag), w === W_PISTOL ? '/∞' : `/${local.reserve}`);
       } else if (w === W_FRAG) {
@@ -935,6 +996,9 @@ export class Game implements WorldView {
       const fired = this.firedAt.get(r.key);
       out.push({ x: r.s.x, y: r.s.y - C.PLAYER_H / 2, color: this.colorOf(r.key), kind: ally ? 'ally' : 'enemy', firedAgo: fired === undefined ? Infinity : now - fired });
     }
+    for (const p of this.pickups.values()) {
+      if (p.row.kind === PICKUP_DROP) out.push({ x: p.sprite.x, y: p.baseY, color: 0xffd54a, kind: 'objective', firedAgo: 0 });
+    }
     const cam = this.camera;
     const z = cam.zoom;
     this.radar.update(out, { l: cam.left, t: cam.top, r: cam.right, b: cam.bottom }, (x, y) => ({ sx: (x - cam.left) * z, sy: (y - cam.top) * z }), this.app.screen.width, this.app.screen.height);
@@ -956,12 +1020,13 @@ export class Game implements WorldView {
     const toScreen = (x: number, y: number) => ({ sx: (x - cam.left) * cam.zoom, sy: (y - cam.top) * cam.zoom });
     return {
       room: this.room ? { code: this.room.code, state: this.room.state } : null,
-      me: this.local ? { x: this.local.body.x, y: this.local.body.y, alive: this.local.alive, weapon: this.local.weapon, grenades: this.local.grenades, ...toScreen(this.local.body.x, this.local.centerY) } : null,
+      me: this.local ? { x: this.local.body.x, y: this.local.body.y, alive: this.local.alive, weapon: this.local.weapon, grenades: this.local.grenades, power: this.local.power, ...toScreen(this.local.body.x, this.local.centerY) } : null,
       mode: this.mode,
       hitsDealt: this.hitsDealt,
       booms: this.booms,
       remotes: [...this.remotes.values()].map((r) => ({ name: r.row.name, alive: r.row.alive, x: r.s.x, y: r.s.y, ...toScreen(r.s.x, r.s.y - C.PLAYER_H / 2) })),
       kills: this.allPlayers().reduce((n, p) => n + p.kills, 0),
+      pickups: [...this.pickups.values()].map((p) => ({ kind: p.row.kind, tx: p.row.tx, ty: p.row.ty, ready: p.row.availableAtMicros === 0n })),
       renderer: this.app.renderer.name,
       camera: { x: cam.x, y: cam.y, left: cam.left, top: cam.top, right: cam.right, bottom: cam.bottom, zoom: cam.zoom },
       deathSpot: this.deathSpot,

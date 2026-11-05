@@ -52,8 +52,10 @@ export const WEAPON_DRAW: Draw[] = [
   (g, w, h) => { g.beginPath(); g.ellipse(w / 2, h / 2 + 1, 4, 5, 0, 0, Math.PI * 2); fillStroke(g, '#7cff4f'); rr(g, w / 2 - 2, 0, 4, 3, 1); fillStroke(g, '#8e9ac8', 1.5); },
   // SMG
   (g) => { rr(g, 1, 3, 27, 5, 2); fillStroke(g, '#cfd8ff'); rr(g, 9, 7, 5, 6, 1); fillStroke(g, '#8e9ac8'); rr(g, 0, 2, 6, 6, 1.5); fillStroke(g, '#8e9ac8'); rr(g, 25, 2, 7, 4, 1); fillStroke(g, '#22d3ee', 1.5); },
+  // Railgun: twin rails either side of the barrel
+  (g) => { rr(g, 8, 1, 38, 3, 1); fillStroke(g, '#67e8f9', 1.5); rr(g, 8, 9, 38, 3, 1); fillStroke(g, '#67e8f9', 1.5); rr(g, 1, 4, 34, 5, 1.5); fillStroke(g, '#cfd8ff'); rr(g, 0, 3, 8, 7, 1.5); fillStroke(g, '#8e9ac8'); },
 ];
-export const WEAPON_SIZE: [number, number][] = [[18, 11], [33, 12], [32, 10], [46, 9], [18, 6], [10, 13], [34, 14]];
+export const WEAPON_SIZE: [number, number][] = [[18, 11], [33, 12], [32, 10], [46, 9], [18, 6], [10, 13], [34, 14], [48, 13]];
 
 const PARTS: Part[] = [
   // ---------- Soldier (white parts get tinted per player) ----------
@@ -91,6 +93,9 @@ const PARTS: Part[] = [
   { name: 'pk0', w: 48, h: 48, draw: pickup('#ff4d6d', (g) => { g.fillStyle = '#ffffff'; g.fillRect(20, 13, 8, 22); g.fillRect(13, 20, 22, 8); }) },
   { name: 'pk1', w: 48, h: 48, draw: pickup('#fbbf24', (g) => { rr(g, 13, 16, 22, 16, 2); fillStroke(g, '#c8892a'); g.fillStyle = '#ffe9a8'; g.fillRect(15, 22, 18, 3); }) },
   { name: 'pk2', w: 48, h: 48, draw: pickup('#7cff4f', (g) => { g.beginPath(); g.ellipse(24, 26, 7, 9, 0, 0, Math.PI * 2); fillStroke(g, '#5fcf3a'); rr(g, 21, 14, 6, 4, 1); fillStroke(g, '#8e9ac8', 1.5); }) },
+  { name: 'pk3', w: 48, h: 48, draw: pickup('#22d3ee', (g) => { g.beginPath(); g.moveTo(24, 11); g.lineTo(35, 15); g.lineTo(35, 25); g.quadraticCurveTo(34, 33, 24, 38); g.quadraticCurveTo(14, 33, 13, 25); g.lineTo(13, 15); g.closePath(); fillStroke(g, '#bff6ff'); g.beginPath(); g.moveTo(24, 15); g.lineTo(24, 34); g.lineWidth = 3; g.strokeStyle = '#22d3ee'; g.stroke(); }) },
+  { name: 'pk4', w: 48, h: 48, draw: pickup('#ffd54a', (g) => { rr(g, 9, 12, 30, 26, 3); fillStroke(g, '#56628f'); g.fillStyle = '#ffd54a'; g.fillRect(10, 21, 28, 4); g.fillRect(21, 13, 6, 24); }) },
+  { name: 'chute', w: 64, h: 44, draw: (g, w) => { g.beginPath(); g.moveTo(3, 20); g.quadraticCurveTo(w / 2, -14, w - 3, 20); g.closePath(); fillStroke(g, '#ff7a45'); g.strokeStyle = 'rgba(238,242,255,0.75)'; g.lineWidth = 1; g.beginPath(); g.moveTo(3, 20); g.lineTo(w / 2, 43); g.lineTo(w - 3, 20); g.moveTo(w / 2, 6); g.lineTo(w / 2, 43); g.stroke(); } },
 
   // ---------- UI icons ----------
   { name: 'skull', w: 16, h: 16, draw: (g) => { g.beginPath(); g.arc(8, 7, 6, 0, Math.PI * 2); g.fillStyle = '#e6ecff'; g.fill(); g.fillRect(5, 11, 6, 4); g.fillStyle = OUTLINE; g.fillRect(4.5, 5, 3, 3); g.fillRect(8.5, 5, 3, 3); } },

@@ -7,7 +7,7 @@ import * as C from '@shared/config';
 import type { GameMap } from '@shared/map';
 import { type MoveInput, type PlayerBody, applyImpulse, makeBody, stepPlayer } from '@shared/physics';
 import { castTiles, rayVsBox, lineOfSight } from '@shared/raycast';
-import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, allowedWeapons, canThrow, isGun, isPrimary } from '@shared/weapons';
+import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, allowedWeapons, canThrow, defaultWeapon, isGun, isPrimary } from '@shared/weapons';
 import type { DbConnection } from '../module_bindings';
 import type { Player, Pstate } from '../module_bindings/types';
 
@@ -74,6 +74,8 @@ export interface WorldView {
   mode: number;
   rules: SimRules;
   serverNow(): number;
+  /** Where a CPU player with nothing to shoot should head (feet position), if anywhere. */
+  goal(x: number, y: number): { x: number; y: number } | null;
   /** Everyone this actor could hit, excluding itself. */
   targets(selfKey: string, out: Target[]): number;
 }
@@ -98,6 +100,8 @@ export class Actor {
   pistolMag = 12;
   reserve = 0;
   grenades = 0;
+  /** Railgun shots left from an airdrop. */
+  power = 0;
   reloadUntilMs = 0;
   private lastShotMs = WEAPONS.map(() => 0);
   private lastMeleeMs = 0;
@@ -157,6 +161,9 @@ export class Actor {
     this.pistolMag = row.pistolMag;
     this.reserve = row.reserve;
     this.grenades = row.grenades;
+    // A crate was just opened: the server has already put the railgun in our hands.
+    if (row.alive && row.power === C.RAIL_SHOTS && this.power < C.RAIL_SHOTS) this.weapon = W_RAIL;
+    this.power = row.power;
     this.reloadUntilMs = Number(row.reloadUntilMicros) / 1000;
     if (snapped === 'respawn') this.weapon = row.weapon;
     return snapped;
@@ -200,8 +207,8 @@ export class Actor {
       const def = WEAPONS[w];
       const trigger = def.kind === 'auto' ? input.fire : input.firePressed;
       if (trigger && now - this.lastShotMs[w] >= 1000 / def.rate && !this.reloading) {
-        const left = w === W_PISTOL ? this.pistolMag : this.mag;
-        if (left > 0 || world.rules.infiniteAmmo) this.fire(def.id, world, now);
+        const left = w === W_RAIL ? this.power : w === W_PISTOL ? this.pistolMag : this.mag;
+        if (left > 0 || (world.rules.infiniteAmmo && w !== W_RAIL)) this.fire(def.id, world, now);
         else if (input.firePressed) {
           this.fx?.empty();
           if (!world.rules.infiniteAmmo) this.requestReload();
@@ -219,7 +226,7 @@ export class Actor {
   }
 
   private swapWeapon(mode: number): void {
-    const list = allowedWeapons(mode, this.primary).filter((x) => mode !== C.MODE_ARMS || x !== W_KNIFE);
+    const list = allowedWeapons(mode, this.primary, this.power).filter((x) => mode !== C.MODE_ARMS || x !== W_KNIFE);
     if (list.length < 2) return;
     const i = list.indexOf(this.weapon);
     this.weapon = list[(i + 1) % list.length];
@@ -229,7 +236,7 @@ export class Actor {
 
   private requestReload(): void {
     const w = this.weapon;
-    if (!isGun(w) || this.reloading) return;
+    if (!isGun(w) || w === W_RAIL || this.reloading) return;
     const def = WEAPONS[w];
     if (w === W_PISTOL ? this.pistolMag >= def.mag : this.mag >= def.mag || this.reserve <= 0) return;
     this.wantReload = true;
@@ -256,7 +263,8 @@ export class Actor {
   private fire(wid: number, world: WorldView, now: number): void {
     const def = WEAPONS[wid];
     this.lastShotMs[wid] = now;
-    if (!world.rules.infiniteAmmo) {
+    if (wid === W_RAIL) this.power = Math.max(0, this.power - 1);
+    else if (!world.rules.infiniteAmmo) {
       if (wid === W_PISTOL) this.pistolMag--;
       else this.mag--;
     }
@@ -277,6 +285,7 @@ export class Actor {
     const hitCount = new Map<string, { t: Target; pellets: number; angleSum: number }>();
     // Friendly fire off: bullets pass straight through teammates.
     const skipTeam = world.rules.teams && !world.rules.friendlyFire && this.team !== 0 ? this.team : -1;
+    const pierce = wid === W_RAIL;
 
     for (let p = 0; p < def.pellets; p++) {
       // Shotgun pellets spread evenly across the cone with a little jitter; others are random.
@@ -289,11 +298,21 @@ export class Actor {
       let best = castTiles(world.map, startX, startY, dx, dy, def.range);
       let wall = best < def.range;
       let hitT: Target | null = null;
+      const land = (t: Target) => {
+        const e = hitCount.get(t.key) ?? { t, pellets: 0, angleSum: 0 };
+        e.pellets++;
+        e.angleSum += ang;
+        hitCount.set(t.key, e);
+      };
       for (let i = 0; i < nTargets; i++) {
         const t = tmpTargets[i];
         if (t.team === skipTeam) continue;
         const d = rayVsBox(startX, startY, dx, dy, t.x - C.PLAYER_W / 2, t.y - C.PLAYER_H, t.x + C.PLAYER_W / 2, t.y, best);
         if (d >= 0 && d < best) {
+          if (pierce) {
+            land(t); // the slug carries on to the wall
+            continue;
+          }
           best = d;
           hitT = t;
           wall = false;
@@ -301,12 +320,7 @@ export class Actor {
       }
       ends.push(startX + dx * best, startY + dy * best);
       wallHits.push(wall);
-      if (hitT) {
-        const e = hitCount.get(hitT.key) ?? { t: hitT, pellets: 0, angleSum: 0 };
-        e.pellets++;
-        e.angleSum += ang;
-        hitCount.set(hitT.key, e);
-      }
+      if (hitT) land(hitT);
     }
 
     const hits = [...hitCount.values()].map((e) => ({ target: e.t.id, pellets: e.pellets, angle: e.angleSum / e.pellets, viewMs: e.t.viewMs }));
@@ -317,6 +331,7 @@ export class Actor {
     if (def.recoil > 0) applyImpulse(this.body, -Math.cos(this.aim) * def.recoil, -Math.sin(this.aim) * def.recoil);
     this.fx?.shot(wid, startX, startY, ends, wallHits, this.colorIdx);
     this.fx?.shake(def.shake);
+    if (wid === W_RAIL && this.power === 0) this.weapon = defaultWeapon(world.mode, this.primary);
     this.markActive();
   }
 

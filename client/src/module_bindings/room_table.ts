@@ -11,6 +11,7 @@ import {
 } from "spacetimedb";
 import {
   Rules,
+  MatchRules,
 } from "./types";
 
 
@@ -32,4 +33,7 @@ export default __t.row({
   roundNo: __t.u32().name("round_no"),
   createdAt: __t.timestamp().name("created_at"),
   quick: __t.bool(),
+  get match() {
+    return MatchRules;
+  },
 });

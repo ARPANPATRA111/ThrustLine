@@ -47,8 +47,8 @@ export class Effects {
     return oldest; // pool full: recycle the one closest to expiring
   }
 
-  /** A bullet tracer from (x0, y0) to (x1, y1), fading over 80 ms. */
-  tracer(x0: number, y0: number, x1: number, y1: number, color: number, width = 2): void {
+  /** A bullet tracer from (x0, y0) to (x1, y1), fading over 80 ms unless told otherwise. */
+  tracer(x0: number, y0: number, x1: number, y1: number, color: number, width = 2, fadeMs = TRACER_FADE_MS): void {
     const f = this.take();
     const len = Math.hypot(x1 - x0, y1 - y0);
     f.s.texture = this.tex.tracer;
@@ -60,7 +60,7 @@ export class Effects {
     f.s.alpha = 1;
     f.s.visible = true;
     f.kind = 0;
-    f.life = f.max = TRACER_FADE_MS / 1000;
+    f.life = f.max = fadeMs / 1000;
   }
 
   /** Muzzle flash: visible for 2 frames. */

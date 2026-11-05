@@ -6,8 +6,8 @@
 import { schema, table, t, SenderError, type Infer, type InferSchema, type ReducerCtx } from 'spacetimedb/server';
 import { ScheduleAt, type Identity } from 'spacetimedb';
 import * as C from './shared/config';
-import { MAP_H, MAP_W, PICKUP_AMMO, PICKUP_GRENADE, PICKUP_HEALTH, RIG7, T_ACID, T_SOLID, boxTouchesTile, spawnWorldPos } from './shared/map';
-import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, PRIMARIES, allowedWeapons, canThrow, damageAtDistance, defaultWeapon, effectivePrimary, grenadeDamage, isGun, isPrimary, pickupActive } from './shared/weapons';
+import { MAP_H, MAP_W, PICKUP_AMMO, PICKUP_DROP, PICKUP_GRENADE, PICKUP_HEALTH, PICKUP_SHIELD, RIG7, T_ACID, T_SOLID, boxTouchesTile, spawnWorldPos } from './shared/map';
+import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, PRIMARIES, allowedWeapons, canThrow, damageAtDistance, defaultWeapon, effectivePrimary, grenadeDamage, isGun, isPrimary, pickupActive } from './shared/weapons';
 import { fuseTicks, simulateGrenade } from './shared/grenade';
 import { pickSpawn, shuffledSpawnOrder, type Point } from './shared/spawn';
 import { lineOfSight } from './shared/raycast';
@@ -45,6 +45,11 @@ const Rules = t.object('Rules', {
 });
 type RulesRow = Infer<typeof Rules>;
 
+/** Arena options the host can change in the lobby. */
+const MatchRules = t.object('MatchRules', {
+  airdrops: t.bool(),
+});
+
 const room = table(
   { name: 'room', public: true },
   {
@@ -66,6 +71,7 @@ const room = table(
     createdAt: t.timestamp(),
     /** Quick Play: open to anyone, no lobby, rounds run on a loop. */
     quick: t.bool().default(false),
+    match: MatchRules.default({ ...C.DEFAULT_MATCH }),
   },
 );
 
@@ -104,6 +110,10 @@ const player = table(
     pingMs: t.u16(),
     /** False while the slot is being held for a dropped player (see RECONNECT_GRACE_SEC). */
     connected: t.bool().default(true),
+    /** Extra hit points from a shield pickup: damage takes these first. */
+    shield: t.f32().default(0),
+    /** Railgun shots left from an airdrop. */
+    power: t.u8().default(0),
   },
 );
 
@@ -270,6 +280,15 @@ const pickupJob = table(
     roomId: t.u64().index('btree'),
   },
 );
+const airdropJob = table(
+  { name: 'airdrop_job' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+    roomId: t.u64().index('btree'),
+    roundNo: t.u32(),
+  },
+);
 const dropJob = table(
   { name: 'drop_job' },
   {
@@ -322,6 +341,12 @@ const emoteEv = table(
   { roomId: t.u64(), identity: t.identity(), emote: t.u8(), x: t.f32(), y: t.f32() },
 );
 
+/** Something the whole room should notice (x/y locate it). */
+const noticeEv = table(
+  { name: 'notice_ev', public: true, event: true },
+  { roomId: t.u64(), kind: t.u8(), x: t.f32(), y: t.f32() },
+);
+
 const spacetimedb = schema({
   room,
   player,
@@ -337,6 +362,7 @@ const spacetimedb = schema({
   lobbyJob,
   detonateJob,
   pickupJob,
+  airdropJob,
   dropJob,
   shotEv,
   hitEv,
@@ -347,6 +373,7 @@ const spacetimedb = schema({
   pongEv,
   kickEv,
   emoteEv,
+  noticeEv,
 });
 export default spacetimedb;
 
@@ -494,6 +521,8 @@ function spawnAt(ctx: Ctx, r: RoomRow, p: PlayerRow, spawnIdx: number): PlayerRo
     respawnAtMicros: 0n,
     cx: pos.x,
     cy: pos.y,
+    shield: 0,
+    power: 0,
   };
   ctx.db.player.identity.update(updated);
   const ps = ctx.db.pstate.identity.find(p.identity);
@@ -549,7 +578,10 @@ function applyDamage(ctx: Ctx, victim: PlayerRow, amount: number, attacker: Iden
   const pos = ctx.db.pstate.identity.find(victim.identity);
   const px = pos ? pos.x : 0;
   const py = pos ? pos.y - C.PLAYER_H / 2 : 0;
-  victim.hp = Math.max(0, victim.hp - amount);
+  // A shield takes weapon damage first; acid eats straight through it.
+  const soaked = cause === C.CAUSE_ACID ? 0 : Math.min(victim.shield, amount);
+  victim.shield -= soaked;
+  victim.hp = Math.max(0, victim.hp - (amount - soaked));
   const killed = victim.hp <= 0;
   ctx.db.hitEv.insert({ roomId: victim.roomId, attacker, target: victim.identity, dmg: amount, x: px, y: py, killed });
   if (!killed) return result;
@@ -561,6 +593,8 @@ function applyDamage(ctx: Ctx, victim: PlayerRow, amount: number, attacker: Iden
   victim.deaths += 1;
   victim.streak = 0;
   victim.reloadUntilMicros = 0n;
+  victim.shield = 0;
+  victim.power = 0;
   if (selfInflicted) victim.score += C.SCORE_SELF_DEATH;
   victim.respawnAtMicros = scheduleRespawn(ctx, victim, C.RESPAWN_SEC);
   const meta = ctx.db.pmeta.identity.find(victim.identity);
@@ -656,6 +690,8 @@ function addPlayerToRoom(ctx: Ctx, r: RoomRow, name: string, isBot: boolean): vo
     cy: start.y,
     pingMs: 0,
     connected: true,
+    shield: 0,
+    power: 0,
   });
   ctx.db.pstate.insert({ identity: ctx.sender, roomId: r.id, x: start.x, y: start.y, vx: 0, vy: 0, aim: 0, flags: 0, weapon: 0, seq: 0, serverMicros: now, sentMs: nowMs(ctx) });
   ctx.db.pmeta.insert({
@@ -738,6 +774,7 @@ function clearRoomJobs(ctx: Ctx, roomId: bigint, includePickups: boolean): void 
   for (const g of [...ctx.db.grenade.roomId.filter(roomId)]) ctx.db.grenade.id.delete(g.id);
   if (includePickups) {
     for (const j of [...ctx.db.pickupJob.roomId.filter(roomId)]) ctx.db.pickupJob.scheduledId.delete(j.scheduledId);
+    for (const j of [...ctx.db.airdropJob.roomId.filter(roomId)]) ctx.db.airdropJob.scheduledId.delete(j.scheduledId);
     for (const j of [...ctx.db.roundEndJob.roomId.filter(roomId)]) ctx.db.roundEndJob.scheduledId.delete(j.scheduledId);
     for (const j of [...ctx.db.lobbyJob.roomId.filter(roomId)]) ctx.db.lobbyJob.scheduledId.delete(j.scheduledId);
   }
@@ -811,6 +848,7 @@ function openRoom(ctx: Ctx, name: string, mode: number, roundSec: number, dev: b
     roundNo: 0,
     createdAt: ctx.timestamp,
     quick,
+    match: { ...C.DEFAULT_MATCH },
   });
   // Seed pickups from the map markers.
   for (const m of RIG7.pickups) {
@@ -926,8 +964,8 @@ export const kickPlayer = spacetimedb.reducer({ target: t.identity() }, (ctx, { 
 });
 
 export const updateRoomSettings = spacetimedb.reducer(
-  { mode: t.u8(), roundSec: t.u32(), teams: t.bool(), rules: Rules },
-  (ctx, { mode, roundSec, teams, rules }) => {
+  { mode: t.u8(), roundSec: t.u32(), teams: t.bool(), rules: Rules, match: MatchRules },
+  (ctx, { mode, roundSec, teams, rules, match }) => {
     const { r } = requireHost(ctx);
     if (r.quick) throw new SenderError('Quick Play rooms use the standard rules');
     if (r.state === ROOM_PLAYING) throw new SenderError('Round in progress');
@@ -935,7 +973,7 @@ export const updateRoomSettings = spacetimedb.reducer(
     if (!validRoundSec(roundSec, r.dev)) throw new SenderError('Invalid round length');
     if (!validRules(rules)) throw new SenderError('Invalid house rules');
     // Respawn delay is fixed at five seconds, whatever an older client sends.
-    const updated = { ...r, mode, roundSec, teams, rules: { ...rules, respawnSec: C.RESPAWN_SEC } };
+    const updated = { ...r, mode, roundSec, teams, match, rules: { ...rules, respawnSec: C.RESPAWN_SEC } };
     ctx.db.room.id.update(updated);
     if (teams !== r.teams) assignTeams(ctx, updated, teams);
   },
@@ -978,7 +1016,10 @@ function beginRound(ctx: Ctx, r: RoomRow): void {
   const now = nowMicros(ctx);
 
   clearRoomJobs(ctx, r.id, true);
-  for (const pk of [...ctx.db.pickup.roomId.filter(r.id)]) ctx.db.pickup.id.update({ ...pk, availableAtMicros: 0n });
+  for (const pk of [...ctx.db.pickup.roomId.filter(r.id)]) {
+    if (pk.kind === PICKUP_DROP) ctx.db.pickup.id.delete(pk.id);
+    else ctx.db.pickup.id.update({ ...pk, availableAtMicros: 0n });
+  }
 
   const started: RoomRow = {
     ...r,
@@ -1010,6 +1051,10 @@ function beginRound(ctx: Ctx, r: RoomRow): void {
     spawnAt(ctx, started, reset, idx);
   }
   ctx.db.roundEndJob.insert({ scheduledId: 0n, scheduledAt: atMicros(started.endsAtMicros), roomId: r.id, roundNo: started.roundNo });
+  if (started.match.airdrops && started.rules.pickups && pickupActive(started.mode, PICKUP_DROP)) {
+    const first = started.dev ? C.AIRDROP_FIRST_DEV_SEC : C.AIRDROP_FIRST_SEC;
+    ctx.db.airdropJob.insert({ scheduledId: 0n, scheduledAt: atMicros(now + secToMicros(first)), roomId: r.id, roundNo: started.roundNo });
+  }
 }
 
 export const choosePrimary = spacetimedb.reducer({ weapon: t.u8() }, (ctx, { weapon }) => {
@@ -1183,7 +1228,7 @@ export const sync = spacetimedb.reducer(
       if (a.melee !== undefined && fireRateOk(meta.lastMeleeMicros, now, WEAPONS[W_KNIFE].rate)) addBoost(credit, C.KNIFE_LUNGE);
       for (const s of a.shots.slice(0, MAX_SHOTS_PER_SYNC)) {
         const w = WEAPONS[s.weapon];
-        if (w && s.weapon === p.weapon && w.recoil > 0 && fireRateOk(meta.lastFire[s.weapon] ?? 0n, now, w.rate)) addBoost(credit, w.recoil);
+        if (w && (s.weapon === p.weapon || s.weapon === a.weapon) && w.recoil > 0 && fireRateOk(meta.lastFire[s.weapon] ?? 0n, now, w.rate)) addBoost(credit, w.recoil);
       }
       const runMul = r.mode === C.MODE_BLADES ? C.BLADES_RUN_MUL : 1;
       const legal = validateMove(RIG7, pos, { x: a.x, y: a.y }, dt) && spendMove(credit, a.x - pos.x, a.y - pos.y, dt, runMul);
@@ -1250,7 +1295,7 @@ export const sync = spacetimedb.reducer(
 
     // ---- 6. Actions: weapon switch, reload, shots, melee, throw ----
     if (p.alive) {
-      const allowed = allowedWeapons(r.mode, p.primary);
+      const allowed = allowedWeapons(r.mode, p.primary, p.power);
       if (a.weapon !== p.weapon && allowed.includes(a.weapon)) {
         p.weapon = a.weapon;
         p.reloadUntilMicros = 0n; // switching cancels a reload
@@ -1258,7 +1303,7 @@ export const sync = spacetimedb.reducer(
       if (a.reload && !r.rules.infiniteAmmo) startReload(p, now);
       for (const shot of a.shots.slice(0, MAX_SHOTS_PER_SYNC)) {
         if (!p.alive) break;
-        handleShot(ctx, r, p, meta, pos, shot, now, fmul);
+        handleShot(ctx, r, p, meta, pos, shot, now, fmul, me.weapon);
       }
       if (a.melee !== undefined && p.alive) handleMelee(ctx, r, p, meta, pos, a.melee, now, fmul);
       if (a.throwG !== undefined && p.alive) handleThrow(ctx, r, p, meta, pos, ps, a.throwG, now);
@@ -1282,7 +1327,7 @@ function finishReload(p: PlayerRow): void {
 }
 
 function startReload(p: PlayerRow, now: bigint): void {
-  if (!isGun(p.weapon) || p.reloadUntilMicros > 0n) return;
+  if (!isGun(p.weapon) || p.weapon === W_RAIL || p.reloadUntilMicros > 0n) return;
   const w = WEAPONS[p.weapon];
   if (p.weapon === W_PISTOL) {
     if (p.pistolMag >= w.mag) return;
@@ -1297,7 +1342,7 @@ function collectPickups(ctx: Ctx, r: RoomRow, p: PlayerRow, pos: { x: number; y:
   const left = pos.x - C.PLAYER_W / 2;
   const right = pos.x + C.PLAYER_W / 2;
   const top = pos.y - C.PLAYER_H;
-  for (const pk of ctx.db.pickup.roomId.filter(r.id)) {
+  for (const pk of [...ctx.db.pickup.roomId.filter(r.id)]) {
     if (pk.availableAtMicros !== 0n) continue;
     if (!pickupActive(r.mode, pk.kind)) continue;
     const px = pk.tx * C.TILE;
@@ -1315,8 +1360,20 @@ function collectPickups(ctx: Ctx, r: RoomRow, p: PlayerRow, pos: { x: number; y:
     } else if (pk.kind === PICKUP_GRENADE) {
       if (p.grenades >= C.GRENADE_CRATE_MAX) continue;
       p.grenades += 1;
+    } else if (pk.kind === PICKUP_SHIELD) {
+      if (p.shield >= C.SHIELD_MAX) continue;
+      p.shield = C.SHIELD_MAX;
+    } else if (pk.kind === PICKUP_DROP) {
+      if (p.power >= C.RAIL_SHOTS) continue;
+      // A one-off: the crate is gone and the railgun goes straight into the player's hands.
+      p.power = C.RAIL_SHOTS;
+      p.weapon = W_RAIL;
+      p.reloadUntilMicros = 0n;
+      ctx.db.pickup.id.delete(pk.id);
+      ctx.db.pickupEv.insert({ roomId: r.id, identity: p.identity, kind: pk.kind, pickupId: pk.id });
+      continue;
     }
-    const at = now + secToMicros(C.PICKUP_RESPAWN_SEC);
+    const at = now + secToMicros(pk.kind === PICKUP_SHIELD ? C.SHIELD_RESPAWN_SEC : C.PICKUP_RESPAWN_SEC);
     ctx.db.pickup.id.update({ ...pk, availableAtMicros: at });
     ctx.db.pickupJob.insert({ scheduledId: 0n, scheduledAt: atMicros(at), pickupId: pk.id, roomId: r.id });
     ctx.db.pickupEv.insert({ roomId: r.id, identity: p.identity, kind: pk.kind, pickupId: pk.id });
@@ -1346,20 +1403,25 @@ function lagCompPositions(meta: MetaRow | null, ps: PStateRow, viewMs: number, n
 }
 
 /** Validate one shot (section 6, "favour the shooter within tolerances") and apply its hits. */
-function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x: number; y: number }, shot: ShotRow, now: bigint, fmul: number): void {
+function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x: number; y: number }, shot: ShotRow, now: bigint, fmul: number, heldBefore: number): void {
   const wid = shot.weapon;
-  if (!isGun(wid) || wid !== p.weapon || !allowedWeapons(r.mode, p.primary).includes(wid)) return rejected(r, 'shot: weapon not equipped');
+  // One packet covers up to 50 ms: a shot fired just before a swap carries the gun held when the
+  // packet began, not the one it ends on.
+  const held = wid === p.weapon || wid === heldBefore;
+  if (!isGun(wid) || !held || !allowedWeapons(r.mode, p.primary, p.power).includes(wid)) return rejected(r, 'shot: weapon not equipped');
   if (p.reloadUntilMicros > 0n) return rejected(r, 'shot: reloading');
   const w = WEAPONS[wid];
   if (!fireRateOk(meta.lastFire[wid] ?? 0n, now, w.rate)) return rejected(r, 'shot: too fast');
-  const magLeft = wid === W_PISTOL ? p.pistolMag : p.mag;
-  if (magLeft <= 0 && !r.rules.infiniteAmmo) return rejected(r, 'shot: empty');
+  const magLeft = wid === W_RAIL ? p.power : wid === W_PISTOL ? p.pistolMag : p.mag;
+  if (magLeft <= 0 && (wid === W_RAIL || !r.rules.infiniteAmmo)) return rejected(r, 'shot: empty');
   // The shot may have been fired before this sync's movement (e.g. shotgun recoil moved the
   // shooter since), so the origin may be near the current OR the previous accepted position.
   if (!shotOriginOk(pos, shot.ox, shot.oy) && !shotOriginOk({ x: meta.prevX, y: meta.prevY }, shot.ox, shot.oy)) return rejected(r, `shot: origin (${shot.ox.toFixed(0)},${shot.oy.toFixed(0)}) far from (${pos.x.toFixed(0)},${pos.y.toFixed(0)})`);
 
-  // Accepted: spend ammo and advance the fire-rate token bucket.
-  if (!r.rules.infiniteAmmo) {
+  // Accepted: spend ammo and advance the fire-rate token bucket. Infinite ammo never covers the
+  // railgun: its three shots are the whole point of the crate.
+  if (wid === W_RAIL) p.power -= 1;
+  else if (!r.rules.infiniteAmmo) {
     if (wid === W_PISTOL) p.pistolMag -= 1;
     else p.mag -= 1;
   }
@@ -1371,7 +1433,11 @@ function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x:
 
   const nowMs_ = Number(now) / 1000;
   const seen = new Set<string>();
+  // Each pellet stops at one body, so a shot cannot hit more targets than it has pellets.
+  // Only the railgun goes through people.
+  let pelletsLeft = wid === W_RAIL ? Infinity : w.pellets;
   for (const claim of shot.hits.slice(0, MAX_HITS_PER_SHOT)) {
+    if (pelletsLeft <= 0) break;
     const key = claim.target.toHexString();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -1391,12 +1457,14 @@ function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x:
       if (d >= 0) break;
     }
     if (d < 0) { rejected(r, 'hit claim: out of range or off the ray'); continue; }
-    const pellets = Math.max(1, Math.min(claim.pellets, maxPelletsAt(w, d)));
+    const pellets = Math.max(1, Math.min(claim.pellets, maxPelletsAt(w, d), pelletsLeft));
+    pelletsLeft -= pellets;
     const dmg = pellets * damageAtDistance(w, d) * fmul;
     const res = damageOther(ctx, r, p, target, dmg, wid);
     if (res.killed) creditKill(p, res);
   }
   ctx.db.shotEv.insert({ roomId: r.id, shooter: p.identity, weapon: wid, x0: shot.ox, y0: shot.oy, ends: shot.ends.slice(0, MAX_TRACER_FLOATS) });
+  if (wid === W_RAIL && p.power <= 0) p.weapon = defaultWeapon(r.mode, p.primary);
 }
 
 /** Melee: the server finds targets itself. */
@@ -1487,6 +1555,22 @@ export const returnToLobby = spacetimedb.reducer({ onSchedule: lobbyJob }, { job
   if (!r || r.roundNo !== job.roundNo || r.state !== ROOM_ENDED) return;
   if (r.quick) beginRound(ctx, r);
   else toLobby(ctx, r);
+});
+
+/** Drop a crate on a random landing point (one at a time), then schedule the next. */
+export const airdrop = spacetimedb.reducer({ onSchedule: airdropJob }, { job: airdropJob.rowType }, (ctx, { job }) => {
+  if (!ctx.senderAuth.isInternal) throw new SenderError('Scheduler only');
+  const r = ctx.db.room.id.find(job.roomId);
+  if (!r || r.roundNo !== job.roundNo || r.state !== ROOM_PLAYING) return;
+  const now = nowMicros(ctx);
+  if (![...ctx.db.pickup.roomId.filter(r.id)].some((pk) => pk.kind === PICKUP_DROP)) {
+    const spot = RIG7.drops[ctx.random.integerInRange(0, RIG7.drops.length - 1)];
+    const landAt = now + secToMicros(C.AIRDROP_FALL_SEC);
+    const pk = ctx.db.pickup.insert({ id: 0n, roomId: r.id, kind: PICKUP_DROP, tx: spot.tx, ty: spot.ty, availableAtMicros: landAt });
+    ctx.db.pickupJob.insert({ scheduledId: 0n, scheduledAt: atMicros(landAt), pickupId: pk.id, roomId: r.id });
+    ctx.db.noticeEv.insert({ roomId: r.id, kind: C.NOTICE_AIRDROP, x: spot.tx * C.TILE, y: spot.ty * C.TILE });
+  }
+  ctx.db.airdropJob.insert({ scheduledId: 0n, scheduledAt: atMicros(now + secToMicros(C.AIRDROP_EVERY_SEC)), roomId: r.id, roundNo: r.roundNo });
 });
 
 /** The grace period ran out: the player is not coming back. */

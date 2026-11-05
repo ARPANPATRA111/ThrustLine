@@ -36,6 +36,7 @@ const reducer = (p: Page, name: string, args: object) =>
   p.evaluate(([n, a]) => (window as any).__tl.net.conn.reducers[n as string](a), [name, args] as const);
 
 const rules = (p: Page) => p.evaluate(() => (window as any).__tl.game.room.rules);
+const match = (p: Page) => p.evaluate(() => (window as any).__tl.game.room.match);
 
 async function waitAlive(p: Page): Promise<void> {
   await expect.poll(async () => (await st(p)).me?.alive, { timeout: 15_000 }).toBe(true);
@@ -139,7 +140,7 @@ test('every weapon works in Arms; Blades and Boom restrict loadouts', async ({ b
   await waitRoundEnd(pages);
 
   // ---- Round 4: Blades ----
-  await reducer(a, 'updateRoomSettings', { mode: 1, roundSec: 30, teams: false, rules: await rules(a) });
+  await reducer(a, 'updateRoomSettings', { mode: 1, roundSec: 30, teams: false, rules: await rules(a), match: await match(a) });
   await playRound(a, pages);
   await waitAlive(a);
   expect((await st(a)).mode).toBe(1);
@@ -156,7 +157,7 @@ test('every weapon works in Arms; Blades and Boom restrict loadouts', async ({ b
   await waitRoundEnd(pages);
 
   // ---- Round 5: Boom ----
-  await reducer(a, 'updateRoomSettings', { mode: 2, roundSec: 30, teams: false, rules: await rules(a) });
+  await reducer(a, 'updateRoomSettings', { mode: 2, roundSec: 30, teams: false, rules: await rules(a), match: await match(a) });
   await playRound(a, pages);
   await waitAlive(a);
   expect((await st(a)).mode).toBe(2);
