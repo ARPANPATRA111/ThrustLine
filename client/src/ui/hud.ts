@@ -48,6 +48,7 @@ export class Hud {
   private tint = $('frenzy-tint');
   private banner = $('banner');
   private notice = $('notice');
+  private hillChip = $('hill-chip');
   private debugEl = $('debug');
   private teamEl = $('team-score');
   private last: Record<string, string | number | boolean> = {};
@@ -138,6 +139,17 @@ export class Hud {
     if (!this.changed('teams', key)) return;
     this.teamEl.classList.toggle('hidden', !scores);
     if (scores) this.teamEl.innerHTML = `<span class="red${myTeam === 1 ? ' mine' : ''}">RED ${scores[0]}</span><span class="blue${myTeam === 2 ? ' mine' : ''}">${scores[1]} BLUE</span>`;
+  }
+
+  /** King of the Hill status under the timer; `cls` colours it (open, mine, enemy, contested). */
+  setHill(text: string | null, cls: string): void {
+    const key = text === null ? '' : `${cls}:${text}`;
+    if (!this.changed('hill', key)) return;
+    this.hillChip.classList.toggle('hidden', text === null);
+    if (text !== null) {
+      this.hillChip.textContent = text;
+      this.hillChip.className = `hill-chip ${cls}`;
+    }
   }
 
   setReloading(on: boolean): void {

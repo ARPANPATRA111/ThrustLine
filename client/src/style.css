@@ -291,6 +291,11 @@ body.touch-mode .crosshair { display: none; }
 .banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 .notice-line { position: absolute; left: 50%; top: calc(74px + var(--safe-t)); transform: translateX(-50%); padding: 3px 12px; border-radius: 8px; background: rgba(7, 11, 24, 0.6); font-family: var(--display); font-size: 15px; letter-spacing: 0.1em; white-space: nowrap; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
 .notice-line.show { opacity: 1; }
+.hill-chip { margin-top: 3px; padding: 2px 10px; border-radius: 8px; background: rgba(7, 11, 24, 0.72); border: 1px solid var(--line); font-family: var(--display); font-size: 12px; letter-spacing: 0.08em; white-space: nowrap; }
+.hill-chip.open { color: #22d3ee; }
+.hill-chip.mine { color: #7cff4f; border-color: #7cff4f; }
+.hill-chip.enemy { color: var(--gold); }
+.hill-chip.contested { color: #ff4d6d; border-color: #ff4d6d; }
 /* Menu + fullscreen sit beside the timer, above the touch layer so thumbs can always reach them. */
 .tc-row { display: flex; align-items: center; gap: 6px; }
 .hud-tools { display: flex; gap: 6px; }

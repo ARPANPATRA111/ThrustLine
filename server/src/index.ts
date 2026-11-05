@@ -6,7 +6,7 @@
 import { schema, table, t, SenderError, type Infer, type InferSchema, type ReducerCtx } from 'spacetimedb/server';
 import { ScheduleAt, type Identity } from 'spacetimedb';
 import * as C from './shared/config';
-import { MAP_H, MAP_W, PICKUP_AMMO, PICKUP_DROP, PICKUP_GRENADE, PICKUP_HEALTH, PICKUP_SHIELD, RIG7, T_ACID, T_SOLID, boxTouchesTile, spawnWorldPos } from './shared/map';
+import { MAP_H, MAP_W, inZone, PICKUP_AMMO, PICKUP_DROP, PICKUP_GRENADE, PICKUP_HEALTH, PICKUP_SHIELD, RIG7, T_ACID, T_SOLID, boxTouchesTile, spawnWorldPos } from './shared/map';
 import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, PRIMARIES, allowedWeapons, canThrow, damageAtDistance, defaultWeapon, effectivePrimary, grenadeDamage, isGun, isPrimary, pickupActive } from './shared/weapons';
 import { fuseTicks, simulateGrenade } from './shared/grenade';
 import { pickSpawn, shuffledSpawnOrder, type Point } from './shared/spawn';
@@ -48,6 +48,9 @@ type RulesRow = Infer<typeof Rules>;
 /** Arena options the host can change in the lobby. */
 const MatchRules = t.object('MatchRules', {
   airdrops: t.bool(),
+  suddenDeath: t.bool(),
+  /** C.OBJECTIVE_KILLS or C.OBJECTIVE_HILL. */
+  objective: t.u8(),
 });
 
 const room = table(
@@ -214,6 +217,21 @@ const grenade = table(
   },
 );
 
+/** King of the Hill: where the zone is and who holds it (one row per room). */
+const hill = table(
+  { name: 'hill', public: true },
+  {
+    roomId: t.u64().primaryKey(),
+    idx: t.u8(),
+    state: t.u8(),
+    /** The player holding the zone (free-for-all). */
+    holder: t.option(t.identity()),
+    /** The team holding the zone (team match). */
+    team: t.u8(),
+    movesAtMicros: t.i64(),
+  },
+);
+
 /** Players the host removed from a room; they cannot rejoin it. */
 const kicked = table(
   { name: 'kicked' },
@@ -289,6 +307,15 @@ const airdropJob = table(
     roundNo: t.u32(),
   },
 );
+const hillJob = table(
+  { name: 'hill_job' },
+  {
+    scheduledId: t.u64().primaryKey().autoInc(),
+    scheduledAt: t.scheduleAt(),
+    roomId: t.u64().index('btree'),
+    roundNo: t.u32(),
+  },
+);
 const dropJob = table(
   { name: 'drop_job' },
   {
@@ -355,6 +382,7 @@ const spacetimedb = schema({
   throttle,
   pickup,
   grenade,
+  hill,
   kicked,
   emoteLog,
   respawnJob,
@@ -363,6 +391,7 @@ const spacetimedb = schema({
   detonateJob,
   pickupJob,
   airdropJob,
+  hillJob,
   dropJob,
   shotEv,
   hitEv,
@@ -444,6 +473,12 @@ function uniqueName(ctx: Ctx, roomId: bigint, raw: string, self: Identity): stri
     if (!taken.has(candidate.toLowerCase())) return candidate;
   }
   return `${wanted || 'Rigger'} ${ctx.random.integerInRange(10, 99)}`.slice(0, C.NAME_MAX);
+}
+
+/** Where the rising acid is right now, or Infinity outside sudden death. */
+function acidLine(r: RoomRow, now: bigint): number {
+  if (!r.match.suddenDeath || !r.rules.acid) return Infinity;
+  return C.acidSurface(Number(now) / 1000, Number(r.endsAtMicros) / 1000, r.roundSec);
 }
 
 function frenzyMul(r: RoomRow, now: bigint): number {
@@ -546,7 +581,8 @@ function respawnPlayer(ctx: Ctx, r: RoomRow, p: PlayerRow): void {
       if (ps) enemies.push({ x: ps.x, y: ps.y });
     }
   }
-  const idx = pickSpawn(RIG7.spawns, death, enemies, () => ctx.random());
+  // Never spawn under the rising acid (leave a player's height of margin).
+  const idx = pickSpawn(RIG7.spawns, death, enemies, () => ctx.random(), acidLine(r, nowMicros(ctx)) - C.PLAYER_H);
   spawnAt(ctx, r, p, idx);
 }
 
@@ -775,6 +811,7 @@ function clearRoomJobs(ctx: Ctx, roomId: bigint, includePickups: boolean): void 
   if (includePickups) {
     for (const j of [...ctx.db.pickupJob.roomId.filter(roomId)]) ctx.db.pickupJob.scheduledId.delete(j.scheduledId);
     for (const j of [...ctx.db.airdropJob.roomId.filter(roomId)]) ctx.db.airdropJob.scheduledId.delete(j.scheduledId);
+    for (const j of [...ctx.db.hillJob.roomId.filter(roomId)]) ctx.db.hillJob.scheduledId.delete(j.scheduledId);
     for (const j of [...ctx.db.roundEndJob.roomId.filter(roomId)]) ctx.db.roundEndJob.scheduledId.delete(j.scheduledId);
     for (const j of [...ctx.db.lobbyJob.roomId.filter(roomId)]) ctx.db.lobbyJob.scheduledId.delete(j.scheduledId);
   }
@@ -784,6 +821,7 @@ function deleteRoom(ctx: Ctx, roomId: bigint): void {
   clearRoomJobs(ctx, roomId, true);
   for (const pk of [...ctx.db.pickup.roomId.filter(roomId)]) ctx.db.pickup.id.delete(pk.id);
   for (const k of [...ctx.db.kicked.roomId.filter(roomId)]) ctx.db.kicked.id.delete(k.id);
+  ctx.db.hill.roomId.delete(roomId);
   ctx.db.room.id.delete(roomId);
 }
 
@@ -848,7 +886,8 @@ function openRoom(ctx: Ctx, name: string, mode: number, roundSec: number, dev: b
     roundNo: 0,
     createdAt: ctx.timestamp,
     quick,
-    match: { ...C.DEFAULT_MATCH },
+    // Short test rounds would otherwise spend all their time under the acid.
+    match: { ...C.DEFAULT_MATCH, suddenDeath: !dev },
   });
   // Seed pickups from the map markers.
   for (const m of RIG7.pickups) {
@@ -1011,6 +1050,8 @@ export const startRound = spacetimedb.reducer((ctx) => {
   beginRound(ctx, r);
 });
 
+const hillMoveMicros = (r: RoomRow) => secToMicros(r.dev ? C.HILL_MOVE_DEV_SEC : C.HILL_MOVE_SEC);
+
 /** Reset the map and everyone's stats, spawn the players and start the clock. */
 function beginRound(ctx: Ctx, r: RoomRow): void {
   const now = nowMicros(ctx);
@@ -1051,6 +1092,12 @@ function beginRound(ctx: Ctx, r: RoomRow): void {
     spawnAt(ctx, started, reset, idx);
   }
   ctx.db.roundEndJob.insert({ scheduledId: 0n, scheduledAt: atMicros(started.endsAtMicros), roomId: r.id, roundNo: started.roundNo });
+  ctx.db.hill.roomId.delete(r.id);
+  if (started.match.objective === C.OBJECTIVE_HILL) {
+    const idx = ctx.random.integerInRange(0, RIG7.hills.length - 1);
+    ctx.db.hill.insert({ roomId: r.id, idx, state: C.HILL_EMPTY, holder: undefined, team: C.TEAM_NONE, movesAtMicros: now + hillMoveMicros(started) });
+    ctx.db.hillJob.insert({ scheduledId: 0n, scheduledAt: atMicros(now + SEC), roomId: r.id, roundNo: started.roundNo });
+  }
   if (started.match.airdrops && started.rules.pickups && pickupActive(started.mode, PICKUP_DROP)) {
     const first = started.dev ? C.AIRDROP_FIRST_DEV_SEC : C.AIRDROP_FIRST_SEC;
     ctx.db.airdropJob.insert({ scheduledId: 0n, scheduledAt: atMicros(now + secToMicros(first)), roomId: r.id, roundNo: started.roundNo });
@@ -1280,7 +1327,8 @@ export const sync = spacetimedb.reducer(
     // ---- 4. Acid hazard ----
     const hazardDt = Math.min(Number(now - meta.lastHazardMicros) / 1e6, C.SYNC_MAX_DT_SEC);
     meta.lastHazardMicros = now;
-    if (r.rules.acid && boxTouchesTile(RIG7, pos.x - C.PLAYER_W / 2, pos.y - C.PLAYER_H, pos.x + C.PLAYER_W / 2, pos.y, T_ACID)) {
+    const inPit = r.rules.acid && boxTouchesTile(RIG7, pos.x - C.PLAYER_W / 2, pos.y - C.PLAYER_H, pos.x + C.PLAYER_W / 2, pos.y, T_ACID);
+    if (inPit || pos.y > acidLine(r, now)) {
       applyDamage(ctx, p, C.ACID_DPS * hazardDt, p.identity, C.CAUSE_ACID);
       // `meta` is written back at the end of this reducer, so it must carry the death spot too.
       if (!p.alive) {
@@ -1571,6 +1619,46 @@ export const airdrop = spacetimedb.reducer({ onSchedule: airdropJob }, { job: ai
     ctx.db.noticeEv.insert({ roomId: r.id, kind: C.NOTICE_AIRDROP, x: spot.tx * C.TILE, y: spot.ty * C.TILE });
   }
   ctx.db.airdropJob.insert({ scheduledId: 0n, scheduledAt: atMicros(now + secToMicros(C.AIRDROP_EVERY_SEC)), roomId: r.id, roundNo: r.roundNo });
+});
+
+/** Once a second during a King of the Hill round: score whoever holds the zone, move it on time. */
+export const hillTick = spacetimedb.reducer({ onSchedule: hillJob }, { job: hillJob.rowType }, (ctx, { job }) => {
+  if (!ctx.senderAuth.isInternal) throw new SenderError('Scheduler only');
+  const r = ctx.db.room.id.find(job.roomId);
+  if (!r || r.roundNo !== job.roundNo || r.state !== ROOM_PLAYING) return;
+  const h = ctx.db.hill.roomId.find(r.id);
+  if (!h) return;
+  const now = nowMicros(ctx);
+  const next = { ...h };
+
+  // Move on schedule, or early if the acid has reached the zone.
+  const surface = acidLine(r, now);
+  const zoneBottom = (z: { ty: number; th: number }) => (z.ty + z.th) * C.TILE;
+  if (now >= h.movesAtMicros || zoneBottom(RIG7.hills[h.idx]) > surface) {
+    const options = RIG7.hills.map((z, i) => ({ z, i })).filter(({ z, i }) => i !== h.idx && zoneBottom(z) <= surface);
+    if (options.length > 0) {
+      const pick = options[ctx.random.integerInRange(0, options.length - 1)];
+      next.idx = pick.i;
+      ctx.db.noticeEv.insert({ roomId: r.id, kind: C.NOTICE_HILL_MOVED, x: pick.z.tx * C.TILE, y: pick.z.ty * C.TILE });
+    }
+    next.movesAtMicros = now + hillMoveMicros(r);
+  }
+
+  // Who is standing in it? One player (or one team) scores; two sides contest it.
+  const zone = RIG7.hills[next.idx];
+  const inside: PlayerRow[] = [];
+  for (const p of roomPlayers(ctx, r.id)) {
+    const c = p.alive ? centreOf(ctx, p.identity) : null;
+    if (c && inZone(zone, c.x, c.y)) inside.push(p);
+  }
+  const held = r.teams ? new Set(inside.map((p) => p.team)).size === 1 : inside.length === 1;
+  next.state = inside.length === 0 ? C.HILL_EMPTY : held ? C.HILL_HELD : C.HILL_CONTESTED;
+  next.holder = held && !r.teams ? inside[0].identity : undefined;
+  next.team = held && r.teams ? inside[0].team : C.TEAM_NONE;
+  if (held) for (const p of inside) ctx.db.player.identity.update({ ...p, score: p.score + C.HILL_POINTS_PER_SEC });
+
+  ctx.db.hill.roomId.update(next);
+  ctx.db.hillJob.insert({ scheduledId: 0n, scheduledAt: atMicros(now + SEC), roomId: r.id, roundNo: r.roundNo });
 });
 
 /** The grace period ran out: the player is not coming back. */

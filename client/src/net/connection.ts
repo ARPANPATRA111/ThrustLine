@@ -3,7 +3,7 @@
 import type { Identity } from 'spacetimedb';
 import { DbConnection, tables, type EventContext, type SubscriptionHandle } from '../module_bindings';
 import type {
-  BoomEv, EmoteEv, Grenade, HitEv, KickEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, PongEv, Pstate, Room, ShotEv,
+  BoomEv, EmoteEv, Grenade, Hill, HitEv, KickEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, PongEv, Pstate, Room, ShotEv,
 } from '../module_bindings/types';
 
 export const STDB_URI: string = import.meta.env.VITE_STDB_URI ?? 'ws://localhost:3000';
@@ -24,6 +24,8 @@ export interface NetHandlers {
   pstateDelete?: (s: Pstate) => void;
   pickupUpsert?: (p: Pickup) => void;
   pickupDelete?: (p: Pickup) => void;
+  hillUpsert?: (h: Hill) => void;
+  hillDelete?: () => void;
   grenadeInsert?: (g: Grenade) => void;
   grenadeDelete?: (g: Grenade) => void;
   shot?: (e: ShotEv) => void;
@@ -125,6 +127,9 @@ export class Net {
     db.pickup.onInsert((_c: EventContext, p) => h().pickupUpsert?.(p));
     db.pickup.onUpdate((_c: EventContext, _o, p) => h().pickupUpsert?.(p));
     db.pickup.onDelete((_c: EventContext, p) => h().pickupDelete?.(p));
+    db.hill.onInsert((_c: EventContext, r) => h().hillUpsert?.(r));
+    db.hill.onUpdate((_c: EventContext, _o, r) => h().hillUpsert?.(r));
+    db.hill.onDelete((_c: EventContext) => h().hillDelete?.());
     db.grenade.onInsert((_c: EventContext, g) => h().grenadeInsert?.(g));
     db.grenade.onDelete((_c: EventContext, g) => h().grenadeDelete?.(g));
     db.shotEv.onInsert((_c: EventContext, e) => h().shot?.(e));
@@ -162,6 +167,7 @@ export class Net {
           tables.pstate.where((r) => r.roomId.eq(roomId)),
           tables.pickup.where((r) => r.roomId.eq(roomId)),
           tables.grenade.where((r) => r.roomId.eq(roomId)),
+          tables.hill.where((r) => r.roomId.eq(roomId)),
           tables.shotEv.where((r) => r.roomId.eq(roomId)),
           tables.hitEv.where((r) => r.roomId.eq(roomId)),
           tables.killEv.where((r) => r.roomId.eq(roomId)),

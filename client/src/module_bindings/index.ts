@@ -56,6 +56,7 @@ import UpdateRoomSettingsReducer from "./update_room_settings_reducer";
 import BoomEvRow from "./boom_ev_table";
 import EmoteEvRow from "./emote_ev_table";
 import GrenadeRow from "./grenade_table";
+import HillRow from "./hill_table";
 import HitEvRow from "./hit_ev_table";
 import KickEvRow from "./kick_ev_table";
 import KillEvRow from "./kill_ev_table";
@@ -106,6 +107,17 @@ const tablesSchema = __schema({
       { name: 'grenade_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, GrenadeRow),
+  hill: __table({
+    name: 'hill',
+    indexes: [
+      { accessor: 'roomId', name: 'hill_room_id_idx_btree', algorithm: 'btree', columns: [
+        'roomId',
+      ] },
+    ],
+    constraints: [
+      { name: 'hill_room_id_key', constraint: 'unique', columns: ['roomId'] },
+    ],
+  }, HillRow),
   hitEv: __table({
     name: 'hit_ev',
     indexes: [

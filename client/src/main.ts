@@ -40,6 +40,7 @@ const TIPS = [
   'Grenades bounce: bank them off walls.',
   'Shields soak damage before your health does.',
   'Airdrops carry a railgun that pierces everyone on the line.',
+  'In the last 30 seconds the acid rises: get high.',
   'Hosts can add CPU players and change the house rules.',
 ];
 
@@ -276,6 +277,8 @@ async function boot(): Promise<void> {
     pickupTaken: (e) => game.onPickup(e),
     emote: (e) => game.onEmote(e),
     notice: (e) => game.onNotice(e),
+    hillUpsert: (h) => game.hillUpsert(h),
+    hillDelete: () => game.hillDelete(),
   };
   // The connection may already be up (it was started during loading): start the clock sync now.
   if (net.conn) time.start();

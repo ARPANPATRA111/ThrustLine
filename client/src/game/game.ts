@@ -1,12 +1,12 @@
 // The match: fixed-step simulation of the local player (and any CPU bots hosted here),
 // interpolation of remote players, server events turned into effects, and rendering.
-import { type Application, Container, Sprite, type Texture, TilingSprite } from 'pixi.js';
+import { type Application, Container, Graphics, Sprite, type Texture, TilingSprite } from 'pixi.js';
 import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
-import { PICKUP_DROP, PICKUP_SHIELD, RIG7, MAP_H, MAP_W } from '@shared/map';
+import { PICKUP_DROP, PICKUP_SHIELD, RIG7, MAP_H, MAP_W, inZone } from '@shared/map';
 import { fuseTicks, grenadePath } from '@shared/grenade';
 import { W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, W_SMG, W_SNIPER, canThrow, isGun, pickupActive } from '@shared/weapons';
-import type { BoomEv, EmoteEv, Grenade, HitEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
+import type { BoomEv, EmoteEv, Grenade, Hill, HitEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
 import type { Net } from '../net/connection';
 import type { TimeSync } from '../net/timesync';
 import { LagEstimator, SnapshotBuffer, type Sample } from '../net/interp';
@@ -131,6 +131,12 @@ export class Game implements WorldView {
   private acid: TilingSprite;
   private acidGlow: Sprite;
   private acidR = acidRect(RIG7);
+  /** Sudden death: a sheet of acid across the whole map, rising from the floor. */
+  private acidSheet: TilingSprite;
+  private wasSuddenDeath = false;
+  /** King of the Hill: the live zone and how it is drawn. */
+  private hill: Hill | null = null;
+  private hillGfx = new Graphics();
   private pickupLayer = new Container();
   private grenadeLayer = new Container();
   private playerLayer = new Container();
@@ -193,8 +199,12 @@ export class Game implements WorldView {
     this.acidGlow.alpha = 0.35;
     this.acidGlow.position.set(this.acidR.x + this.acidR.w / 2, this.acidR.y);
     this.acidGlow.scale.set((this.acidR.w * 1.4) / 32, 90 / 32);
+    this.acidSheet = makeAcid({ x: 0, y: 0, w: MAP_W, h: MAP_H });
+    this.acidSheet.alpha = 0.72;
+    this.acidSheet.visible = false;
+    this.hillGfx.visible = false;
     this.world.addChild(
-      bakeMap(RIG7), this.acid, this.acidGlow, this.pickupLayer, this.grenadeLayer, this.playerLayer, this.emoteLayer,
+      bakeMap(RIG7), this.acid, this.acidGlow, this.hillGfx, this.pickupLayer, this.grenadeLayer, this.playerLayer, this.emoteLayer, this.acidSheet,
       this.particles.normal, this.aimLine, this.effects.layer, this.particles.additive, this.effects.textLayer,
     );
     this.radar = new Radar(this.tex, RIG7);
@@ -259,6 +269,9 @@ export class Game implements WorldView {
     this.emotes.clear();
     this.deathSpot = null;
     this.localEmoteAt = 0;
+    this.hill = null;
+    this.hillGfx.visible = false;
+    this.hud.setHill(null, '');
     this.localView?.destroy();
     this.localView = null;
     this.local = null;
@@ -295,6 +308,7 @@ export class Game implements WorldView {
     }
     if (r.state === 1 && (!prev || prev.state !== 1 || prev.roundNo !== r.roundNo)) {
       this.wasFrenzy = false;
+      this.wasSuddenDeath = false;
       this.lastBeepSec = -1;
       this.hud.reset();
       this.hud.showBanner('FIGHT!', '#22d3ee');
@@ -403,6 +417,41 @@ export class Game implements WorldView {
     if (v) { v.sprite.destroy(); this.pickups.delete(p.id); }
   }
 
+  hillUpsert(h: Hill): void {
+    const moved = this.hill?.idx !== h.idx;
+    this.hill = h;
+    if (moved) this.drawHill();
+  }
+
+  hillDelete(): void {
+    this.hill = null;
+    this.hillGfx.visible = false;
+    this.hud.setHill(null, '');
+  }
+
+  /** Is the zone held by me or my team? */
+  private hillIsMine(h: Hill): boolean {
+    if (h.state !== C.HILL_HELD) return false;
+    return this.teams ? h.team === this.localRow?.team : h.holder?.toHexString() === this.net.myKey;
+  }
+
+  private hillColor(h: Hill): number {
+    if (h.state === C.HILL_CONTESTED) return 0xff4d6d;
+    if (h.state === C.HILL_EMPTY) return 0x22d3ee;
+    return this.hillIsMine(h) ? 0x7cff4f : 0xffd54a;
+  }
+
+  private drawHill(): void {
+    const h = this.hill;
+    if (!h) return;
+    const z = this.map.hills[h.idx];
+    const pad = 3;
+    this.hillGfx.clear()
+      .rect(z.tx * C.TILE, z.ty * C.TILE, z.tw * C.TILE, z.th * C.TILE).fill({ color: 0xffffff, alpha: 0.13 })
+      .rect(z.tx * C.TILE + pad, z.ty * C.TILE + pad, z.tw * C.TILE - pad * 2, z.th * C.TILE - pad * 2).stroke({ width: 3, color: 0xffffff, alpha: 0.9 });
+    this.hillGfx.visible = true;
+  }
+
   grenadeInsert(g: Grenade): void {
     this.firedAt.set(g.owner.toHexString(), this.serverNow());
     // Pre-compute the whole deterministic flight once; drawing is then a lookup per frame.
@@ -508,11 +557,29 @@ export class Game implements WorldView {
     if (e.kind === C.NOTICE_AIRDROP) {
       this.hud.showNotice('AIRDROP INCOMING', '#ffd54a', 2.5);
       this.audio.play('alarm', 0.5);
+    } else if (e.kind === C.NOTICE_HILL_MOVED) {
+      this.hud.showNotice('THE HILL MOVED', '#22d3ee', 2);
+      this.audio.play('beep', 0.6);
     }
+  }
+
+  hillRect(): { x0: number; y0: number; x1: number; y1: number } | null {
+    const h = this.hill;
+    if (!h || this.room?.state !== 1) return null;
+    const z = this.map.hills[h.idx];
+    return { x0: z.tx * C.TILE, y0: z.ty * C.TILE, x1: (z.tx + z.tw) * C.TILE, y1: (z.ty + z.th) * C.TILE };
+  }
+
+  acidLine(): number {
+    const r = this.room;
+    if (!r || r.state !== 1 || !r.match.suddenDeath || !r.rules.acid) return Infinity;
+    return C.acidSurface(this.serverNow(), Number(r.endsAtMicros) / 1000, r.roundSec);
   }
 
   /** Where a CPU player with nothing to shoot should head: the crate, else a shield close by. */
   goal(x: number, y: number): { x: number; y: number } | null {
+    const hill = this.hillRect();
+    if (hill) return { x: (hill.x0 + hill.x1) / 2, y: hill.y1 };
     let best: { x: number; y: number } | null = null;
     let bestD = 700;
     for (const p of this.pickups.values()) {
@@ -852,6 +919,28 @@ export class Game implements WorldView {
       else if (show) p.sprite.y = p.baseY - 6 + Math.sin(tSec * 3 + p.row.tx) * 3;
     }
 
+    // --- King of the Hill zone: colour by who holds it, pulsing while it matters ---
+    if (this.hill && playing) {
+      this.hillGfx.tint = this.hillColor(this.hill);
+      this.hillGfx.alpha = this.hill.state === C.HILL_CONTESTED ? 0.55 + Math.sin(tSec * 12) * 0.35 : 0.75 + Math.sin(tSec * 3) * 0.2;
+    }
+    this.hillGfx.visible = !!this.hill && playing;
+
+    // --- Sudden death: the acid sheet climbs with the clock ---
+    const surface = this.acidLine();
+    const suddenDeath = Number.isFinite(surface);
+    this.acidSheet.visible = suddenDeath;
+    if (suddenDeath) {
+      this.acidSheet.y = surface;
+      this.acidSheet.height = Math.max(1, MAP_H - surface);
+      this.acidSheet.tilePosition.x += dt * 26;
+      if (!this.wasSuddenDeath) {
+        this.hud.showBanner('ACID RISING', '#7cff4f', 2.2);
+        this.audio.play('alarm', 0.8);
+      }
+    }
+    this.wasSuddenDeath = suddenDeath;
+
     // --- Acid ---
     this.acid.tilePosition.x += dt * 18;
     this.acidGlow.alpha = (this.rules.acid ? 0.3 : 0.12) + Math.sin(tSec * 2) * 0.08;
@@ -942,6 +1031,7 @@ export class Game implements WorldView {
       } else {
         this.hud.setAmmo(w === W_KNIFE ? '—' : '', '');
       }
+      this.updateHillChip(now);
       this.hud.setNades(this.mode === C.MODE_ARMS ? (this.rules.infiniteAmmo ? '● ∞' : '● '.repeat(local.grenades).trim() || '○') : '');
       this.hud.setReloading(local.reloading && isGun(w));
     }
@@ -960,6 +1050,23 @@ export class Game implements WorldView {
           : `FPS ${this.fps.toFixed(0)}\nRTT ${this.time.rtt.toFixed(0)} ms\nRenderer ${this.app.renderer.name}\nPlayers ${players.length}\nQuality ${this.quality} (step ${this.qualityStep})\nParticles cap ${this.particles.cap}`,
         );
       } else this.hud.setDebug(null);
+    }
+  }
+
+  /** One line under the timer: who holds the hill and when it moves. */
+  private updateHillChip(now: number): void {
+    const h = this.hill;
+    if (!h || this.room?.state !== 1) {
+      this.hud.setHill(null, '');
+      return;
+    }
+    const secs = Math.max(0, Math.ceil((Number(h.movesAtMicros) / 1000 - now) / 1000));
+    if (h.state === C.HILL_CONTESTED) this.hud.setHill('HILL CONTESTED', 'contested');
+    else if (h.state === C.HILL_EMPTY) this.hud.setHill(`HILL OPEN · MOVES ${secs}s`, 'open');
+    else if (this.hillIsMine(h)) this.hud.setHill(`HOLDING +${C.HILL_POINTS_PER_SEC}/s · ${secs}s`, 'mine');
+    else {
+      const who = this.teams ? (h.team === C.TEAM_RED ? 'RED' : 'BLUE') : this.rowOf(h.holder?.toHexString() ?? '')?.name ?? 'Someone';
+      this.hud.setHill(`${who} HOLDS · ${secs}s`, 'enemy');
     }
   }
 
@@ -999,9 +1106,18 @@ export class Game implements WorldView {
     for (const p of this.pickups.values()) {
       if (p.row.kind === PICKUP_DROP) out.push({ x: p.sprite.x, y: p.baseY, color: 0xffd54a, kind: 'objective', firedAgo: 0 });
     }
+    const hill = this.hillRect();
+    if (hill && !(this.local?.alive && this.inHill())) {
+      out.push({ x: (hill.x0 + hill.x1) / 2, y: (hill.y0 + hill.y1) / 2, color: this.hill ? this.hillColor(this.hill) : 0xffffff, kind: 'objective', firedAgo: 0 });
+    }
     const cam = this.camera;
     const z = cam.zoom;
     this.radar.update(out, { l: cam.left, t: cam.top, r: cam.right, b: cam.bottom }, (x, y) => ({ sx: (x - cam.left) * z, sy: (y - cam.top) * z }), this.app.screen.width, this.app.screen.height);
+  }
+
+  private inHill(): boolean {
+    const h = this.hill;
+    return !!h && !!this.local && inZone(this.map.hills[h.idx], this.local.body.x, this.local.centerY);
   }
 
   /** Team totals (sum of member scores) for team matches. */
@@ -1027,6 +1143,8 @@ export class Game implements WorldView {
       remotes: [...this.remotes.values()].map((r) => ({ name: r.row.name, alive: r.row.alive, x: r.s.x, y: r.s.y, ...toScreen(r.s.x, r.s.y - C.PLAYER_H / 2) })),
       kills: this.allPlayers().reduce((n, p) => n + p.kills, 0),
       pickups: [...this.pickups.values()].map((p) => ({ kind: p.row.kind, tx: p.row.tx, ty: p.row.ty, ready: p.row.availableAtMicros === 0n })),
+      hill: this.hill ? { idx: this.hill.idx, state: this.hill.state, zone: this.map.hills[this.hill.idx], mine: this.hillIsMine(this.hill) } : null,
+      acidLine: this.acidLine(),
       renderer: this.app.renderer.name,
       camera: { x: cam.x, y: cam.y, left: cam.left, top: cam.top, right: cam.right, bottom: cam.bottom, zoom: cam.zoom },
       deathSpot: this.deathSpot,

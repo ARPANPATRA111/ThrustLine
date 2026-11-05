@@ -76,6 +76,10 @@ export interface WorldView {
   serverNow(): number;
   /** Where a CPU player with nothing to shoot should head (feet position), if anywhere. */
   goal(x: number, y: number): { x: number; y: number } | null;
+  /** The live King of the Hill zone in world px, if this round has one. */
+  hillRect(): { x0: number; y0: number; x1: number; y1: number } | null;
+  /** World y of the rising acid, or Infinity outside sudden death. */
+  acidLine(): number;
   /** Everyone this actor could hit, excluding itself. */
   targets(selfKey: string, out: Target[]): number;
 }

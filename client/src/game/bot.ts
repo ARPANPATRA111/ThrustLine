@@ -203,6 +203,14 @@ export class BotBrain {
       inp.aim = turnToward(a.aim, moveX >= 0 ? 0.1 : Math.PI - 0.1, 3 * DT);
     }
 
+    // --- Objective: the hill pulls bots in even mid-fight; they shoot on the way ---
+    const hill = world.hillRect();
+    if (hill && t) {
+      if (cx < hill.x0 || cx > hill.x1) moveX = Math.sign((hill.x0 + hill.x1) / 2 - cx);
+      if (cy > hill.y1) thrust = true;
+      else if (cy < hill.y0 && b.grounded) inp.down = true;
+    }
+
     // --- Navigation: hop walls, escape acid, get unstuck ---
     const aheadTx = Math.floor((cx + Math.sign(moveX || 1) * 24) / C.TILE);
     const bodyTy = Math.floor(cy / C.TILE);
@@ -220,6 +228,12 @@ export class BotBrain {
         thrust = true;
         moveX = cx - pitL < pitR - cx ? -1 : 1;
       }
+    }
+    // Sudden death: stay above the rising acid.
+    if (b.y > world.acidLine() - 150 && b.fuel > 1) {
+      thrust = true;
+      inAcid = true;
+      inp.down = false;
     }
     if (Math.abs(moveX) > 0.5 && Math.abs(b.vx) < 20 && b.grounded) this.stuckFor += DT;
     else this.stuckFor = 0;
