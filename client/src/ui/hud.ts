@@ -5,7 +5,7 @@ import { WEAPON_DRAW, WEAPON_SIZE } from '../render/atlas';
 import { playerCss } from '../render/soldier';
 import type { Player } from '../module_bindings/types';
 
-export const CAUSE_NAMES: Record<number, string> = { 0: 'pistol', 1: 'AR', 2: 'shotgun', 3: 'sniper', 4: 'knife', 5: 'frag', 6: 'SMG', 7: 'railgun', 10: 'acid' };
+export const CAUSE_NAMES: Record<number, string> = { 0: 'pistol', 1: 'AR', 2: 'shotgun', 3: 'sniper', 4: 'knife', 5: 'frag', 6: 'SMG', 7: 'railgun', 10: 'acid', 11: 'impact grenade' };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -28,6 +28,7 @@ export class Hud {
   private hpFill = $('hp-fill');
   private hpText = $('hp-text');
   private shieldFill = $('shield-fill');
+  private fuelMeter = document.querySelector<HTMLElement>('.meter.fuel')!;
   private fuelFill = $('fuel-fill');
   private fuelText = $('fuel-text');
   private timer = $('timer');
@@ -88,6 +89,15 @@ export class Hud {
     if (!this.changed('fuel', v)) return;
     this.fuelFill.style.transform = `scaleX(${infinite ? 1 : v / 100})`;
     this.fuelText.textContent = infinite ? '∞' : '';
+  }
+
+  /** Seconds left on an EMP (0 = jetpack fine): the fuel bar goes dark and counts down. */
+  setEmp(sec: number): void {
+    const text = sec > 0 ? `OFF ${sec.toFixed(1)}` : '';
+    if (!this.changed('emp', text)) return;
+    this.fuelMeter.classList.toggle('offline', sec > 0);
+    this.fuelText.textContent = text;
+    if (sec <= 0) delete this.last.fuel; // let setFuel repaint its own label
   }
 
   setTimer(text: string, frenzy: boolean): void {

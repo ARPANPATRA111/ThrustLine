@@ -238,6 +238,8 @@ input[type='range'] { width: 100%; accent-color: var(--cyan); height: 28px; }
 .meter.hp .fill { background: linear-gradient(90deg, #ff3d6a, #ff8fa3); box-shadow: 0 0 10px rgba(255, 77, 109, 0.6); }
 .meter.hp.low .fill { background: linear-gradient(90deg, #ff2a2a, #ff6b6b); }
 .meter.fuel .fill { background: linear-gradient(90deg, #22d3ee, #9ff3ff); }
+.meter.fuel.offline { outline: 1px solid #67e8f9; }
+.meter.fuel.offline .fill { background: #2a3550; }
 .meter .shield { position: absolute; left: 0; right: 0; top: 0; height: 5px; transform: scaleX(0); transform-origin: left; background: linear-gradient(90deg, #22d3ee, #e0fbff); box-shadow: 0 0 8px rgba(34, 211, 238, 0.9); }
 .vnum { font-family: var(--display); font-size: 16px; min-width: 34px; }
 .hud-tc { position: absolute; left: 50%; top: calc(8px + var(--safe-t)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; }

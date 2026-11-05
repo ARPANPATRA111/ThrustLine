@@ -7,12 +7,13 @@ import { schema, table, t, SenderError, type Infer, type InferSchema, type Reduc
 import { ScheduleAt, type Identity } from 'spacetimedb';
 import * as C from './shared/config';
 import { MAPS, MAP_H, MAP_W, inZone, PICKUP_AMMO, PICKUP_DROP, PICKUP_GRENADE, PICKUP_HEALTH, PICKUP_SHIELD, T_ACID, T_SOLID, boxTouchesTile, movesAround, spawnWorldPos, type TilePos } from './shared/map';
-import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, PRIMARIES, allowedWeapons, canThrow, damageAtDistance, defaultWeapon, effectivePrimary, grenadeDamage, isGun, isPrimary, pickupActive } from './shared/weapons';
-import { fuseTicks, simulateGrenade } from './shared/grenade';
+import { GRENADES, NADE_EMP, NADE_IMPACT, WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, PRIMARIES, allowedWeapons, canThrow, damageAtDistance, defaultWeapon, effectiveNade, effectivePrimary, grenadeDamage, isGun, isPrimary, nadeCooldownSec, pickupActive } from './shared/weapons';
+import { bodyContact, firstTouchTick, fuseTicks, simulateGrenade, ticksToFuseMs } from './shared/grenade';
 import { pickSpawn, pickSpot, shuffledSpawnOrder, type Point } from './shared/spawn';
 import { lineOfSight } from './shared/raycast';
+import { isStandingOn } from './shared/physics';
 import { randomCallsign, sanitizeName } from './shared/names';
-import { type MoveCredit, addBoost, canSeeBody, fireRateOk, freshMoveCredit, hitClaimDistance, isStaleSeq, isValidPosition, maxPelletsAt, meleeHits, shotOriginOk, spendMove, validateMove } from './shared/validate';
+import { type MoveCredit, addBoost, canSeeBody, fireRateOk, freshMoveCredit, hitClaimDistance, isStaleSeq, isValidPosition, maxPelletsAt, meleeHits, shotOriginOk, spendMove, spendRise, validateMove } from './shared/validate';
 
 // ============================================================================
 // Tables
@@ -121,6 +122,10 @@ const player = table(
     shield: t.f32().default(0),
     /** Railgun shots left from an airdrop. */
     power: t.u8().default(0),
+    /** The grenade type this player carries (see GRENADES). */
+    nade: t.u8().default(0),
+    /** Until when an EMP has their jetpack offline. */
+    empUntilMicros: t.i64().default(0n),
   },
 );
 
@@ -178,6 +183,8 @@ const pmeta = table(
     creditX: t.f32().default(C.MOVE_BUDGET_PX),
     creditUp: t.f32().default(C.MOVE_BUDGET_PX),
     boost: t.f32().default(0),
+    /** Lift left while the jetpack is offline (see spendRise). */
+    empRise: t.f32().default(0),
   },
 );
 
@@ -218,6 +225,8 @@ const grenade = table(
     fuseMs: t.u32(),
     /** Floating (zero-g) grenade: no gravity, drifts to a stop. */
     zeroG: t.bool(),
+    /** Which of GRENADES this is. */
+    kind: t.u8().default(0),
   },
 );
 
@@ -379,7 +388,7 @@ const meleeEv = table(
 );
 const boomEv = table(
   { name: 'boom_ev', public: true, event: true },
-  { roomId: t.u64(), owner: t.identity(), x: t.f32(), y: t.f32() },
+  { roomId: t.u64(), owner: t.identity(), x: t.f32(), y: t.f32(), kind: t.u8().default(0) },
 );
 const pickupEv = table(
   { name: 'pickup_ev', public: true, event: true },
@@ -448,6 +457,7 @@ type RoomRow = Infer<typeof room.rowType>;
 type PlayerRow = Infer<typeof player.rowType>;
 type MetaRow = Infer<typeof pmeta.rowType>;
 type PStateRow = Infer<typeof pstate.rowType>;
+type GrenadeRow = Infer<typeof grenade.rowType>;
 type ProfileRow = Infer<typeof profile.rowType>;
 
 // ============================================================================
@@ -597,6 +607,7 @@ function spawnAt(ctx: Ctx, r: RoomRow, p: PlayerRow, spawnIdx: number): PlayerRo
     cy: pos.y,
     shield: 0,
     power: 0,
+    empUntilMicros: 0n,
   };
   ctx.db.player.identity.update(updated);
   const ps = ctx.db.pstate.identity.find(p.identity);
@@ -784,6 +795,8 @@ function addPlayerToRoom(ctx: Ctx, r: RoomRow, name: string, isBot: boolean): vo
     connected: true,
     shield: 0,
     power: 0,
+    nade: 0,
+    empUntilMicros: 0n,
   });
   ctx.db.pstate.insert({ identity: ctx.sender, roomId: r.id, x: start.x, y: start.y, vx: 0, vy: 0, aim: 0, flags: 0, weapon: 0, seq: 0, serverMicros: now, sentMs: nowMs(ctx) });
   ctx.db.pmeta.insert({
@@ -808,6 +821,7 @@ function addPlayerToRoom(ctx: Ctx, r: RoomRow, name: string, isBot: boolean): vo
     creditX: C.MOVE_BUDGET_PX,
     creditUp: C.MOVE_BUDGET_PX,
     boost: 0,
+    empRise: 0,
   });
 }
 
@@ -1183,6 +1197,14 @@ export const choosePrimary = spacetimedb.reducer({ weapon: t.u8() }, (ctx, { wea
   ctx.db.player.identity.update({ ...p, primary: weapon });
 });
 
+/** One grenade type per life, for the same reason as the gun: pick it while waiting to deploy. */
+export const chooseGrenade = spacetimedb.reducer({ kind: t.u8() }, (ctx, { kind }) => {
+  const { p, r } = requireMember(ctx);
+  if (kind >= GRENADES.length) throw new SenderError('Unknown grenade');
+  if (r.state === ROOM_PLAYING && p.alive) throw new SenderError('Pick your grenade while respawning');
+  ctx.db.player.identity.update({ ...p, nade: kind });
+});
+
 /**
  * Broadcast a short emote. Alive players emote above themselves (clients keep it following);
  * dead players emote at their death spot, where their camera is waiting.
@@ -1328,6 +1350,8 @@ export const sync = spacetimedb.reducer(
     // `corr` must match the server's correction counter: until the client has snapped back,
     // its positions are stale.
     let pos = { x: ps.x, y: ps.y };
+    const start = pos;
+    let moved: { t0: number; t1: number } | null = null;
     const gap = now - meta.lastSyncMicros;
     if (gap >= FLOOD_GAP_MICROS && a.corr === p.correction && Number.isFinite(a.t)) {
       meta.lastSyncMicros = now;
@@ -1350,7 +1374,14 @@ export const sync = spacetimedb.reducer(
         if (w && (s.weapon === p.weapon || s.weapon === a.weapon) && w.recoil > 0 && fireRateOk(meta.lastFire[s.weapon] ?? 0n, now, w.rate)) addBoost(credit, w.recoil);
       }
       const runMul = r.mode === C.MODE_BLADES ? C.BLADES_RUN_MUL : 1;
-      const legal = validateMove(mapOf(r), pos, { x: a.x, y: a.y }, dt) && spendMove(credit, a.x - pos.x, a.y - pos.y, dt, runMul);
+      let legal = validateMove(mapOf(r), pos, { x: a.x, y: a.y }, dt) && spendMove(credit, a.x - pos.x, a.y - pos.y, dt, runMul);
+      // Jetpack offline: nothing but a jump (or a blast) can lift this player.
+      if (legal && p.empUntilMicros > now) {
+        const enforced = now >= p.empUntilMicros - secToMicros(C.EMP_SEC - C.EMP_GRACE_SEC);
+        const rise = enforced ? spendRise(meta.empRise, a.y - pos.y, isStandingOn(mapOf(r), a.x, a.y)) : C.EMP_RISE_PX;
+        if (rise < 0 && credit.boost <= 0) legal = false;
+        else meta.empRise = Math.max(0, rise);
+      }
       meta.creditX = credit.x;
       meta.creditUp = credit.up;
       meta.boost = credit.boost;
@@ -1358,6 +1389,7 @@ export const sync = spacetimedb.reducer(
         meta.prevX = ps.x;
         meta.prevY = ps.y;
         meta.prevMicros = ps.serverMicros;
+        const lastClient = meta.lastClientMs;
         meta.lastClientMs = a.t;
         meta.timeDebtMs = debt * 1000;
         // The client's timestamp may not be far from the server's clock.
@@ -1371,6 +1403,7 @@ export const sync = spacetimedb.reducer(
           meta.histY.shift();
         }
         pos = { x: a.x, y: a.y };
+        moved = { t0: lastClient > 0 ? lastClient : sentMs - C.SYNC_INTERVAL_MS, t1: sentMs };
         const reloading = p.reloadUntilMicros > 0n ? C.FLAG_RELOADING : 0;
         ctx.db.pstate.identity.update({
           ...ps,
@@ -1431,8 +1464,32 @@ export const sync = spacetimedb.reducer(
 
     ctx.db.player.identity.update(p);
     ctx.db.pmeta.identity.update(meta);
+    // Last, because a blast writes player rows and the copies above must not overwrite it.
+    if (moved && p.alive) checkImpacts(ctx, r, p.identity, start, pos, moved.t0, moved.t1);
   },
 );
+
+/**
+ * Impact grenades burst on the first body they touch. Bodies are only known from each player's own
+ * packets, so each packet checks the stretch of flight it covers, on the sender's timeline: if the
+ * grenade reached you on your screen, it hit you. Grenades that cannot hurt you pass through.
+ */
+function checkImpacts(ctx: Ctx, r: RoomRow, identity: Identity, from: Point, to: Point, t0: number, t1: number): void {
+  for (const g of [...ctx.db.grenade.roomId.filter(r.id)]) {
+    if (g.kind !== NADE_IMPACT) continue;
+    const p = ctx.db.player.identity.find(identity);
+    if (!p || !p.alive || isProtected(p, nowMicros(ctx))) return;
+    const thrown = Number(g.thrownMicros) / 1000;
+    if (g.owner.isEqual(identity) && t1 - thrown < C.IMPACT_ARM_MS) continue;
+    const owner = ctx.db.player.identity.find(g.owner);
+    if (owner && !canHurt(r, owner, p)) continue;
+    const hit = bodyContact(mapOf(r), g, fuseTicks(g.fuseMs), from, to, t0 - thrown, t1 - thrown);
+    if (!hit) continue;
+    for (const job of [...ctx.db.detonateJob.grenadeId.filter(g.id)]) ctx.db.detonateJob.scheduledId.delete(job.scheduledId);
+    ctx.db.grenade.id.delete(g.id);
+    explode(ctx, r, g, hit.x, hit.y, identity);
+  }
+}
 
 function finishReload(p: PlayerRow): void {
   p.reloadUntilMicros = 0n;
@@ -1611,10 +1668,11 @@ function handleMelee(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x
 
 function handleThrow(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x: number; y: number }, ps: PStateRow, angle: number, now: bigint): void {
   if (!canThrow(r.mode)) return;
+  const kind = effectiveNade(r.mode, p.nade);
+  if (!fireRateOk(meta.lastThrowMicros, now, 1 / nadeCooldownSec(r.mode, kind))) return;
   if (r.mode === C.MODE_ARMS) {
-    if ((p.grenades <= 0 && !r.rules.infiniteAmmo) || !fireRateOk(meta.lastThrowMicros, now, 1 / C.GRENADE_COOLDOWN_ARMS)) return;
+    if (p.grenades <= 0 && !r.rules.infiniteAmmo) return;
   } else {
-    if (!fireRateOk(meta.lastThrowMicros, now, 1 / C.GRENADE_COOLDOWN_BOOM)) return;
     const live = [...ctx.db.grenade.owner.filter(p.identity)].length;
     if (live >= C.GRENADE_BOOM_MAX_LIVE) return;
   }
@@ -1637,8 +1695,14 @@ function handleThrow(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x
   const v = clampVel(ps.vx, ps.vy);
   const vx0 = dx * C.GRENADE_THROW_SPEED + v.vx * C.GRENADE_INHERIT;
   const vy0 = dy * C.GRENADE_THROW_SPEED + v.vy * C.GRENADE_INHERIT;
-  const g = ctx.db.grenade.insert({ id: 0n, roomId: r.id, owner: p.identity, x0, y0, vx0, vy0, thrownMicros: now, fuseMs: C.GRENADE_FUSE_MS, zeroG: r.rules.floatingGrenades });
-  ctx.db.detonateJob.insert({ scheduledId: 0n, scheduledAt: atMicros(now + BigInt(C.GRENADE_FUSE_MS) * 1000n), grenadeId: g.id, roomId: r.id });
+  const zeroG = r.rules.floatingGrenades;
+  // Touching the map is a pure function of the throw, so an impact grenade just gets a shorter fuse.
+  // The flight is computed on the f32 values the row will hold, like every client's copy of it.
+  const fuseMs = kind === NADE_IMPACT
+    ? ticksToFuseMs(firstTouchTick(mapOf(r), Math.fround(x0), Math.fround(y0), Math.fround(vx0), Math.fround(vy0), fuseTicks(GRENADES[kind].fuseMs), zeroG))
+    : GRENADES[kind].fuseMs;
+  const g = ctx.db.grenade.insert({ id: 0n, roomId: r.id, owner: p.identity, x0, y0, vx0, vy0, thrownMicros: now, fuseMs, zeroG, kind });
+  ctx.db.detonateJob.insert({ scheduledId: 0n, scheduledAt: atMicros(now + BigInt(fuseMs) * 1000n), grenadeId: g.id, roomId: r.id });
 }
 
 // ============================================================================
@@ -1799,21 +1863,39 @@ export const detonate = spacetimedb.reducer({ onSchedule: detonateJob }, { job: 
   ctx.db.grenade.id.delete(g.id);
   const r = ctx.db.room.id.find(g.roomId);
   if (!r || r.state !== ROOM_PLAYING) return;
-  const now = nowMicros(ctx);
-
   // Re-run the exact client simulation on the stored f32 start values to find the blast point.
   const end = simulateGrenade(mapOf(r), g.x0, g.y0, g.vx0, g.vy0, fuseTicks(g.fuseMs), { x: 0, y: 0, vx: 0, vy: 0 }, g.zeroG);
-  const bx = Math.min(Math.max(end.x, 0), MAP_W);
-  const by = Math.min(Math.max(end.y, 0), MAP_H);
-  ctx.db.boomEv.insert({ roomId: r.id, owner: g.owner, x: bx, y: by });
+  explode(ctx, r, g, Math.min(Math.max(end.x, 0), MAP_W), Math.min(Math.max(end.y, 0), MAP_H));
+});
 
+/** An EMP knocks out every jetpack it can reach, the thrower's too, and hurts nobody. */
+function empBlast(ctx: Ctx, r: RoomRow, owner: PlayerRow | null, bx: number, by: number): void {
+  const now = nowMicros(ctx);
+  for (const target of roomPlayers(ctx, r.id)) {
+    if (!target.alive || isProtected(target, now) || (owner && !canHurt(r, owner, target))) continue;
+    const c = centreOf(ctx, target.identity);
+    if (!c || Math.hypot(c.x - bx, c.y - by) >= C.EMP_BLAST_RADIUS || !lineOfSight(mapOf(r), bx, by, c.x, c.y)) continue;
+    ctx.db.player.identity.update({ ...target, empUntilMicros: now + secToMicros(C.EMP_SEC) });
+    const meta = ctx.db.pmeta.identity.find(target.identity);
+    if (meta) ctx.db.pmeta.identity.update({ ...meta, empRise: C.EMP_RISE_PX });
+  }
+}
+
+/** Set a grenade off. `struck` is the player an impact grenade hit: they take the full blast. */
+function explode(ctx: Ctx, r: RoomRow, g: GrenadeRow, bx: number, by: number, struck?: Identity): void {
+  const now = nowMicros(ctx);
+  const def = GRENADES[g.kind] ?? GRENADES[0];
+  ctx.db.boomEv.insert({ roomId: r.id, owner: g.owner, x: bx, y: by, kind: g.kind });
   const owner = ctx.db.player.identity.find(g.owner);
+  if (g.kind === NADE_EMP) return empBlast(ctx, r, owner, bx, by);
+
   const fmul = frenzyMul(r, now);
+  const cause = g.kind === NADE_IMPACT ? C.CAUSE_IMPACT : W_FRAG;
   // Everyone near the blast may be thrown by it, whether or not it can hurt them.
   for (const target of roomPlayers(ctx, r.id)) {
     const c = target.alive ? centreOf(ctx, target.identity) : null;
     const meta = c ? ctx.db.pmeta.identity.find(target.identity) : null;
-    if (!c || !meta || Math.hypot(c.x - bx, c.y - by) > C.GRENADE_BLAST_RADIUS + C.BLAST_BOOST_MARGIN_PX) continue;
+    if (!c || !meta || Math.hypot(c.x - bx, c.y - by) > def.radius + C.BLAST_BOOST_MARGIN_PX) continue;
     const credit: MoveCredit = { x: meta.creditX, up: meta.creditUp, boost: meta.boost };
     addBoost(credit, C.BLAST_BOOST);
     ctx.db.pmeta.identity.update({ ...meta, boost: credit.boost });
@@ -1823,19 +1905,20 @@ export const detonate = spacetimedb.reducer({ onSchedule: detonateJob }, { job: 
     if (owner && !canHurt(r, owner, target)) continue;
     const c = centreOf(ctx, target.identity);
     if (!c) continue;
-    const d = Math.hypot(c.x - bx, c.y - by);
-    if (d >= C.GRENADE_BLAST_RADIUS || !lineOfSight(mapOf(r), bx, by, c.x, c.y)) continue;
-    const own = target.identity.isEqual(g.owner);
-    const dmg = grenadeDamage(C.GRENADE_MAX_DAMAGE, C.GRENADE_BLAST_RADIUS, d) * fmul * (own ? C.GRENADE_SELF_DAMAGE_MUL : 1);
+    const direct = !!struck && target.identity.isEqual(struck);
+    const d = direct ? 0 : Math.hypot(c.x - bx, c.y - by);
+    if (d >= def.radius || (!direct && !lineOfSight(mapOf(r), bx, by, c.x, c.y))) continue;
+    // The cap holds through Frenzy: a grenade never one-shots a full-health pilot.
+    const dmg = Math.min(def.maxDamage, grenadeDamage(def.maxDamage, def.radius, d) * fmul);
     if (!owner) {
       // The thrower left the room: the blast still hurts, but nobody gets credit.
       const victim = { ...target };
-      applyDamage(ctx, victim, dmg, g.owner, W_FRAG);
+      applyDamage(ctx, victim, dmg, g.owner, cause);
       ctx.db.player.identity.update(victim);
       continue;
     }
-    const res = damageOther(ctx, r, owner, target, dmg, W_FRAG);
-    if (res.killed && !own) {
+    const res = damageOther(ctx, r, owner, target, dmg, cause);
+    if (res.killed && !target.identity.isEqual(g.owner)) {
       const killer = ctx.db.player.identity.find(g.owner);
       if (killer) {
         const k = { ...killer };
@@ -1844,7 +1927,7 @@ export const detonate = spacetimedb.reducer({ onSchedule: detonateJob }, { job: 
       }
     }
   }
-});
+}
 
 export const restorePickup = spacetimedb.reducer({ onSchedule: pickupJob }, { job: pickupJob.rowType }, (ctx, { job }) => {
   if (!ctx.senderAuth.isInternal) throw new SenderError('Scheduler only');

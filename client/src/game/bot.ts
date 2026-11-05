@@ -11,7 +11,7 @@ import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
 import { type GameMap, MAP_W, T_ACID, T_SOLID, spawnWorldPos, tileAt } from '@shared/map';
 import { lineOfSight } from '@shared/raycast';
-import { PRIMARIES, WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, W_SMG, W_SNIPER, canThrow, isGun } from '@shared/weapons';
+import { GRENADES, PRIMARIES, WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, W_SMG, W_SNIPER, canThrow, isGun } from '@shared/weapons';
 import { tables, type DbConnection } from '../module_bindings';
 import type { Player, Pstate } from '../module_bindings/types';
 import { openBotConnection } from '../net/connection';
@@ -329,6 +329,7 @@ export class BotManager {
       const name = BOT_NAMES.find((n) => !used.has(n)) ?? `CPU ${this.bots.length + 1}`;
       await conn.reducers.joinRoom({ code: roomCode, name, bot: true });
       void conn.reducers.choosePrimary({ weapon: PRIMARIES[Math.floor(Math.random() * PRIMARIES.length)] }).catch(() => {});
+      void conn.reducers.chooseGrenade({ kind: Math.floor(Math.random() * GRENADES.length) }).catch(() => {});
       this.bots.push({ conn, identity, key: identity.toHexString(), actor: new Actor(identity, null), brain: new BotBrain(), name, lastLife: -1, lastRow: null });
     } finally {
       this.adding--;
@@ -371,6 +372,7 @@ export class BotManager {
         // Dead: maybe switch primary for the next life.
         bot.lastLife = row.lifeId;
         if (Math.random() < 0.3) void bot.conn.reducers.choosePrimary({ weapon: PRIMARIES[Math.floor(Math.random() * PRIMARIES.length)] }).catch(() => {});
+        if (Math.random() < 0.3) void bot.conn.reducers.chooseGrenade({ kind: Math.floor(Math.random() * GRENADES.length) }).catch(() => {});
       }
       if (!bot.actor.alive) continue;
       const input = bot.brain.think(bot.actor, world, this.claims);
@@ -380,7 +382,7 @@ export class BotManager {
     }
   }
 
-  knockback(world: WorldView, x: number, y: number): void {
-    for (const b of this.bots) b.actor.knockback(world.map, x, y);
+  knockback(world: WorldView, x: number, y: number, kind: number): void {
+    for (const b of this.bots) b.actor.knockback(world.map, x, y, kind);
   }
 }

@@ -41,4 +41,6 @@ export default __t.row({
   connected: __t.bool(),
   shield: __t.f32(),
   power: __t.u8(),
+  nade: __t.u8(),
+  empUntilMicros: __t.i64().name("emp_until_micros"),
 });

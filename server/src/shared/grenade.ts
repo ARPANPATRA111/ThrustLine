@@ -8,7 +8,10 @@ import {
   GRENADE_RESTITUTION,
   GRENADE_TICK_HZ,
   GRENADE_ZEROG_DRAG,
+  IMPACT_HIT_PAD,
   MAX_FALL,
+  PLAYER_H,
+  PLAYER_W,
   TILE,
 } from './config';
 import { type GameMap, T_ONEWAY, T_SOLID, tileAt } from './map';
@@ -55,8 +58,10 @@ function landsOnOneWay(map: GameMap, x: number, oldBottom: number, newBottom: nu
  * Advance one fixed 120 Hz step. Mutates `g`.
  * zeroG (house rule "floating grenades"): no gravity, and a constant drag factor per tick, so the
  * grenade drifts where it was thrown and slows to a stop in mid-air (still bouncing off surfaces).
+ * Returns true if the grenade touched a wall, floor or ceiling during this step.
  */
-export function stepGrenade(map: GameMap, g: GrenadeState, zeroG = false): void {
+export function stepGrenade(map: GameMap, g: GrenadeState, zeroG = false): boolean {
+  let touched = false;
   if (zeroG) {
     g.vx *= GRENADE_ZEROG_DRAG;
     g.vy *= GRENADE_ZEROG_DRAG;
@@ -68,6 +73,7 @@ export function stepGrenade(map: GameMap, g: GrenadeState, zeroG = false): void 
   // X axis: move, and on hitting a wall reflect with restitution.
   const nx = g.x + g.vx * DT;
   if (boxSolid(map, nx, g.y)) {
+    touched = true;
     g.vx = -g.vx * GRENADE_RESTITUTION;
     g.vy = g.vy * GRENADE_FRICTION;
   } else {
@@ -79,6 +85,7 @@ export function stepGrenade(map: GameMap, g: GrenadeState, zeroG = false): void 
   let floorTop = -1;
   if (g.vy > 0) floorTop = landsOnOneWay(map, g.x, g.y + R, ny + R);
   if (boxSolid(map, g.x, ny) || floorTop >= 0) {
+    touched = true;
     if (g.vy > 0) {
       // Snap onto the surface so the grenade never rests inside a tile.
       if (floorTop >= 0) {
@@ -100,6 +107,7 @@ export function stepGrenade(map: GameMap, g: GrenadeState, zeroG = false): void 
   } else {
     g.y = ny;
   }
+  return touched;
 }
 
 /**
@@ -122,6 +130,51 @@ export function simulateGrenade(
   out.vy = vy0;
   for (let i = 0; i < ticks; i++) stepGrenade(map, out, zeroG);
   return out;
+}
+
+/**
+ * The tick an impact grenade first touches the map, or `maxTicks` if it never does. Pure flight, so
+ * client and server agree and the fuse stored on the row is simply this time.
+ */
+export function firstTouchTick(map: GameMap, x0: number, y0: number, vx0: number, vy0: number, maxTicks: number, zeroG = false): number {
+  const g: GrenadeState = { x: x0, y: y0, vx: vx0, vy: vy0 };
+  for (let i = 1; i <= maxTicks; i++) if (stepGrenade(map, g, zeroG)) return i;
+  return maxTicks;
+}
+
+/** A fuse (ms) that `fuseTicks` turns back into exactly this many ticks. */
+export function ticksToFuseMs(ticks: number): number {
+  return Math.ceil((ticks * 1000) / GRENADE_TICK_HZ);
+}
+
+export interface GrenadeFlight {
+  x0: number;
+  y0: number;
+  vx0: number;
+  vy0: number;
+  zeroG: boolean;
+}
+
+/**
+ * Where a grenade first touches a moving body, or null. The body's feet go from `from` at `t0Ms` to
+ * `to` at `t1Ms`, both measured from the throw.
+ */
+export function bodyContact(map: GameMap, f: GrenadeFlight, lastTick: number, from: { x: number; y: number }, to: { x: number; y: number }, t0Ms: number, t1Ms: number): { x: number; y: number } | null {
+  const first = Math.max(1, Math.floor((t0Ms * GRENADE_TICK_HZ) / 1000));
+  const last = Math.min(lastTick, Math.ceil((t1Ms * GRENADE_TICK_HZ) / 1000));
+  if (last < first) return null;
+  const g: GrenadeState = { x: f.x0, y: f.y0, vx: f.vx0, vy: f.vy0 };
+  const reachX = PLAYER_W / 2 + R + IMPACT_HIT_PAD;
+  const pad = R + IMPACT_HIT_PAD;
+  for (let i = 1; i <= last; i++) {
+    stepGrenade(map, g, f.zeroG);
+    if (i < first) continue;
+    const k = last > first ? (i - first) / (last - first) : 1;
+    const bx = from.x + (to.x - from.x) * k;
+    const by = from.y + (to.y - from.y) * k;
+    if (Math.abs(g.x - bx) < reachX && g.y > by - PLAYER_H - pad && g.y < by + pad) return { x: g.x, y: g.y };
+  }
+  return null;
 }
 
 /** Number of fixed ticks for a fuse in milliseconds. */

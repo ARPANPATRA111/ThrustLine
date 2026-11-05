@@ -5,7 +5,7 @@ import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
 import { MAPS, MAP_H, MAP_NAMES, MAP_W, PICKUP_DROP, PICKUP_SHIELD, inZone, movesAround } from '@shared/map';
 import { fuseTicks, grenadePath } from '@shared/grenade';
-import { W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, W_SMG, W_SNIPER, canThrow, isGun, pickupActive } from '@shared/weapons';
+import { GRENADES, NADE_EMP, NADE_IMPACT, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, W_SMG, W_SNIPER, canThrow, effectiveNade, isGun, pickupActive } from '@shared/weapons';
 import type { BoomEv, EmoteEv, Grenade, Hill, HitEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
 import type { Net } from '../net/connection';
 import type { TimeSync } from '../net/timesync';
@@ -35,6 +35,8 @@ const WEAPON_SOUND: Record<number, 'pistol' | 'ar' | 'smg' | 'shotgun' | 'sniper
   [W_SMG]: 'smg',
   [W_RAIL]: 'rail',
 };
+/** Atlas sprite for each grenade type. */
+const NADE_SPRITE = ['w5', 'nade1', 'nade2'];
 /** Tracer colour and thickness per gun. */
 function tracerStyle(w: number): { color: number; width: number; fadeMs: number } {
   if (w === W_RAIL) return { color: 0x67e8f9, width: 7, fadeMs: 420 }; // a beam that hangs in the air
@@ -367,6 +369,10 @@ export class Game implements WorldView {
       }
       const ps = this.net.conn?.db.pstate.identity.find(p.identity) ?? undefined;
       const wasAlive = this.local.alive;
+      if (p.alive && Number(p.empUntilMicros) / 1000 > this.local.empUntilMs + 500) {
+        this.hud.showBanner('JETPACK OFFLINE', '#67e8f9', 1.6);
+        this.audio.play('alarm', 0.6, undefined, undefined, 1.7);
+      }
       const snap = this.local.applyServer(p, ps);
       if (snap === 'respawn') {
         this.deathSpot = null;
@@ -503,7 +509,7 @@ export class Game implements WorldView {
     this.firedAt.set(g.owner.toHexString(), this.serverNow());
     // Pre-compute the whole deterministic flight once; drawing is then a lookup per frame.
     const ticks = fuseTicks(g.fuseMs);
-    const sprite = new Sprite(this.tex.w5);
+    const sprite = new Sprite(this.tex[NADE_SPRITE[g.kind] ?? 'w5']);
     sprite.anchor.set(0.5);
     this.grenadeLayer.addChild(sprite);
     this.grenades.set(g.id, { row: g, path: grenadePath(this.map, g.x0, g.y0, g.vx0, g.vy0, ticks, g.zeroG), ticks, thrownMs: Number(g.thrownMicros) / 1000, sprite });
@@ -586,9 +592,13 @@ export class Game implements WorldView {
 
   onBoom(e: BoomEv): void {
     this.booms++;
-    this.explosion(e.x, e.y);
-    this.local?.knockback(this.map, e.x, e.y);
-    this.bots.knockback(this, e.x, e.y);
+    if (e.kind === NADE_EMP) {
+      this.empBurst(e.x, e.y);
+      return;
+    }
+    this.explosion(e.x, e.y, GRENADES[e.kind]?.radius ?? C.GRENADE_BLAST_RADIUS);
+    this.local?.knockback(this.map, e.x, e.y, e.kind);
+    this.bots.knockback(this, e.x, e.y, e.kind);
   }
 
   onPickup(e: PickupEv): void {
@@ -776,9 +786,17 @@ export class Game implements WorldView {
     this.effects.ring(x, y, 50, color, 0.4, true);
   }
 
-  private explosion(x: number, y: number): void {
-    this.effects.ring(x, y, C.GRENADE_BLAST_RADIUS, 0xffd54a, 0.35);
-    this.effects.ring(x, y, C.GRENADE_BLAST_RADIUS * 1.4, 0xffffff, 0.5, true);
+  /** An EMP has no fire: a cold ring, arcing sparks and a dying whine. */
+  private empBurst(x: number, y: number): void {
+    this.effects.ring(x, y, C.EMP_BLAST_RADIUS, 0x67e8f9, 0.45);
+    this.effects.ring(x, y, C.EMP_BLAST_RADIUS * 0.6, 0xffffff, 0.3, true);
+    this.sparks(x, y, 0x67e8f9, 30);
+    this.audio.play('alarm', 0.7, x, y, 1.7);
+  }
+
+  private explosion(x: number, y: number, radius: number): void {
+    this.effects.ring(x, y, radius, 0xffd54a, 0.35);
+    this.effects.ring(x, y, radius * 1.4, 0xffffff, 0.5, true);
     for (let i = 0; i < 14; i++) {
       const a = Math.random() * Math.PI * 2;
       const sp = 40 + Math.random() * 160;
@@ -905,6 +923,7 @@ export class Game implements WorldView {
         const bounty = this.localRow.streak >= C.BOUNTY_STREAK;
         this.localView.update(x, y, local.aim, b.vx, flags, local.weapon, dt, bounty, Number(this.localRow.spawnProtectUntilMicros) / 1000 > now, this.localRow.shield / C.SHIELD_MAX);
         this.localView.refreshColor(this.localRow.colorIdx, bounty);
+        if (now < local.empUntilMs && Math.random() < dt * 16) this.sparks(x, y - 30, 0x67e8f9, 1);
         this.aimLine.position.set(x, y - 30);
         this.aimLine.rotation = local.aim;
         const sniper = local.weapon === W_SNIPER;
@@ -938,6 +957,7 @@ export class Game implements WorldView {
       const bounty = r.row.streak >= C.BOUNTY_STREAK;
       if (bounty !== r.bounty) { r.bounty = bounty; r.view.refreshColor(r.row.colorIdx, bounty); }
       r.view.update(r.s.x, r.s.y, r.s.aim, r.s.vx, r.s.flags, r.s.weapon, dt, bounty, Number(r.row.spawnProtectUntilMicros) / 1000 > now, r.row.shield / C.SHIELD_MAX);
+      if (now < Number(r.row.empUntilMicros) / 1000 && Math.random() < dt * 16) this.sparks(r.s.x, r.s.y - 30, 0x67e8f9, 1);
     }
 
     // --- Grenades: look up the precomputed path at the current server time ---
@@ -951,7 +971,7 @@ export class Game implements WorldView {
       g.sprite.rotation += dt * 8 * Math.sign(g.row.vx0 || 1) * Math.min(1, (g.ticks - tf) / 60 + 0.2);
       // Blink faster as the fuse runs out.
       const left = (g.ticks - tf) / C.GRENADE_TICK_HZ;
-      g.sprite.tint = left < 1 && Math.floor(now / (left < 0.4 ? 60 : 140)) % 2 === 0 ? 0xff4d6d : 0xffffff;
+      g.sprite.tint = g.row.kind !== NADE_IMPACT && left < 1 && Math.floor(now / (left < 0.4 ? 60 : 140)) % 2 === 0 ? 0xff4d6d : 0xffffff;
     }
 
     // --- Pickups bob, hidden while respawning ---
@@ -1076,6 +1096,7 @@ export class Game implements WorldView {
       this.hud.setHP(row.alive ? row.hp : 0, this.maxHp);
       this.hud.setShield(row.alive ? row.shield : 0);
       this.hud.setFuel(local.body.fuel, this.rules.infiniteFuel);
+      this.hud.setEmp(row.alive ? Math.max(0, local.empUntilMs - now) / 1000 : 0);
       this.hud.setWeapon(local.weapon);
       const w = local.weapon;
       if (w === W_RAIL) {
@@ -1089,7 +1110,11 @@ export class Game implements WorldView {
         this.hud.setAmmo(w === W_KNIFE ? '—' : '', '');
       }
       this.updateHillChip(now);
-      this.hud.setNades(this.mode === C.MODE_ARMS ? (this.rules.infiniteAmmo ? '● ∞' : '● '.repeat(local.grenades).trim() || '○') : '');
+      if (canThrow(this.mode)) {
+        const count = this.rules.infiniteAmmo || this.mode !== C.MODE_ARMS ? '∞' : '●'.repeat(local.grenades) || '○';
+        const wait = local.nadeWait(now, this.mode);
+        this.hud.setNades(`${GRENADES[effectiveNade(this.mode, local.nade)].name.toUpperCase()} ${wait > 0.2 ? `${Math.ceil(wait)}s` : count}`);
+      } else this.hud.setNades('');
       this.hud.setReloading(local.reloading && isGun(w));
     }
     if (this.hudTimer <= 0) {
@@ -1195,7 +1220,7 @@ export class Game implements WorldView {
     const toScreen = (x: number, y: number) => ({ sx: (x - cam.left) * cam.zoom, sy: (y - cam.top) * cam.zoom });
     return {
       room: this.room ? { code: this.room.code, state: this.room.state } : null,
-      me: this.local ? { x: this.local.body.x, y: this.local.body.y, alive: this.local.alive, weapon: this.local.weapon, grenades: this.local.grenades, power: this.local.power, ...toScreen(this.local.body.x, this.local.centerY) } : null,
+      me: this.local ? { x: this.local.body.x, y: this.local.body.y, alive: this.local.alive, weapon: this.local.weapon, grenades: this.local.grenades, power: this.local.power, nade: this.local.nade, emp: this.local.empUntilMs > this.serverNow(), ...toScreen(this.local.body.x, this.local.centerY) } : null,
       mode: this.mode,
       hitsDealt: this.hitsDealt,
       booms: this.booms,

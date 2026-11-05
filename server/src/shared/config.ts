@@ -188,13 +188,30 @@ export const GRENADE_RESTITUTION = 0.45;
 export const GRENADE_FRICTION = 0.7;
 export const GRENADE_RADIUS = 5;
 export const GRENADE_BLAST_RADIUS = 170;
-export const GRENADE_MAX_DAMAGE = 100;
+/** No grenade one-shots a full-health pilot, Frenzy included. */
+export const GRENADE_MAX_DAMAGE = 80;
 export const GRENADE_KNOCKBACK = 700;
-export const GRENADE_SELF_DAMAGE_MUL = 0.5;
 export const GRENADE_ARMS_PER_LIFE = 2;
 export const GRENADE_COOLDOWN_ARMS = 0.7;
 export const GRENADE_COOLDOWN_BOOM = 0.85;
 export const GRENADE_BOOM_MAX_LIVE = 3;
+/** Impact grenades: airborne with nothing to hit, they burst on this fuse. */
+export const IMPACT_FUSE_MS = 1800;
+export const IMPACT_BLAST_RADIUS = 130;
+export const IMPACT_COOLDOWN = 1.4;
+/** A thrower cannot set off their own impact grenade while it is leaving their hand. */
+export const IMPACT_ARM_MS = 220;
+/** Extra reach around a body when testing an impact grenade against it. */
+export const IMPACT_HIT_PAD = 6;
+/** EMP grenades: no damage, but the jetpack dies. */
+export const EMP_FUSE_MS = 1200;
+export const EMP_BLAST_RADIUS = 210;
+export const EMP_COOLDOWN = 6;
+export const EMP_SEC = 3;
+/** The hit player only hears about the EMP a round trip later, so enforcement starts this late. */
+export const EMP_GRACE_SEC = 0.4;
+/** How far a jump can lift you with the jetpack dead: a full hop, with slack for a coasting climb. */
+export const EMP_RISE_PX = (HOP_SPEED * HOP_SPEED) / (2 * GRAVITY) + 40;
 /** The grenade simulation runs at a fixed 120 Hz so server and client agree exactly. */
 export const GRENADE_TICK_HZ = 120;
 /** Zero-g grenades: velocity multiplier per 120 Hz tick (slow drift to a stop, ~680 px travel). */
@@ -299,6 +316,7 @@ export const EMOTE_SHOW_SEC = 2.6;
 
 // ---------- kill causes (weapon ids 0..6 are reused as causes) ----------
 export const CAUSE_ACID = 10;
+export const CAUSE_IMPACT = 11;
 
 // ---------- Room-wide announcements (notice_ev.kind) ----------
 export const NOTICE_AIRDROP = 0;

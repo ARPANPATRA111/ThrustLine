@@ -7,6 +7,7 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import BackToLobbyReducer from "../back_to_lobby_reducer";
+import ChooseGrenadeReducer from "../choose_grenade_reducer";
 import ChoosePrimaryReducer from "../choose_primary_reducer";
 import CreateRoomReducer from "../create_room_reducer";
 import DevTeleportReducer from "../dev_teleport_reducer";
@@ -23,6 +24,7 @@ import SyncReducer from "../sync_reducer";
 import UpdateRoomSettingsReducer from "../update_room_settings_reducer";
 
 export type BackToLobbyParams = __Infer<typeof BackToLobbyReducer>;
+export type ChooseGrenadeParams = __Infer<typeof ChooseGrenadeReducer>;
 export type ChoosePrimaryParams = __Infer<typeof ChoosePrimaryReducer>;
 export type CreateRoomParams = __Infer<typeof CreateRoomReducer>;
 export type DevTeleportParams = __Infer<typeof DevTeleportReducer>;
