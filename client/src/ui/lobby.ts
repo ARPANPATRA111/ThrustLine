@@ -2,6 +2,7 @@
 // health, CPU skill and house-rule toggles). Everyone sees the settings; only
 // the host can change them, kick players, or move players between teams.
 import * as C from '@shared/config';
+import { MAP_NAMES } from '@shared/map';
 import type { Identity } from 'spacetimedb';
 import type { Player, Room } from '../module_bindings/types';
 import { TEAM_CSS, TEAM_NAMES, playerCss } from '../render/soldier';
@@ -148,6 +149,8 @@ export class LobbyView {
     $('mode-cards').classList.toggle('locked', !isHost);
     $('mode-cards').querySelectorAll<HTMLButtonElement>('.mode').forEach((b) => b.classList.toggle('on', Number(b.dataset.mode) === d.mode));
     this.seg('seg-teams', [{ v: 0, label: 'Free-for-all' }, { v: 1, label: 'Red vs Blue' }], d.teams ? 1 : 0, (v) => this.change({ teams: v === 1 }));
+    const maps = [...MAP_NAMES.map((label, v) => ({ v, label })), { v: C.MAP_ROTATE, label: 'Rotate' }];
+    this.seg('seg-map', maps, d.match.map, (v) => this.change({ match: { map: v } }));
     this.seg('seg-objective', [{ v: C.OBJECTIVE_KILLS, label: 'Deathmatch' }, { v: C.OBJECTIVE_HILL, label: 'King of the Hill' }], d.match.objective, (v) => this.change({ match: { objective: v } }));
     const rounds = room.dev ? [C.DEV_ROUND_SEC, ...C.ROUND_LENGTHS_SEC] : C.ROUND_LENGTHS_SEC;
     this.seg('seg-round', rounds.map((v) => ({ v, label: roundLabel(v) })), d.roundSec, (v) => this.change({ roundSec: v }));

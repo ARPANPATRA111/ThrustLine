@@ -3,7 +3,7 @@
 import { type Application, Container, Graphics, Sprite, type Texture, TilingSprite } from 'pixi.js';
 import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
-import { PICKUP_DROP, PICKUP_SHIELD, RIG7, MAP_H, MAP_W, inZone } from '@shared/map';
+import { MAPS, MAP_H, MAP_NAMES, MAP_W, PICKUP_DROP, PICKUP_SHIELD, inZone } from '@shared/map';
 import { fuseTicks, grenadePath } from '@shared/grenade';
 import { W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, W_SMG, W_SNIPER, canThrow, isGun, pickupActive } from '@shared/weapons';
 import type { BoomEv, EmoteEv, Grenade, Hill, HitEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
@@ -103,7 +103,7 @@ const QUALITY_STEPS = [
 ];
 
 export class Game implements WorldView {
-  map = RIG7;
+  map = MAPS[0];
   mode = C.MODE_ARMS;
   /** House rules of the current room (defaults until the room row arrives). */
   rules: SimRules = { ...C.DEFAULT_RULES, teams: false };
@@ -130,7 +130,11 @@ export class Game implements WorldView {
   private parallax: TilingSprite[] = [];
   private acid: TilingSprite;
   private acidGlow: Sprite;
-  private acidR = acidRect(RIG7);
+  private mapId = -1;
+  /** The map being shown; each map is baked once, the first time it is played. */
+  private mapLayer = new Container();
+  private baked = new Map<number, Container>();
+  private acidR = acidRect(MAPS[0]);
   /** Sudden death: a sheet of acid across the whole map, rising from the floor. */
   private acidSheet: TilingSprite;
   private wasSuddenDeath = false;
@@ -204,10 +208,11 @@ export class Game implements WorldView {
     this.acidSheet.visible = false;
     this.hillGfx.visible = false;
     this.world.addChild(
-      bakeMap(RIG7), this.acid, this.acidGlow, this.hillGfx, this.pickupLayer, this.grenadeLayer, this.playerLayer, this.emoteLayer, this.acidSheet,
+      this.mapLayer, this.acid, this.acidGlow, this.hillGfx, this.pickupLayer, this.grenadeLayer, this.playerLayer, this.emoteLayer, this.acidSheet,
       this.particles.normal, this.aimLine, this.effects.layer, this.particles.additive, this.effects.textLayer,
     );
-    this.radar = new Radar(this.tex, RIG7);
+    this.radar = new Radar(this.tex);
+    this.setMap(0);
     app.stage.addChild(this.bg, this.world, this.radar.root);
     app.stage.visible = false;
     app.ticker.add(() => this.frame());
@@ -284,6 +289,28 @@ export class Game implements WorldView {
     return this.time.serverNow();
   }
 
+  /** Switch arenas: tiles, acid pit, minimap and the hill zone all follow. */
+  private setMap(id: number): void {
+    if (id === this.mapId) return;
+    this.mapId = id;
+    this.map = MAPS[id] ?? MAPS[0];
+    let layer = this.baked.get(id);
+    if (!layer) {
+      layer = bakeMap(this.map);
+      this.baked.set(id, layer);
+    }
+    this.mapLayer.removeChildren();
+    this.mapLayer.addChild(layer);
+    this.acidR = acidRect(this.map);
+    this.acid.position.set(this.acidR.x, this.acidR.y);
+    this.acid.width = this.acidR.w;
+    this.acid.height = this.acidR.h;
+    this.acidGlow.position.set(this.acidR.x + this.acidR.w / 2, this.acidR.y);
+    this.acidGlow.scale.set((this.acidR.w * 1.4) / 32, 90 / 32);
+    this.radar.setMap(id, this.map);
+    this.drawHill();
+  }
+
   get frenzy(): boolean {
     return !!this.room && this.room.state === 1 && this.frenzyOn && C.isFrenzy(this.serverNow(), Number(this.room.endsAtMicros) / 1000);
   }
@@ -294,6 +321,7 @@ export class Game implements WorldView {
     const prev = this.room;
     this.room = r;
     if (!r) return;
+    this.setMap(r.mapId);
     this.mode = r.mode;
     this.teams = r.teams;
     this.rules = { infiniteFuel: r.rules.infiniteFuel, infiniteAmmo: r.rules.infiniteAmmo, acid: r.rules.acid, botSkill: r.rules.botSkill, teams: r.teams, friendlyFire: r.rules.friendlyFire };
@@ -312,6 +340,8 @@ export class Game implements WorldView {
       this.lastBeepSec = -1;
       this.hud.reset();
       this.hud.showBanner('FIGHT!', '#22d3ee');
+      const objective = r.match.objective === C.OBJECTIVE_HILL ? 'KING OF THE HILL' : 'DEATHMATCH';
+      this.hud.showNotice(`${objective} · ${MAP_NAMES[r.mapId] ?? ''}`, '#eef2ff', 3);
       this.audio.play('beep', 0.7, undefined, undefined, 1.5);
     }
   }
@@ -459,7 +489,7 @@ export class Game implements WorldView {
     const sprite = new Sprite(this.tex.w5);
     sprite.anchor.set(0.5);
     this.grenadeLayer.addChild(sprite);
-    this.grenades.set(g.id, { row: g, path: grenadePath(RIG7, g.x0, g.y0, g.vx0, g.vy0, ticks, g.zeroG), ticks, thrownMs: Number(g.thrownMicros) / 1000, sprite });
+    this.grenades.set(g.id, { row: g, path: grenadePath(this.map, g.x0, g.y0, g.vx0, g.vy0, ticks, g.zeroG), ticks, thrownMs: Number(g.thrownMicros) / 1000, sprite });
   }
 
   grenadeDelete(g: Grenade): void {
@@ -536,7 +566,7 @@ export class Game implements WorldView {
   onBoom(e: BoomEv): void {
     this.booms++;
     this.explosion(e.x, e.y);
-    this.local?.knockback(RIG7, e.x, e.y);
+    this.local?.knockback(this.map, e.x, e.y);
     this.bots.knockback(this, e.x, e.y);
   }
 
@@ -1143,6 +1173,7 @@ export class Game implements WorldView {
       remotes: [...this.remotes.values()].map((r) => ({ name: r.row.name, alive: r.row.alive, x: r.s.x, y: r.s.y, ...toScreen(r.s.x, r.s.y - C.PLAYER_H / 2) })),
       kills: this.allPlayers().reduce((n, p) => n + p.kills, 0),
       pickups: [...this.pickups.values()].map((p) => ({ kind: p.row.kind, tx: p.row.tx, ty: p.row.ty, ready: p.row.availableAtMicros === 0n })),
+      mapId: this.mapId,
       hill: this.hill ? { idx: this.hill.idx, state: this.hill.state, zone: this.map.hills[this.hill.idx], mine: this.hillIsMine(this.hill) } : null,
       acidLine: this.acidLine(),
       renderer: this.app.renderer.name,

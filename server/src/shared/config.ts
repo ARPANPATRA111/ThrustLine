@@ -146,12 +146,16 @@ export const DEFAULT_RULES = {
 export const OBJECTIVE_KILLS = 0;
 export const OBJECTIVE_HILL = 1;
 /** Arena options, stored in `room.match` next to the original house rules. */
+/** `match.map` value meaning "a different map every round". */
+export const MAP_ROTATE = 255;
 export const DEFAULT_MATCH = {
   /** Crates with a power weapon parachute in during the round. */
   airdrops: true,
   /** The acid rises in the final seconds, so a round cannot end in hiding. */
   suddenDeath: true,
   objective: OBJECTIVE_KILLS,
+  /** An index into MAPS, or MAP_ROTATE. */
+  map: 0,
 };
 
 // ---------- Grenades ----------

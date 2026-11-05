@@ -9,7 +9,7 @@
 //   - bots spread their attention instead of all hunting the same player.
 import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
-import { MAP_W, RIG7, T_ACID, T_SOLID, spawnWorldPos, tileAt } from '@shared/map';
+import { type GameMap, MAP_W, T_ACID, T_SOLID, spawnWorldPos, tileAt } from '@shared/map';
 import { lineOfSight } from '@shared/raycast';
 import { PRIMARIES, WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, W_SMG, W_SNIPER, canThrow, isGun } from '@shared/weapons';
 import { tables, type DbConnection } from '../module_bindings';
@@ -29,14 +29,35 @@ const SKILL = [
 
 const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 
-// The acid pit's extent, found once from the map.
-const ACID_TILES: number[] = [];
-for (let ty = 0; ty < RIG7.rows; ty++) for (let tx = 0; tx < RIG7.cols; tx++) if (tileAt(RIG7, tx, ty) === T_ACID) ACID_TILES.push(tx, ty);
-const pitL = Math.min(...ACID_TILES.filter((_, i) => i % 2 === 0)) * C.TILE;
-const pitR = (Math.max(...ACID_TILES.filter((_, i) => i % 2 === 0)) + 1) * C.TILE;
-const pitTop = Math.min(...ACID_TILES.filter((_, i) => i % 2 === 1)) * C.TILE;
-/** Patrol waypoints: the spawn points, spread over every height of the map. */
-const WAYPOINTS = RIG7.spawns.map(spawnWorldPos);
+/** What a bot needs to know about a map: the acid pit's extent and where to patrol. */
+interface Nav {
+  pitL: number;
+  pitR: number;
+  pitTop: number;
+  /** The spawn points, spread over every height of the map. */
+  waypoints: { x: number; y: number }[];
+}
+const NAV = new Map<GameMap, Nav>();
+
+function navFor(map: GameMap): Nav {
+  let nav = NAV.get(map);
+  if (!nav) {
+    let left = Infinity, right = -1, top = Infinity;
+    for (let ty = 0; ty < map.rows; ty++) {
+      for (let tx = 0; tx < map.cols; tx++) {
+        if (tileAt(map, tx, ty) !== T_ACID) continue;
+        left = Math.min(left, tx);
+        right = Math.max(right, tx);
+        top = Math.min(top, ty);
+      }
+    }
+    nav = { pitL: left * C.TILE, pitR: (right + 1) * C.TILE, pitTop: top * C.TILE, waypoints: map.spawns.map(spawnWorldPos) };
+    NAV.set(map, nav);
+  }
+  return nav;
+}
+
+const pickWaypoint = (nav: Nav) => nav.waypoints[Math.floor(Math.random() * nav.waypoints.length)];
 
 /** Decision-making for one bot. Plain heuristics a person can read and tune. */
 export class BotBrain {
@@ -53,7 +74,7 @@ export class BotBrain {
   private aimNoise = 0;
   private burstOn = false;
   private burstLeft = 0;
-  private waypoint = WAYPOINTS[Math.floor(Math.random() * WAYPOINTS.length)];
+  private waypoint: { x: number; y: number } | null = null;
   private stuckFor = 0;
   private strafeDir = 1;
   private strafeIn = 0;
@@ -70,6 +91,8 @@ export class BotBrain {
     const cx = b.x;
     const cy = b.y - C.PLAYER_H / 2;
     const map = world.map;
+    const nav = navFor(map);
+    const waypoint = (this.waypoint ??= pickWaypoint(nav));
     inp.fire = inp.firePressed = inp.melee = inp.grenade = inp.swap = inp.reload = false;
     inp.down = false;
 
@@ -191,12 +214,12 @@ export class BotBrain {
       const hunting = this.huntFor > 0;
       // Crates and shields are worth a detour; otherwise hunt, then patrol.
       const goal = world.goal(cx, b.y);
-      const gx = goal ? goal.x : hunting ? this.seenX : this.waypoint.x;
-      const gy = goal ? goal.y : hunting ? this.seenY + C.PLAYER_H / 2 : this.waypoint.y;
+      const gx = goal ? goal.x : hunting ? this.seenX : waypoint.x;
+      const gy = goal ? goal.y : hunting ? this.seenY + C.PLAYER_H / 2 : waypoint.y;
       const dx = gx - cx;
       const dy = gy - b.y;
       if (hunting && Math.abs(dx) < 40 && Math.abs(dy) < 60) this.huntFor = 0;
-      if (Math.abs(dx) < 40 && Math.abs(dy) < 50) this.waypoint = WAYPOINTS[Math.floor(Math.random() * WAYPOINTS.length)];
+      if (Math.abs(dx) < 40 && Math.abs(dy) < 50) this.waypoint = pickWaypoint(nav);
       moveX = Math.abs(dx) > 20 ? Math.sign(dx) : 0;
       if (dy < -40 && b.fuel > 25) thrust = true;
       if (dy > 60 && b.grounded) inp.down = true;
@@ -223,10 +246,10 @@ export class BotBrain {
       for (let k = 0; k <= 4; k++) {
         if (tileAt(map, Math.floor((cx + dir * k * C.TILE) / C.TILE), feetTy) === T_ACID) thrust = true;
       }
-      if (pitL <= cx && cx <= pitR && b.y > pitTop - 160 && b.fuel > 1) thrust = true;
+      if (nav.pitL <= cx && cx <= nav.pitR && b.y > nav.pitTop - 160 && b.fuel > 1) thrust = true;
       if (inAcid) {
         thrust = true;
-        moveX = cx - pitL < pitR - cx ? -1 : 1;
+        moveX = cx - nav.pitL < nav.pitR - cx ? -1 : 1;
       }
     }
     // Sudden death: stay above the rising acid.
@@ -239,7 +262,7 @@ export class BotBrain {
     else this.stuckFor = 0;
     if (this.stuckFor > 0.6) {
       thrust = true;
-      this.waypoint = WAYPOINTS[Math.floor(Math.random() * WAYPOINTS.length)];
+      this.waypoint = pickWaypoint(nav);
       this.stuckFor = 0;
     }
     if (b.fuel < 8 && !inAcid) thrust = false;

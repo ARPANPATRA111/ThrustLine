@@ -94,7 +94,7 @@ async function boot(): Promise<void> {
 
   installFont();
   const atlas = buildAtlas();
-  setProgress(0.3, 'Baking RIG-7…');
+  setProgress(0.3, 'Baking the rig…');
   await nextFrame();
 
   const net = new Net();

@@ -142,6 +142,7 @@ export const MatchRules = __t.object("MatchRules", {
   airdrops: __t.bool(),
   suddenDeath: __t.bool(),
   objective: __t.u8(),
+  map: __t.u8(),
 });
 export type MatchRules = __Infer<typeof MatchRules>;
 
@@ -300,6 +301,7 @@ export const Room = __t.object("Room", {
   get match() {
     return MatchRules;
   },
+  mapId: __t.u8(),
 });
 export type Room = __Infer<typeof Room>;
 
