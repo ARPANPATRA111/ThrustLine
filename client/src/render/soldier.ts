@@ -21,6 +21,24 @@ export function playerCss(colorIdx: number, team: number): string {
 }
 export const GOLD = 0xffd54a;
 
+/** Okabe-Ito colours, chosen to stay distinct under the common forms of colour blindness. */
+const CB_COLORS = [0x56b4e9, 0xe69f00, 0x009e73, 0xf0e442, 0x0072b2, 0xd55e00, 0xcc79a7, 0xe5e7eb];
+const DEFAULT_COLORS = [...PLAYER_COLORS];
+const DEFAULT_CSS = [...PLAYER_CSS];
+const hex = (c: number) => `#${c.toString(16).padStart(6, '0').toUpperCase()}`;
+
+/** Swap every player and team colour; the arrays are read each time a colour is needed. */
+export function setColorblind(on: boolean): void {
+  (on ? CB_COLORS : DEFAULT_COLORS).forEach((c, i) => {
+    PLAYER_COLORS[i] = c;
+    PLAYER_CSS[i] = on ? hex(c) : DEFAULT_CSS[i];
+  });
+  TEAM_COLORS[1] = on ? 0xe69f00 : 0xff4d5e; // orange against blue, not red against blue
+  TEAM_COLORS[2] = on ? 0x0072b2 : 0x3d8bff;
+  TEAM_CSS[1] = hex(TEAM_COLORS[1]);
+  TEAM_CSS[2] = hex(TEAM_COLORS[2]);
+}
+
 function part(tex: Texture, ax: number, ay: number): Sprite {
   const s = new Sprite(tex);
   s.anchor.set(ax, ay);

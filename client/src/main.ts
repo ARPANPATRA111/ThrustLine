@@ -14,10 +14,10 @@ import { TimeSync } from './net/timesync';
 import { buildAtlas } from './render/atlas';
 import { installFont } from './render/font';
 import { stickerDataURL } from './render/stickers';
-import { TEAM_CSS, TEAM_NAMES, playerCss } from './render/soldier';
+import { TEAM_CSS, TEAM_NAMES, playerCss, setColorblind } from './render/soldier';
 import { Audio } from './audio/audio';
 import { Game } from './game/game';
-import { Input } from './game/input';
+import { ACTIONS, DEFAULT_KEYS, Input, keyLabel, type Action } from './game/input';
 import { Hud, escapeHtml, pingClass, rankPlayers } from './ui/hud';
 import { TouchControls } from './ui/touch';
 import { LobbyView } from './ui/lobby';
@@ -394,6 +394,8 @@ async function boot(): Promise<void> {
     if (!$('btn-tap').classList.contains('hidden') || !net.conn || !$('scr-loading').classList.contains('hidden')) return;
     const room = myRoom();
     const me = myRow();
+    // Dev rooms allow teleporting, so nobody should join one without knowing.
+    document.body.classList.toggle('dev-room', !!room?.dev);
     if (!room || !me || me.roomId !== room.id) {
       showScreen('scr-home');
       for (const id of ['scr-respawn', 'scr-board', 'scr-menu']) showOverlay(id, false);
@@ -478,6 +480,7 @@ async function boot(): Promise<void> {
   // ---------------------------------------------------------------- respawn overlay
   function renderRespawn(me: Player, room: Room): void {
     $('killed-by').textContent = me.deaths === 0 && me.kills === 0 && !game.killedBy ? 'Deploying…' : game.killedBy || 'Eliminated';
+    $('kill-recap').textContent = game.killedBy ? game.killRecap : '';
     $('primary-pick').classList.toggle('hidden', room.mode !== C.MODE_ARMS);
     const sel = pendingPrimary ?? me.primary;
     document.querySelectorAll<HTMLButtonElement>('#primary-pick .pick').forEach((b) => b.classList.toggle('sel', Number(b.dataset.w) === sel));
@@ -614,6 +617,65 @@ async function boot(): Promise<void> {
   const chkFps = $<HTMLInputElement>('set-fps');
   chkFps.checked = settings.showDebug;
   chkFps.addEventListener('change', () => { settings.showDebug = chkFps.checked; game.debug = chkFps.checked; saveSettings(settings); });
+  const bindComfort = (id: string, key: 'shake' | 'particles') => {
+    const el = $<HTMLInputElement>(id);
+    el.value = String(settings[key]);
+    el.addEventListener('input', () => {
+      settings[key] = Number(el.value);
+      game.setComfort(settings.shake, settings.particles);
+      saveSettings(settings);
+    });
+  };
+  bindComfort('set-shake', 'shake');
+  bindComfort('set-particles', 'particles');
+  game.setComfort(settings.shake, settings.particles);
+  const applyPalette = () => {
+    setColorblind(settings.colorblind);
+    document.body.classList.toggle('cb', settings.colorblind);
+    game.refreshColors();
+  };
+  applyPalette();
+  const chkCb = $<HTMLInputElement>('set-colorblind');
+  chkCb.checked = settings.colorblind;
+  chkCb.addEventListener('change', () => { settings.colorblind = chkCb.checked; saveSettings(settings); applyPalette(); queueRoute(); });
+
+  /** The keys in the panel and the on-screen cheat sheet both follow the player's bindings. */
+  function applyKeys(): void {
+    input.binds = { ...DEFAULT_KEYS, ...settings.keys };
+    const k = input.binds;
+    const l = keyLabel;
+    $('key-binds').innerHTML = ACTIONS.map((a) => `<button type="button" class="bind" data-act="${a.id}"><span>${a.label}</span><kbd>${escapeHtml(l(k[a.id]))}</kbd></button>`).join('');
+    $('key-hints').innerHTML =
+      `<div class="kh-row"><kbd>${l(k.left)}${l(k.right)}</kbd> move <kbd>${l(k.jet)}</kbd> jet <kbd>LMB</kbd> fire <kbd>RMB</kbd> knife</div>` +
+      `<div class="kh-row"><kbd>${l(k.emote)}</kbd> emote <kbd>1-4</kbd> sticker <kbd>${l(k.fire)}</kbd> fire <kbd>${l(k.melee)}</kbd> knife <kbd>${l(k.grenade)}</kbd> nade <kbd>${l(k.swap)}</kbd> swap <kbd>${l(k.reload)}</kbd> reload</div>`;
+  }
+  applyKeys();
+  $('key-binds').addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-act]');
+    if (!b) return;
+    const action = b.dataset.act as Action;
+    b.querySelector('kbd')!.textContent = 'Press a key';
+    input.captureKey((code) => {
+      if (code) {
+        // A key already in use swaps places, so no action is ever left without one.
+        const clash = ACTIONS.find((a) => a.id !== action && input.binds[a.id] === code);
+        if (clash) settings.keys[clash.id] = input.binds[action];
+        settings.keys[action] = code;
+        saveSettings(settings);
+      }
+      applyKeys();
+    });
+  });
+  $('btn-keys-reset').addEventListener('click', () => { settings.keys = {}; saveSettings(settings); applyKeys(); });
+  const quickRow = $('quick-stickers');
+  quickRow.innerHTML = settings.quickStickers.map((sel, slot) =>
+    `<label>${slot + 1}<select data-slot="${slot}">${C.EMOTES.map((name, i) => `<option value="${i}"${i === sel ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select></label>`).join('');
+  quickRow.addEventListener('change', (e) => {
+    const el = e.target as HTMLSelectElement;
+    settings.quickStickers[Number(el.dataset.slot)] = Number(el.value);
+    saveSettings(settings);
+  });
+
   const chkLefty = $<HTMLInputElement>('set-lefty');
   chkLefty.checked = settings.lefty;
   chkLefty.addEventListener('change', () => { settings.lefty = chkLefty.checked; touch.setLefty(chkLefty.checked); saveSettings(settings); });

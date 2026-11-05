@@ -203,10 +203,7 @@
       <div id="banner" class="banner"></div>
       <div id="notice" class="notice-line"></div>
       <!-- Desktop-only cheat sheet: tiny, in the bottom-left corner, never over the play area. -->
-      <div id="key-hints" class="key-hints" aria-hidden="true">
-        <div class="kh-row"><kbd>WASD</kbd> move <kbd>Space</kbd> jet <kbd>LMB</kbd> fire <kbd>RMB</kbd> knife</div>
-        <div class="kh-row"><kbd>Q</kbd> emote <kbd>1-4</kbd> sticker <kbd>E</kbd> fire <kbd>R</kbd> knife <kbd>G</kbd> nade <kbd>F</kbd> swap <kbd>T</kbd> reload</div>
-      </div>
+      <div id="key-hints" class="key-hints" aria-hidden="true"></div>
       <div id="touch" class="touch hidden">
         <div id="stick-l" class="stick stick-l"><div class="ring"></div><div class="knob"><svg class="ic"><use href="#i-jet" /></svg></div></div>
         <div id="stick-r" class="stick stick-r"><div class="ring"></div><div class="knob"><svg class="ic"><use href="#i-scope" /></svg></div></div>
@@ -224,6 +221,7 @@
     <section id="scr-respawn" class="overlay center hidden">
       <div class="respawn-card card">
         <p id="killed-by" class="killed-by">Eliminated</p>
+        <p id="kill-recap" class="kill-recap"></p>
         <div class="ring-wrap">
           <svg viewBox="0 0 100 100" class="ring"><circle cx="50" cy="50" r="44" class="ring-bg" /><circle id="ring-fg" cx="50" cy="50" r="44" class="ring-fg" /></svg>
           <span id="respawn-count">4</span>
@@ -234,6 +232,7 @@
           <button data-w="3" class="pick"><img data-icon="w3" alt="" /><span>Sniper</span></button>
           <button data-w="6" class="pick"><img data-icon="w6" alt="" /><span>SMG</span></button>
         </div>
+        <p class="look-hint muted">Use your movement controls to look around</p>
       </div>
     </section>
 
@@ -275,9 +274,18 @@
           <label class="slider">Master volume<input id="set-master" type="range" min="0" max="1" step="0.05" /></label>
           <label class="slider">Music<input id="set-music" type="range" min="0" max="1" step="0.05" /></label>
           <label class="slider">Sound effects<input id="set-sfx" type="range" min="0" max="1" step="0.05" /></label>
+          <label class="slider">Camera shake<input id="set-shake" type="range" min="0" max="1" step="0.05" /></label>
+          <label class="slider">Particles<input id="set-particles" type="range" min="0.2" max="1" step="0.05" /></label>
           <div class="slider">Graphics quality<div id="seg-quality" class="seg"></div></div>
           <label class="tog"><input id="set-fps" type="checkbox" /><span class="sw"></span>Detailed stats (F3)</label>
           <label class="tog"><input id="set-lefty" type="checkbox" /><span class="sw"></span>Left-handed touch</label>
+          <label class="tog"><input id="set-colorblind" type="checkbox" /><span class="sw"></span>Colour-blind palette</label>
+        </div>
+        <div class="keys-panel">
+          <div class="panel-head"><h3>Keys</h3><button id="btn-keys-reset" class="btn ghost sm">Reset</button></div>
+          <div id="key-binds" class="key-binds"></div>
+          <h3>Quick stickers</h3>
+          <div id="quick-stickers" class="quick-stickers"></div>
         </div>
       </div>
     </section>
@@ -304,6 +312,7 @@
                 <div class="kgroup"><div class="krow"><kbd>Q</kbd><kbd>G</kbd><kbd>F</kbd><kbd>T</kbd></div><small>Emote · Grenade · Swap · Reload</small></div>
                 <div class="kgroup"><div class="krow"><kbd class="wide">Space</kbd></div><small>Jetpack (tap = hop)</small></div>
               </div>
+              <small class="muted">Keys can be changed in Settings. Number keys 1 to 4 send a sticker. Gamepads work too: left stick moves, right stick aims, RT fires, A or LB jets, RB throws, LT knife, X reloads, Y swaps, B emotes.</small>
             </div>
             <div class="ctl-card">
               <h3>Touch (landscape)</h3>
