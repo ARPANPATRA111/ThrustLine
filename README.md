@@ -223,8 +223,12 @@ npm run deploy                       # typecheck, tests, generate, publish to Ma
 ```
 
 `npm run deploy` publishes the module to the database named in `client/.env.production` and deploys
-the client from the repo root (see `vercel.json`). If a schema change is incompatible, run
-`npm run publish:cloud -- --delete-data` once (all match data is disposable).
+the client from the repo root (see `vercel.json`).
+
+**Never use `--delete-data` on production.** `profile` and `season_board` hold every player's level and
+season points, and that flag erases them. Schema changes must migrate in place: add new tables, or add
+columns to the end of a table with `.default()`. The shape of an object column such as `MatchRules`
+cannot be changed in place, so add a new column instead. Try it on a throwaway local database first.
 
 ### Offline LAN fallback
 

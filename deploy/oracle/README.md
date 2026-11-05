@@ -58,6 +58,7 @@ Vercel. To go back to Maincloud, restore the old two lines and deploy again.
 
 - Everyone connects to this one server, so players far from India will see higher ping. For a lab
   group in India that is ideal.
-- Match data lives in memory/disk on the VM and is disposable; there is nothing to back up.
+- Match data lives in memory/disk on the VM and is disposable, but `profile` and `season_board` hold
+  every player's level and season points. Back them up, and copy them across when moving servers.
 - Updates: `ssh ubuntu@<ip> "spacetime version upgrade && sudo systemctl restart spacetimedb"`.
 - Logs: `ssh ubuntu@<ip> "journalctl -u spacetimedb -f"`.
