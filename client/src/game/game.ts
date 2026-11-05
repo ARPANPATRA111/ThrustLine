@@ -564,7 +564,10 @@ export class Game implements WorldView {
 
   flagDelete(f: Flag): void {
     const v = this.flags.get(f.team);
-    if (v) { v.sprite.destroy(); this.flags.delete(f.team); }
+    // A new round replaces both flags, and its rows can arrive before the old ones go.
+    if (!v || v.row.id !== f.id) return;
+    v.sprite.destroy();
+    this.flags.delete(f.team);
     if (this.flags.size === 0) this.baseGfx.visible = false;
   }
 

@@ -146,7 +146,7 @@ test('a dropped flag can be returned, and goes home by itself', async ({ browser
   console.log(`dropped flag went home after ${Date.now() - left} ms`);
 });
 
-test('three captures win the round, and a carrier can still be stopped by death at home', async ({ browser }) => {
+test('three captures win the round, and the next round has fresh flags', async ({ browser }) => {
   const [red, blue] = await match(browser);
   for (let i = 1; i <= 3; i++) {
     await teleport(red, BLUE_FLAG, FLOOR);
@@ -159,6 +159,15 @@ test('three captures win the round, and a carrier can still be stopped by death 
   await expect(red.locator('#winner-name')).toContainText('3');
   await expect(red.locator('#winner-name')).toContainText('VICTORY');
   await expect(blue.locator('#winner-name')).not.toContainText('VICTORY');
+
+  // Playing again in the same room replaces both flags. Their rows can reach a client in any order.
+  const host = await red.evaluate(() => (window as any).__tl.game.room.hostIdentity.isEqual((window as any).__tl.net.identity)) ? red : blue;
+  await host.click('#btn-again');
+  for (const p of [red, blue]) {
+    await expect.poll(async () => (await st(p)).room?.state, { timeout: 8000 }).toBe(1);
+    await expect.poll(async () => (await st(p)).flags.map((f: any) => f.caps), { timeout: 4000 }).toEqual([0, 0]);
+  }
+  await expect(red.locator('#hill-chip')).toContainText('ENEMY FLAG');
 });
 
 // Every map must be playable by CPU players. Taking a flag is the bar: on the slow test renderer a
