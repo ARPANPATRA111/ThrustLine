@@ -12,7 +12,7 @@ import { fuseTicks, simulateGrenade } from './shared/grenade';
 import { pickSpawn, shuffledSpawnOrder, type Point } from './shared/spawn';
 import { lineOfSight } from './shared/raycast';
 import { randomCallsign, sanitizeName } from './shared/names';
-import { fireRateOk, hitClaimDistance, isStaleSeq, isValidPosition, meleeHits, shotOriginOk, validateMove } from './shared/validate';
+import { type MoveCredit, addBoost, canSeeBody, fireRateOk, freshMoveCredit, hitClaimDistance, isStaleSeq, isValidPosition, maxPelletsAt, meleeHits, shotOriginOk, spendMove, validateMove } from './shared/validate';
 
 // ============================================================================
 // Tables
@@ -153,6 +153,10 @@ const pmeta = table(
     hasDeath: t.bool(),
     deathX: t.f32(),
     deathY: t.f32(),
+    /** Movement credit (px) per axis and the speed bonus from recent impulses (see spendMove). */
+    creditX: t.f32().default(C.MOVE_BUDGET_PX),
+    creditUp: t.f32().default(C.MOVE_BUDGET_PX),
+    boost: t.f32().default(0),
   },
 );
 
@@ -442,7 +446,16 @@ function rejected(r: RoomRow, what: string): void {
 
 /** Forget a player's movement timeline (spawn, teleport): the next sync starts fresh. */
 function resetMotion(meta: MetaRow, x: number, y: number, now: bigint): MetaRow {
-  return { ...meta, prevX: x, prevY: y, prevMicros: now, lastSyncMicros: now, lastClientMs: 0, timeDebtMs: 0, histT: [], histX: [], histY: [] };
+  const c = freshMoveCredit();
+  return { ...meta, prevX: x, prevY: y, prevMicros: now, lastSyncMicros: now, lastClientMs: 0, timeDebtMs: 0, histT: [], histX: [], histY: [], creditX: c.x, creditUp: c.up, boost: c.boost };
+}
+
+/** A client's own velocity is untrusted: keep it inside what physics can produce. */
+function clampVel(vx: number, vy: number): { vx: number; vy: number } {
+  return {
+    vx: Math.max(-C.MAX_IMPULSE_SPEED_X, Math.min(C.MAX_IMPULSE_SPEED_X, vx)),
+    vy: Math.max(-C.MAX_IMPULSE_SPEED_UP, Math.min(C.MAX_FALL, vy)),
+  };
 }
 
 // ============================================================================
@@ -650,6 +663,9 @@ function addPlayerToRoom(ctx: Ctx, r: RoomRow, name: string, isBot: boolean): vo
     hasDeath: false,
     deathX: 0,
     deathY: 0,
+    creditX: C.MOVE_BUDGET_PX,
+    creditUp: C.MOVE_BUDGET_PX,
+    boost: 0,
   });
 }
 
@@ -899,8 +915,11 @@ export const startRound = spacetimedb.reducer((ctx) => {
 });
 
 export const choosePrimary = spacetimedb.reducer({ weapon: t.u8() }, (ctx, { weapon }) => {
-  const { p } = requireMember(ctx);
+  const { p, r } = requireMember(ctx);
   if (!isPrimary(weapon)) throw new SenderError('Not a primary weapon');
+  // Allowed weapons follow `primary`, so changing it mid-life would be an instant swap to a gun
+  // the player never spawned with, carrying the old gun's magazine.
+  if (r.state === ROOM_PLAYING && p.alive) throw new SenderError('Pick your primary while respawning');
   ctx.db.player.identity.update({ ...p, primary: weapon });
 });
 
@@ -987,8 +1006,9 @@ function finiteShot(s: ShotRow): boolean {
 const MAX_SHOTS_PER_SYNC = 4;
 /** There can be at most MAX_PLAYERS - 1 targets; more claims than that are not honest. */
 const MAX_HITS_PER_SHOT = 8;
-const MAX_TRACER_FLOATS = 14;
-/** Upper bound on the untrusted tracer array before it is parsed/relayed (9 shotgun pellets = 18). */
+/** Tracer end points relayed to the room: two floats per shotgun pellet. */
+const MAX_TRACER_FLOATS = 20;
+/** Upper bound on the untrusted tracer array before it is parsed or relayed. */
 const MAX_ENDS_FLOATS = 42;
 /** Fire-rate "burst allowance": a token bucket that forgives shots bundled into one sync. */
 const FIRE_BURST_MICROS = 200_000n;
@@ -1060,7 +1080,19 @@ export const sync = spacetimedb.reducer(
       }
       debt = Math.max(-1, debt);
       const dt = Math.max(clientDt, Math.min(serverDt, clientDt + 0.1));
-      if (validateMove(RIG7, pos, { x: a.x, y: a.y }, dt)) {
+      const credit: MoveCredit = { x: meta.creditX, up: meta.creditUp, boost: meta.boost };
+      // Recoil and the knife lunge move the client in the same packet that reports them.
+      if (a.melee !== undefined && fireRateOk(meta.lastMeleeMicros, now, WEAPONS[W_KNIFE].rate)) addBoost(credit, C.KNIFE_LUNGE);
+      for (const s of a.shots.slice(0, MAX_SHOTS_PER_SYNC)) {
+        const w = WEAPONS[s.weapon];
+        if (w && s.weapon === p.weapon && w.recoil > 0 && fireRateOk(meta.lastFire[s.weapon] ?? 0n, now, w.rate)) addBoost(credit, w.recoil);
+      }
+      const runMul = r.mode === C.MODE_BLADES ? C.BLADES_RUN_MUL : 1;
+      const legal = validateMove(RIG7, pos, { x: a.x, y: a.y }, dt) && spendMove(credit, a.x - pos.x, a.y - pos.y, dt, runMul);
+      meta.creditX = credit.x;
+      meta.creditUp = credit.up;
+      meta.boost = credit.boost;
+      if (legal) {
         meta.prevX = ps.x;
         meta.prevY = ps.y;
         meta.prevMicros = ps.serverMicros;
@@ -1082,8 +1114,7 @@ export const sync = spacetimedb.reducer(
           ...ps,
           x: a.x,
           y: a.y,
-          vx: a.vx,
-          vy: a.vy,
+          ...clampVel(a.vx, a.vy),
           aim: a.aim,
           flags: (a.flags & ~C.FLAG_RELOADING) | reloading,
           weapon: p.weapon,
@@ -1108,6 +1139,12 @@ export const sync = spacetimedb.reducer(
     meta.lastHazardMicros = now;
     if (r.rules.acid && boxTouchesTile(RIG7, pos.x - C.PLAYER_W / 2, pos.y - C.PLAYER_H, pos.x + C.PLAYER_W / 2, pos.y, T_ACID)) {
       applyDamage(ctx, p, C.ACID_DPS * hazardDt, p.identity, C.CAUSE_ACID);
+      // `meta` is written back at the end of this reducer, so it must carry the death spot too.
+      if (!p.alive) {
+        meta.hasDeath = true;
+        meta.deathX = pos.x;
+        meta.deathY = pos.y;
+      }
     }
 
     // ---- 5. Pickups ----
@@ -1247,8 +1284,8 @@ function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x:
     const tps = ctx.db.pstate.identity.find(target.identity);
     const tmeta = ctx.db.pmeta.identity.find(target.identity) ?? null;
     if (!tps) continue;
-    // Cover wins: the target's CURRENT server position must be in line of sight.
-    if (!lineOfSight(RIG7, shot.ox, shot.oy, tps.x, tps.y - C.PLAYER_H / 2)) { rejected(r, 'hit claim: target is behind cover now'); continue; }
+    // Cover wins: some part of the target's CURRENT body must be exposed to the shot.
+    if (!canSeeBody(RIG7, shot.ox, shot.oy, tps)) { rejected(r, 'hit claim: target is behind cover now'); continue; }
     // The ray and range are checked against where the shooter saw the target (lag compensation).
     let d = -1;
     for (const at of lagCompPositions(tmeta, tps, claim.viewMs, nowMs_)) {
@@ -1256,7 +1293,7 @@ function handleShot(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x:
       if (d >= 0) break;
     }
     if (d < 0) { rejected(r, 'hit claim: out of range or off the ray'); continue; }
-    const pellets = Math.max(1, Math.min(claim.pellets, w.pellets));
+    const pellets = Math.max(1, Math.min(claim.pellets, maxPelletsAt(w, d)));
     const dmg = pellets * damageAtDistance(w, d) * fmul;
     const res = damageOther(ctx, r, p, target, dmg, wid);
     if (res.killed) creditKill(p, res);
@@ -1311,8 +1348,9 @@ function handleThrow(ctx: Ctx, r: RoomRow, p: PlayerRow, meta: MetaRow, pos: { x
     x0 = cx;
     y0 = cy;
   }
-  const vx0 = dx * C.GRENADE_THROW_SPEED + ps.vx * C.GRENADE_INHERIT;
-  const vy0 = dy * C.GRENADE_THROW_SPEED + ps.vy * C.GRENADE_INHERIT;
+  const v = clampVel(ps.vx, ps.vy);
+  const vx0 = dx * C.GRENADE_THROW_SPEED + v.vx * C.GRENADE_INHERIT;
+  const vy0 = dy * C.GRENADE_THROW_SPEED + v.vy * C.GRENADE_INHERIT;
   const g = ctx.db.grenade.insert({ id: 0n, roomId: r.id, owner: p.identity, x0, y0, vx0, vy0, thrownMicros: now, fuseMs: C.GRENADE_FUSE_MS, zeroG: r.rules.floatingGrenades });
   ctx.db.detonateJob.insert({ scheduledId: 0n, scheduledAt: atMicros(now + BigInt(C.GRENADE_FUSE_MS) * 1000n), grenadeId: g.id, roomId: r.id });
 }
@@ -1369,6 +1407,15 @@ export const detonate = spacetimedb.reducer({ onSchedule: detonateJob }, { job: 
 
   const owner = ctx.db.player.identity.find(g.owner);
   const fmul = frenzyMul(r, now);
+  // Everyone near the blast may be thrown by it, whether or not it can hurt them.
+  for (const target of roomPlayers(ctx, r.id)) {
+    const c = target.alive ? centreOf(ctx, target.identity) : null;
+    const meta = c ? ctx.db.pmeta.identity.find(target.identity) : null;
+    if (!c || !meta || Math.hypot(c.x - bx, c.y - by) > C.GRENADE_BLAST_RADIUS + C.BLAST_BOOST_MARGIN_PX) continue;
+    const credit: MoveCredit = { x: meta.creditX, up: meta.creditUp, boost: meta.boost };
+    addBoost(credit, C.BLAST_BOOST);
+    ctx.db.pmeta.identity.update({ ...meta, boost: credit.boost });
+  }
   for (const target of roomPlayers(ctx, r.id)) {
     if (!target.alive || isProtected(target, now)) continue;
     if (owner && !canHurt(r, owner, target)) continue;

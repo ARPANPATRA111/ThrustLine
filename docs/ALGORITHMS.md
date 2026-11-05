@@ -72,18 +72,24 @@ The shooter's client decides what it hit, because it saw the target where the ta
   `0.85 / rate` seconds have passed since the last shot (a token bucket allows a short burst when
   two shots arrive in one packet);
 - the shot origin is within 48 px of the shooter's current or previous server position;
-- for each claimed target: same room, alive, not spawn-protected; a clear DDA raycast to its **current**
-  server position (cover wins: once you are behind a wall you can't be hit); its current or previous
-  position within range + 64 px; and the claim's own ray angle passing within the target's
-  half-diagonal + 40 px (`pointToRayDistance`).
+- for each claimed target: same room, alive, not spawn-protected; a clear DDA raycast to some part of
+  its **current** body (shins, chest or head, so cover wins but a player peeking over a low wall can
+  still be hit); its current or previous position within range + 64 px; and the claim's own ray angle
+  passing within the target's half-diagonal + 40 px (`pointToRayDistance`).
 
-Damage always comes from the **server's** weapon table and the **server's** distance (shotgun falloff,
-at most 7 pellets), times the Frenzy multiplier. Hit markers and damage numbers appear only when the
+Damage always comes from the **server's** weapon table and the **server's** distance (shotgun falloff),
+times the Frenzy multiplier. A claim cannot report more pellets than the target's size allows at that
+distance (`maxPelletsAt`: the share of the cone the body fills, plus two). Hit markers and damage numbers appear only when the
 server's `hit_ev` arrives, so you never see a hit the server refused.
 
-Movement is validated the same way in `sync` (line 702): inside the map, not overlapping a solid
-tile, and no farther than `1400 × dt × 1.3 + 24` px from the last accepted position. A rejected move
-increments `player.correction`; the client sees that and snaps back.
+Movement is validated in `sync` in two steps. `validateMove` is the sanity check: inside the map, not
+overlapping a solid tile, no farther than `1400 × dt × 1.3 + 24` px, and a clear path between the two
+positions (`isPathClear`, so a step cannot cross a wall or floor). `spendMove` is the speed check. It
+keeps a per-axis travel credit that refills at the speed physics allows right now and caps at 96 px:
+run speed sideways and hop speed upward, plus `boost`, a bonus earned from real impulses (recoil, the
+knife lunge, a nearby blast) that fades at the air-drag rate. The credit absorbs jitter without
+raising the speed a client can sustain. A rejected move increments `player.correction`; the client
+sees that and snaps back.
 
 Knife hits are found by the server itself (`meleeHits`: within 72 px, within ±70° of the swing,
 clear line of sight).
@@ -128,7 +134,7 @@ The server keeps the last 16 accepted positions of each player with their timest
 (`pmeta.histT/histX/histY`). Each hit claim says when the shooter's view of the target was from
 (`viewMs`, the render time of that target). The ray/range check accepts the target's position at
 that time (interpolated from history, up to 700 ms back) as well as nearby samples. Line of sight to
-the target's **current** position is still required, so ducking behind cover always protects you.
+the target's **current** body is still required, so ducking fully behind cover always protects you.
 
 ## 6. Spawn selection
 

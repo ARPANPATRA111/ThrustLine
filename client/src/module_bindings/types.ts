@@ -190,6 +190,9 @@ export const Pmeta = __t.object("Pmeta", {
   hasDeath: __t.bool(),
   deathX: __t.f32(),
   deathY: __t.f32(),
+  creditX: __t.f32(),
+  creditUp: __t.f32(),
+  boost: __t.f32(),
 });
 export type Pmeta = __Infer<typeof Pmeta>;
 
