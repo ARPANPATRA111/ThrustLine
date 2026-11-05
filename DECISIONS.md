@@ -94,7 +94,7 @@ Every deviation from the build brief, and every non-obvious choice, one line eac
 ## Round 4: server location
 
 - Measured latency options from India before choosing: Maincloud (Virginia) ~245–305 ms; a Cloudflare Durable Object probe 87–235 ms (free-plan traffic from this ISP is served from Singapore / Hong Kong / Tokyo and the route changes per connection); AWS Mumbai ~67 ms; Oracle Cloud Mumbai ~38 ms; Oracle Cloud Hyderabad ~25 ms · decide on data, not assumptions. The probe Worker was deleted afterwards.
-- Chosen path: self-host the same SpacetimeDB module on Oracle Cloud Always Free in India (`deploy/oracle/`: one setup script with SpacetimeDB as a systemd service and Caddy for automatic HTTPS on `<ip>.sslip.io`) · ~10× lower ping, free, zero code changes; a Cloudflare rewrite would replace a tested backend for an inconsistent gain.
+- Chosen path: self-host the same SpacetimeDB module on Oracle Cloud Always Free in India (`deploy/`: one setup script with SpacetimeDB as a systemd service and Caddy for automatic HTTPS on `<ip>.sslip.io`) · ~10× lower ping, free, zero code changes; a Cloudflare rewrite would replace a tested backend for an inconsistent gain.
 - `scripts/publish-cloud.mjs` now publishes to whatever server `VITE_STDB_URI` names (Maincloud or a self-hosted URL) · switching servers is one config change plus `npm run deploy`.
 - `docs/GAME_GUIDE.md` added as the single explanation document for the presentation and viva.
 

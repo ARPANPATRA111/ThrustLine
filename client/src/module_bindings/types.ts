@@ -154,6 +154,20 @@ export const KillEv = __t.object("KillEv", {
 });
 export type KillEv = __Infer<typeof KillEv>;
 
+export const LegacyProfile = __t.object("LegacyProfile", {
+  key: __t.string(),
+  name: __t.string(),
+  xp: __t.u32(),
+  kills: __t.u32(),
+  deaths: __t.u32(),
+  wins: __t.u32(),
+  rounds: __t.u32(),
+  bestKills: __t.u32(),
+  season: __t.u32(),
+  seasonScore: __t.u32(),
+});
+export type LegacyProfile = __Infer<typeof LegacyProfile>;
+
 export const LoadoutJob = __t.object("LoadoutJob", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
@@ -415,4 +429,10 @@ export const Throttle = __t.object("Throttle", {
   lastPingMicros: __t.i64(),
 });
 export type Throttle = __Infer<typeof Throttle>;
+
+export const TransferKey = __t.object("TransferKey", {
+  identity: __t.identity(),
+  key: __t.string(),
+});
+export type TransferKey = __Infer<typeof TransferKey>;
 

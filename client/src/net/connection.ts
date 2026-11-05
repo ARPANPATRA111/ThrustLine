@@ -12,6 +12,8 @@ const TOKEN_KEY = `tl:token:${STDB_URI}/${STDB_DB}`;
 /** Held for the life of the page by the one tab that owns the saved identity. */
 const OWNER_LOCK = `tl:owner:${STDB_URI}/${STDB_DB}`;
 const ROOM_KEY = 'tl:room';
+/** Outlives any one server: this is how progress finds its owner after the game moves. */
+const TRANSFER_KEY = 'tl:transfer';
 /** Initial-connection retry delays (ms), then every 8 s. */
 const BACKOFF = [500, 1000, 2000, 4000, 8000];
 
@@ -116,6 +118,8 @@ export class Net {
             this.identity = identity;
             this.register(conn);
             this.subscribeSelf(conn, identity);
+            // Spare tabs are separate players, not this browser's returning one.
+            if (this.ownsSaved) void conn.reducers.registerTransfer({ key: transferKey() }).catch(() => {});
             this.h.state?.('connected');
             resolve();
           })
@@ -245,6 +249,16 @@ export class Net {
     if (code) sessionStorage.setItem(ROOM_KEY, code);
     else sessionStorage.removeItem(ROOM_KEY);
   }
+}
+
+/** This browser's transfer key, made the first time it is needed. */
+function transferKey(): string {
+  let key = localStorage.getItem(TRANSFER_KEY);
+  if (!key) {
+    key = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
+    localStorage.setItem(TRANSFER_KEY, key);
+  }
+  return key;
 }
 
 /** A short error message from a failed reducer call (SenderError text). */

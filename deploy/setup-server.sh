@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# One-shot setup of a THRUSTLINE game server on a fresh Ubuntu VM (Oracle Cloud Always Free,
-# region Hyderabad or Mumbai). Installs SpacetimeDB as a service and Caddy for HTTPS/WSS.
+# One-shot setup of a THRUSTLINE game server on a fresh Ubuntu VM from any provider. Installs
+# SpacetimeDB as a service and Caddy for HTTPS/WSS. See deploy/README.md for the whole move.
 #
-# Run on the VM as the default "ubuntu" user:
+# Run on the VM as a user with sudo:
 #   bash setup-server.sh            # uses <public-ip>.sslip.io as the hostname (free, no domain needed)
 #   bash setup-server.sh game.example.com   # or your own domain pointing at the VM
 #
-# Afterwards, on your laptop, set client/.env.production to VITE_STDB_URI=https://<hostname>
-# and run `npm run deploy` (it publishes the module to this server and redeploys the client).
 set -euo pipefail
 
 PUBLIC_IP="$(curl -s https://api.ipify.org)"
@@ -61,7 +59,7 @@ $HOST {
 EOF
 
 # 4. Open ports 80 (certificate challenge) and 443 (game traffic) in the VM firewall.
-#    Oracle's Ubuntu images ship iptables rules that reject everything except SSH.
+#    Some images (Oracle's Ubuntu among them) ship iptables rules that reject everything but SSH.
 echo "==> Opening ports 80 and 443"
 sudo iptables -I INPUT 1 -p tcp -m multiport --dports 80,443 -m conntrack --ctstate NEW -j ACCEPT
 sudo apt-get install -y iptables-persistent >/dev/null 2>&1 || true
@@ -73,10 +71,8 @@ echo "==> Checking https://$HOST/v1/ping"
 if curl -sf "https://$HOST/v1/ping" >/dev/null; then
   echo "OK: SpacetimeDB is reachable at https://$HOST"
 else
-  echo "Not reachable yet. Make sure the Oracle subnet's security list allows TCP 80 and 443 from 0.0.0.0/0,"
+  echo "Not reachable yet. Make sure your provider's firewall allows TCP 80 and 443 from anywhere,"
   echo "then run: sudo systemctl restart caddy && curl -v https://$HOST/v1/ping"
 fi
 echo
-echo "Next, on your laptop:"
-echo "  1. client/.env.production -> VITE_STDB_URI=https://$HOST"
-echo "  2. npm run deploy"
+echo "Next: follow deploy/README.md from step 2, with https://$HOST as the new server."

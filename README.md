@@ -147,9 +147,8 @@ an arrow at the screen edge points toward them; enemies already on screen get no
 The game server is SpacetimeDB Maincloud, which runs in Virginia, USA. From India the network round
 trip alone is about 230–250 ms, so that is the ping you will see. The netcode is built to stay smooth
 and fair at that latency (see Architecture). A lower ping would need a SpacetimeDB server closer to
-the players. **[deploy/oracle/](deploy/oracle/README.md)** sets one up for free on Oracle Cloud's Always Free tier in
-Hyderabad/Mumbai (measured ~25–40 ms from India vs ~250 ms to Maincloud and 87–235 ms via Cloudflare):
-one setup script on the server, then change `VITE_STDB_URI` and run `npm run deploy`.
+the players. **[deploy/README.md](deploy/README.md)** is the whole move to your own server on any provider, including
+carrying every player's level across (measured ~25–40 ms from India vs ~250 ms to Maincloud).
 
 ### Weapons
 
