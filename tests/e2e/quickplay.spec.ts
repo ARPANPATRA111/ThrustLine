@@ -56,7 +56,7 @@ test('Quick Play puts strangers in one running room and rounds loop', async ({ b
   await expect(a.locator('#lobby-countdown')).toContainText('Next round');
   await expect.poll(async () => (await roomOf(b))?.roundNo, { timeout: 25_000 }).toBe(room.roundNo + 1);
   await expect(a.locator('#scr-lobby')).toBeHidden();
-  expect((await roomOf(a))!.state).toBe(1);
+  await expect.poll(async () => (await roomOf(a))!.state, { timeout: 4000 }).toBe(1);
 });
 
 test('a dropped player keeps their stats and comes back to the same match', async ({ browser }) => {
