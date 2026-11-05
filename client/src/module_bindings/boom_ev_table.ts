@@ -15,4 +15,5 @@ export default __t.row({
   owner: __t.identity(),
   x: __t.f32(),
   y: __t.f32(),
+  kind: __t.u8(),
 });

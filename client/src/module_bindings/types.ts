@@ -23,6 +23,7 @@ export const BoomEv = __t.object("BoomEv", {
   owner: __t.identity(),
   x: __t.f32(),
   y: __t.f32(),
+  kind: __t.u8(),
 });
 export type BoomEv = __Infer<typeof BoomEv>;
 
@@ -67,6 +68,7 @@ export const Grenade = __t.object("Grenade", {
   thrownMicros: __t.i64(),
   fuseMs: __t.u32(),
   zeroG: __t.bool(),
+  kind: __t.u8(),
 });
 export type Grenade = __Infer<typeof Grenade>;
 
@@ -220,6 +222,8 @@ export const Player = __t.object("Player", {
   connected: __t.bool(),
   shield: __t.f32(),
   power: __t.u8(),
+  nade: __t.u8(),
+  empUntilMicros: __t.i64(),
 });
 export type Player = __Infer<typeof Player>;
 
@@ -245,6 +249,7 @@ export const Pmeta = __t.object("Pmeta", {
   creditX: __t.f32(),
   creditUp: __t.f32(),
   boost: __t.f32(),
+  empRise: __t.f32(),
 });
 export type Pmeta = __Infer<typeof Pmeta>;
 

@@ -7,7 +7,7 @@ import '@fontsource/chakra-petch/latin-700.css';
 import './style.css';
 import { Application } from 'pixi.js';
 import * as C from '@shared/config';
-import { PRIMARIES } from '@shared/weapons';
+import { GRENADES, PRIMARIES, effectiveNade, nadeOptions } from '@shared/weapons';
 import type { Player, Profile, Room, SeasonBoard } from './module_bindings/types';
 import { Net, errorText } from './net/connection';
 import { TimeSync } from './net/timesync';
@@ -102,7 +102,7 @@ async function boot(): Promise<void> {
   const audio = new Audio();
   const input = new Input();
   const hud = new Hud();
-  hud.causeIcons = { 0: atlas.iconURL('w0'), 1: atlas.iconURL('w1'), 2: atlas.iconURL('w2'), 3: atlas.iconURL('w3'), 4: atlas.iconURL('w4'), 5: atlas.iconURL('w5'), 6: atlas.iconURL('w6'), 7: atlas.iconURL('w7'), [C.CAUSE_ACID]: atlas.iconURL('bubbleAcid', 3) };
+  hud.causeIcons = { 0: atlas.iconURL('w0'), 1: atlas.iconURL('w1'), 2: atlas.iconURL('w2'), 3: atlas.iconURL('w3'), 4: atlas.iconURL('w4'), 5: atlas.iconURL('w5'), 6: atlas.iconURL('w6'), 7: atlas.iconURL('w7'), [C.CAUSE_ACID]: atlas.iconURL('bubbleAcid', 3), [C.CAUSE_IMPACT]: atlas.iconURL('nade1') };
   const game = new Game(app, atlas, audio, net, time, input, hud);
   game.setQuality(settings.quality);
   game.debug = settings.showDebug;
@@ -136,6 +136,7 @@ async function boot(): Promise<void> {
   let wasDead = false;
   /** Primary weapon picked on the death screen, shown immediately while the server confirms. */
   let pendingPrimary: number | null = null;
+  let pendingNade: number | null = null;
   let wakeLock: { release(): Promise<void> } | null = null;
   const myRow = (): Player | undefined => (net.identity ? net.conn?.db.player.identity.find(net.identity) ?? undefined : undefined);
   const myRoom = (): Room | undefined => (myRoomId !== null ? net.conn?.db.room.id.find(myRoomId) ?? undefined : undefined);
@@ -302,6 +303,7 @@ async function boot(): Promise<void> {
         if (p.roomId !== myRoomId) enterRoom(p.roomId);
         if (old && old.alive && !p.alive) game.killedBy = game.killedBy || 'Eliminated';
         if (pendingPrimary !== null && p.primary === pendingPrimary) pendingPrimary = null;
+        if (pendingNade !== null && p.nade === pendingNade) pendingNade = null;
       }
       if (p.roomId === myRoomId) game.playerUpsert(p);
       queueRoute();
@@ -340,6 +342,7 @@ async function boot(): Promise<void> {
     game.clear();
     boardHtml = '';
     pendingPrimary = null;
+    pendingNade = null;
     myRoomId = roomId;
     net.subscribeRoom(roomId);
     const r = myRoom();
@@ -352,6 +355,7 @@ async function boot(): Promise<void> {
     myRoomId = null;
     boardHtml = '';
     pendingPrimary = null;
+    pendingNade = null;
     net.subscribeRoom(null);
     game.clear();
     menuOpen = false;
@@ -483,7 +487,15 @@ async function boot(): Promise<void> {
     $('kill-recap').textContent = game.killedBy ? game.killRecap : '';
     $('primary-pick').classList.toggle('hidden', room.mode !== C.MODE_ARMS);
     const sel = pendingPrimary ?? me.primary;
-    document.querySelectorAll<HTMLButtonElement>('#primary-pick .pick').forEach((b) => b.classList.toggle('sel', Number(b.dataset.w) === sel));
+    document.querySelectorAll<HTMLButtonElement>('.pick[data-w]').forEach((b) => b.classList.toggle('sel', Number(b.dataset.w) === sel));
+    const nades = nadeOptions(room.mode);
+    $('nade-pick').classList.toggle('hidden', nades.length === 0);
+    const nade = effectiveNade(room.mode, pendingNade ?? me.nade);
+    document.querySelectorAll<HTMLButtonElement>('.pick[data-n]').forEach((b) => {
+      const n = Number(b.dataset.n);
+      b.classList.toggle('sel', n === nade);
+      b.classList.toggle('hidden', !nades.includes(n));
+    });
   }
   setInterval(() => {
     if ($('scr-respawn').classList.contains('hidden')) return;
@@ -492,7 +504,21 @@ async function boot(): Promise<void> {
     $('respawn-count').textContent = String(Math.ceil(left / 1000));
     $('ring-fg').style.strokeDashoffset = String(276.5 * (1 - Math.min(1, left / total)));
   }, 100);
-  document.querySelectorAll<HTMLButtonElement>('#primary-pick .pick').forEach((b) => {
+  document.querySelectorAll<HTMLButtonElement>('.pick[data-n]').forEach((b) => {
+    b.addEventListener('click', () => {
+      const kind = Number(b.dataset.n);
+      if (!GRENADES[kind]) return;
+      audio.play('click');
+      pendingNade = kind;
+      const me = myRow();
+      const room = myRoom();
+      if (me && room) renderRespawn(me, room);
+      void call(net.conn?.reducers.chooseGrenade({ kind })).then((ok) => {
+        if (!ok && pendingNade === kind) { pendingNade = null; queueRoute(); }
+      });
+    });
+  });
+  document.querySelectorAll<HTMLButtonElement>('.pick[data-w]').forEach((b) => {
     b.addEventListener('click', () => {
       const w = Number(b.dataset.w);
       if (!PRIMARIES.includes(w)) return;

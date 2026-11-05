@@ -1,5 +1,5 @@
 // Weapon table shared by client (feel, prediction) and server (authoritative damage).
-import { MODE_ARMS, MODE_BLADES, MODE_BOOM, MODE_SNIPERS } from './config';
+import { EMP_BLAST_RADIUS, EMP_COOLDOWN, EMP_FUSE_MS, GRENADE_BLAST_RADIUS, GRENADE_COOLDOWN_ARMS, GRENADE_COOLDOWN_BOOM, GRENADE_FUSE_MS, GRENADE_MAX_DAMAGE, IMPACT_BLAST_RADIUS, IMPACT_COOLDOWN, IMPACT_FUSE_MS, MODE_ARMS, MODE_BLADES, MODE_BOOM, MODE_SNIPERS } from './config';
 import { PICKUP_DROP, PICKUP_SHIELD } from './map';
 
 export const W_PISTOL = 0;
@@ -49,7 +49,7 @@ export const WEAPONS: WeaponDef[] = [
   // One clean body hit kills; with a quarter-second of lag, two-shot kills were too hard to close.
   { id: W_SNIPER, name: 'Sniper', kind: 'bolt', damage: 100, rate: 0.85, mag: 4, reserve: 16, reloadSec: 2.5, range: 2400, spreadStill: 0, spreadMoving: 5, pellets: 1, falloffStart: 2400, falloffMul: 1, recoil: 0, shake: 9 },
   { id: W_KNIFE, name: 'Knife', kind: 'melee', damage: 55, rate: 2, mag: 0, reserve: 0, reloadSec: 0, range: 64, spreadStill: 60, spreadMoving: 60, pellets: 0, falloffStart: 64, falloffMul: 1, recoil: 0, shake: 1 },
-  { id: W_FRAG, name: 'Frag', kind: 'thrown', damage: 100, rate: 1.25, mag: 0, reserve: 0, reloadSec: 0, range: 170, spreadStill: 0, spreadMoving: 0, pellets: 0, falloffStart: 0, falloffMul: 1, recoil: 0, shake: 10 },
+  { id: W_FRAG, name: 'Frag', kind: 'thrown', damage: GRENADE_MAX_DAMAGE, rate: 1.25, mag: 0, reserve: 0, reloadSec: 0, range: 170, spreadStill: 0, spreadMoving: 0, pellets: 0, falloffStart: 0, falloffMul: 1, recoil: 0, shake: 10 },
   // Latency-friendly primary: many forgiving shots, so a quarter-second of lag costs a few bullets
   // rather than a whole marksman's shot. Falls off at range; the AR still wins mid-to-long fights.
   { id: W_SMG, name: 'SMG', kind: 'auto', damage: 8, rate: 14, mag: 35, reserve: 140, reloadSec: 1.3, range: 900, spreadStill: 2.5, spreadMoving: 5.5, pellets: 1, falloffStart: 450, falloffMul: 0.55, recoil: 0, shake: 1.5 },
@@ -58,6 +58,44 @@ export const WEAPONS: WeaponDef[] = [
 ];
 
 export const PRIMARIES = [W_AR, W_SHOTGUN, W_SNIPER, W_SMG];
+
+export const NADE_FRAG = 0;
+export const NADE_IMPACT = 1;
+export const NADE_EMP = 2;
+
+export interface GrenadeDef {
+  id: number;
+  name: string;
+  /** Time to detonate. An impact grenade that touches something goes sooner. */
+  fuseMs: number;
+  radius: number;
+  /** Damage at the centre of the blast, falling to nothing at the radius. */
+  maxDamage: number;
+  cooldownSec: number;
+}
+
+/** A player carries one type for a whole life. Grenades hurt their thrower like anyone else. */
+export const GRENADES: GrenadeDef[] = [
+  { id: NADE_FRAG, name: 'Frag', fuseMs: GRENADE_FUSE_MS, radius: GRENADE_BLAST_RADIUS, maxDamage: GRENADE_MAX_DAMAGE, cooldownSec: GRENADE_COOLDOWN_ARMS },
+  { id: NADE_IMPACT, name: 'Impact', fuseMs: IMPACT_FUSE_MS, radius: IMPACT_BLAST_RADIUS, maxDamage: GRENADE_MAX_DAMAGE, cooldownSec: IMPACT_COOLDOWN },
+  { id: NADE_EMP, name: 'EMP', fuseMs: EMP_FUSE_MS, radius: EMP_BLAST_RADIUS, maxDamage: 0, cooldownSec: EMP_COOLDOWN },
+];
+
+/** The grenade types on offer in a mode. Boom is about blasts, so EMP stays out. */
+export function nadeOptions(mode: number): number[] {
+  if (mode === MODE_ARMS) return [NADE_FRAG, NADE_IMPACT, NADE_EMP];
+  if (mode === MODE_BOOM) return [NADE_FRAG, NADE_IMPACT];
+  return [];
+}
+
+/** The type a player really throws: a pick the mode doesn't offer falls back to a frag. */
+export function effectiveNade(mode: number, nade: number): number {
+  return nadeOptions(mode).includes(nade) ? nade : NADE_FRAG;
+}
+
+export function nadeCooldownSec(mode: number, nade: number): number {
+  return mode === MODE_BOOM ? GRENADE_COOLDOWN_BOOM : GRENADES[effectiveNade(mode, nade)].cooldownSec;
+}
 
 export function isGun(w: number): boolean {
   return w === W_PISTOL || w === W_AR || w === W_SHOTGUN || w === W_SNIPER || w === W_SMG || w === W_RAIL;

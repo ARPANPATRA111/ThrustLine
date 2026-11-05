@@ -57,6 +57,8 @@ export interface StepOptions {
   fuelRefillMul: number;
   /** House rule: the jetpack never runs dry. */
   infiniteFuel?: boolean;
+  /** Knocked out by an EMP: no flight, but a tap on the ground still jumps. */
+  jetOffline?: boolean;
 }
 
 export const DEFAULT_STEP: StepOptions = { runSpeedMul: 1, fuelRefillMul: 1 };
@@ -108,7 +110,7 @@ export function stepPlayer(map: GameMap, b: PlayerBody, input: MoveInput, dt: nu
     b.vy = -HOP_SPEED;
     if (!opt.infiniteFuel) b.fuel -= HOP_FUEL;
     b.grounded = false;
-  } else if (input.thrust && !b.grounded && b.fuel > 0) {
+  } else if (input.thrust && !b.grounded && b.fuel > 0 && !opt.jetOffline) {
     // Holding thrust in the air is flight. Power is analog (Mini Militia style): full power climbs
     // (net 1200 px/s² up), about 60 % hovers, less sinks gently. Vertical damping while the jets
     // fire settles the speed, so hovering and drifting sideways at one height are easy to hold.

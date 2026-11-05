@@ -4,6 +4,7 @@
 // rapid fire and out-of-range hits.
 import {
   AIR_DRAG,
+  EMP_RISE_PX,
   FIRE_RATE_TOLERANCE,
   HOP_SPEED,
   MAX_FALL,
@@ -197,4 +198,14 @@ export function meleeHits(map: GameMap, attacker: Pos, angle: number, target: Po
   if (d > MELEE_SERVER_RANGE) return false;
   if (d > 8 && angleDiff(Math.atan2(ty - ay, tx - ax), angle) > (MELEE_SERVER_ARC_DEG * Math.PI) / 180) return false;
   return lineOfSight(map, ax, ay, tx, ty);
+}
+
+/**
+ * With the jetpack dead a player can only rise as far as a jump carries them. Returns how much rise
+ * is left after moving `dy` (negative is up); standing on something refills it. Below zero means
+ * the move took more lift than a jump has, which only a client ignoring the EMP can do.
+ */
+export function spendRise(left: number, dy: number, standing: boolean): number {
+  if (standing) return EMP_RISE_PX;
+  return dy < 0 ? left + dy : left;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { TILE } from './config';
+import { EMP_RISE_PX, TILE } from './config';
 import { RIG7, spawnWorldPos } from './map';
-import { canSeeBody, fireRateOk, hitClaimDistance, isStaleSeq, isValidPosition, maxPelletsAt, meleeHits, shotOriginOk, validateMove } from './validate';
+import { canSeeBody, fireRateOk, hitClaimDistance, isStaleSeq, isValidPosition, maxPelletsAt, meleeHits, shotOriginOk, spendRise, validateMove } from './validate';
 import { WEAPONS, W_AR, W_PISTOL, W_SHOTGUN, W_SNIPER } from './weapons';
 
 const floorY = 35 * TILE + TILE; // ground floor top (row 36) for the lower spawns
@@ -114,5 +114,20 @@ describe('melee validation', () => {
     expect(meleeHits(RIG7, a, 0, t)).toBe(true);
     expect(meleeHits(RIG7, a, Math.PI, t)).toBe(false);
     expect(meleeHits(RIG7, a, 0, { x: a.x + 120, y: a.y })).toBe(false);
+  });
+});
+
+describe('spendRise', () => {
+  it('lets a jump through and stops a climb', () => {
+    let left = EMP_RISE_PX;
+    for (let i = 0; i < 4; i++) left = spendRise(left, -20, false);
+    expect(left).toBeGreaterThanOrEqual(0);
+    for (let i = 0; i < 4; i++) left = spendRise(left, -20, false);
+    expect(left).toBeLessThan(0);
+  });
+
+  it('ignores falling and refills on the ground', () => {
+    expect(spendRise(10, 30, false)).toBe(10);
+    expect(spendRise(0, 0, true)).toBe(EMP_RISE_PX);
   });
 });

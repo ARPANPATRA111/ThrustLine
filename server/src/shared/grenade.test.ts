@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GRENADE_RADIUS, TILE } from './config';
-import { GrenadeState, simulateGrenade, stepGrenade } from './grenade';
-import { RIG7, T_SOLID, parseMap, tileAt } from './map';
+import { GrenadeState, bodyContact, firstTouchTick, fuseTicks, simulateGrenade, stepGrenade, ticksToFuseMs } from './grenade';
+import { RIG7, T_EMPTY, T_SOLID, parseMap, tileAt } from './map';
 
 const R = GRENADE_RADIUS;
 const fresh = (): GrenadeState => ({ x: 0, y: 0, vx: 0, vy: 0 });
@@ -70,5 +70,57 @@ describe('simulateGrenade', () => {
         }
       }
     }
+  });
+});
+
+describe('impact grenades', () => {
+  const free = (x: number, y: number) => {
+    // Open air in the middle of the map, far from every tile.
+    expect(tileAt(RIG7, Math.floor(x / TILE), Math.floor(y / TILE))).toBe(T_EMPTY);
+    return { x, y };
+  };
+
+  it('touches the floor at the tick the flight says it does', () => {
+    const start = free(30 * TILE, 33 * TILE);
+    const tick = firstTouchTick(RIG7, start.x, start.y, 0, 400, 400);
+    expect(tick).toBeLessThan(120);
+    const end = simulateGrenade(RIG7, start.x, start.y, 0, 400, tick, { x: 0, y: 0, vx: 0, vy: 0 });
+    expect(end.y + GRENADE_RADIUS).toBeCloseTo(36 * TILE, 3);
+  });
+
+  it('touches walls and one-way platforms too', () => {
+    expect(firstTouchTick(RIG7, 3 * TILE, 33 * TILE, -900, 0, 400)).toBeLessThan(30);
+    expect(firstTouchTick(RIG7, 45 * TILE, 28 * TILE, 0, 300, 400)).toBeLessThan(120);
+  });
+
+  it('keeps flying on its fuse with nothing to touch', () => {
+    expect(firstTouchTick(RIG7, 48 * TILE, 12 * TILE, 40, -40, 20, true)).toBe(20);
+  });
+
+  it('stores a fuse that converts back to the exact tick', () => {
+    for (let t = 1; t < 240; t++) expect(fuseTicks(ticksToFuseMs(t))).toBe(t);
+  });
+
+  const f = { x0: 30 * TILE, y0: 20 * TILE, vx0: 600, vy0: 0, zeroG: true };
+
+  it('finds a body in its path, on the timeline of that body', () => {
+    // After 200 ms the grenade is about 110 px along. A body waiting there is hit around then.
+    const body = { x: f.x0 + 110, y: f.y0 + 24 };
+    expect(bodyContact(RIG7, f, 400, body, body, 150, 260)).not.toBeNull();
+  });
+
+  it('misses a body the grenade reaches at another time', () => {
+    const body = { x: f.x0 + 400, y: f.y0 + 24 };
+    expect(bodyContact(RIG7, f, 400, body, body, 0, 100)).toBeNull();
+  });
+
+  it('misses a body high above the flight path', () => {
+    const body = { x: f.x0 + 110, y: f.y0 - 120 };
+    expect(bodyContact(RIG7, f, 400, body, body, 150, 260)).toBeNull();
+  });
+
+  it('cannot hit anything after it has burst', () => {
+    const body = { x: f.x0 + 110, y: f.y0 + 24 };
+    expect(bodyContact(RIG7, f, 10, body, body, 150, 260)).toBeNull();
   });
 });

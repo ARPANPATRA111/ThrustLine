@@ -7,7 +7,7 @@ import * as C from '@shared/config';
 import type { GameMap } from '@shared/map';
 import { type MoveInput, type PlayerBody, applyImpulse, makeBody, stepPlayer } from '@shared/physics';
 import { castTiles, rayVsBox, lineOfSight } from '@shared/raycast';
-import { WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, allowedWeapons, canThrow, defaultWeapon, isGun, isPrimary } from '@shared/weapons';
+import { GRENADES, WEAPONS, W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, allowedWeapons, canThrow, defaultWeapon, isGun, isPrimary, nadeCooldownSec } from '@shared/weapons';
 import type { DbConnection } from '../module_bindings';
 import type { Player, Pstate } from '../module_bindings/types';
 
@@ -106,6 +106,10 @@ export class Actor {
   grenades = 0;
   /** Railgun shots left from an airdrop. */
   power = 0;
+  /** Grenade type carried this life. */
+  nade = 0;
+  /** Until when (server clock, ms) an EMP has the jetpack offline. */
+  empUntilMs = 0;
   reloadUntilMs = 0;
   private lastShotMs = WEAPONS.map(() => 0);
   private lastMeleeMs = 0;
@@ -165,6 +169,8 @@ export class Actor {
     this.pistolMag = row.pistolMag;
     this.reserve = row.reserve;
     this.grenades = row.grenades;
+    this.nade = row.nade;
+    this.empUntilMs = Number(row.empUntilMicros) / 1000;
     // A crate was just opened: the server has already put the railgun in our hands.
     if (row.alive && row.power === C.RAIL_SHOTS && this.power < C.RAIL_SHOTS) this.weapon = W_RAIL;
     this.power = row.power;
@@ -193,7 +199,7 @@ export class Actor {
     this.prevY = this.body.y;
     if (!this.alive) return;
     this.aim = input.aim;
-    stepPlayer(world.map, this.body, input, dt, { runSpeedMul: runMul, fuelRefillMul: fuelMul, infiniteFuel: world.rules.infiniteFuel });
+    stepPlayer(world.map, this.body, input, dt, { runSpeedMul: runMul, fuelRefillMul: fuelMul, infiniteFuel: world.rules.infiniteFuel, jetOffline: world.serverNow() < this.empUntilMs });
     this.weapons(input, world);
   }
 
@@ -349,10 +355,14 @@ export class Actor {
     this.markActive();
   }
 
+  /** Seconds until the next grenade may be thrown. */
+  nadeWait(now: number, mode: number): number {
+    return Math.max(0, this.lastThrowMs / 1000 + nadeCooldownSec(mode, this.nade) - now / 1000);
+  }
+
   private doThrow(now: number, mode: number, infinite: boolean): void {
     if (!canThrow(mode)) return;
-    const cooldown = mode === C.MODE_BOOM ? C.GRENADE_COOLDOWN_BOOM : C.GRENADE_COOLDOWN_ARMS;
-    if (now - this.lastThrowMs < cooldown * 1000) return;
+    if (this.nadeWait(now, mode) > 0) return;
     if (mode === C.MODE_ARMS && !infinite) {
       if (this.grenades <= 0) return;
       this.grenades--;
@@ -364,13 +374,14 @@ export class Actor {
   }
 
   /** Grenade knockback: the client owns its movement, so it applies blasts to itself. */
-  knockback(map: GameMap, bx: number, by: number): void {
+  knockback(map: GameMap, bx: number, by: number, kind = 0): void {
     if (!this.alive) return;
     const cx = this.body.x;
     const cy = this.centerY;
     const d = Math.hypot(cx - bx, cy - by);
-    if (d >= C.GRENADE_BLAST_RADIUS || !lineOfSight(map, bx, by, cx, cy)) return;
-    const k = C.GRENADE_KNOCKBACK * (1 - d / C.GRENADE_BLAST_RADIUS);
+    const radius = GRENADES[kind].radius;
+    if (d >= radius || !lineOfSight(map, bx, by, cx, cy)) return;
+    const k = C.GRENADE_KNOCKBACK * (1 - d / radius);
     const nx = d > 1 ? (cx - bx) / d : 0;
     const ny = d > 1 ? (cy - by) / d : -1;
     applyImpulse(this.body, nx * k, ny * k - k * 0.25);

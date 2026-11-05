@@ -89,6 +89,10 @@ const PARTS: Part[] = [
   { name: 'pip', w: 10, h: 10, draw: (g) => { g.beginPath(); g.arc(5, 5, 4, 0, Math.PI * 2); g.fillStyle = '#ffffff'; g.fill(); g.lineWidth = 1.5; g.strokeStyle = '#0b1020'; g.stroke(); } },
   { name: 'chevron', w: 16, h: 11, draw: (g) => { g.beginPath(); g.moveTo(1, 1); g.lineTo(8, 9); g.lineTo(15, 1); g.lineTo(11, 1); g.lineTo(8, 4.5); g.lineTo(5, 1); g.closePath(); g.fillStyle = '#ffffff'; g.fill(); g.lineWidth = 1.2; g.strokeStyle = '#0b1020'; g.stroke(); } },
 
+  // ---------- Grenade types (the frag is w5) ----------
+  { name: 'nade1', w: 12, h: 14, draw: (g, w, h) => { g.beginPath(); g.ellipse(w / 2, h / 2 + 1, 5, 5.5, 0, 0, Math.PI * 2); fillStroke(g, '#ff7a45'); g.fillStyle = '#ffe2b8'; g.fillRect(w / 2 - 5, h / 2, 10, 2); rr(g, w / 2 - 2, 0, 4, 3, 1); fillStroke(g, '#8e9ac8', 1.5); } },
+  { name: 'nade2', w: 14, h: 14, draw: (g, w, h) => { g.beginPath(); g.arc(w / 2, h / 2, 5.5, 0, Math.PI * 2); fillStroke(g, '#123a52'); g.strokeStyle = '#67e8f9'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(w / 2 + 2, 2.5); g.lineTo(w / 2 - 2, h / 2 + 0.5); g.lineTo(w / 2 + 2, h / 2 - 0.5); g.lineTo(w / 2 - 2, h - 2.5); g.stroke(); } },
+
   // ---------- Pickups with baked glow halos ----------
   { name: 'pk0', w: 48, h: 48, draw: pickup('#ff4d6d', (g) => { g.fillStyle = '#ffffff'; g.fillRect(20, 13, 8, 22); g.fillRect(13, 20, 22, 8); }) },
   { name: 'pk1', w: 48, h: 48, draw: pickup('#fbbf24', (g) => { rr(g, 13, 16, 22, 16, 2); fillStroke(g, '#c8892a'); g.fillStyle = '#ffe9a8'; g.fillRect(15, 22, 18, 3); }) },

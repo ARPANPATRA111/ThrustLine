@@ -21,4 +21,5 @@ export default __t.row({
   thrownMicros: __t.i64().name("thrown_micros"),
   fuseMs: __t.u32().name("fuse_ms"),
   zeroG: __t.bool().name("zero_g"),
+  kind: __t.u8(),
 });

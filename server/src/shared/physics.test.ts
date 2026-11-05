@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FUEL_MAX, JET_HOVER, TILE } from './config';
+import { EMP_RISE_PX, FUEL_MAX, JET_HOVER, TILE } from './config';
 import { MAP_H, MAP_W, RIG7, parseMap } from './map';
 import { MoveInput, makeBody, stepPlayer } from './physics';
 import { isValidPosition } from './validate';
@@ -110,5 +110,35 @@ describe('stepPlayer', () => {
         expect(isValidPosition(RIG7, b.x, b.y)).toBe(true);
       }
     }
+  });
+});
+
+describe('EMP', () => {
+  const standing = () => {
+    const b = makeBody(36 * TILE, 36 * TILE); // open sky above
+    stepPlayer(RIG7, b, { moveX: 0, thrust: false, down: false }, 1 / 60);
+    return b;
+  };
+
+  it('stops flight but not a jump', () => {
+    const b = standing();
+    expect(b.grounded).toBe(true);
+    stepPlayer(RIG7, b, { moveX: 0, thrust: true, down: false }, 1 / 60, { runSpeedMul: 1, fuelRefillMul: 1, jetOffline: true });
+    expect(b.grounded, 'the hop still works').toBe(false);
+    let top = b.y;
+    for (let i = 0; i < 180; i++) {
+      stepPlayer(RIG7, b, { moveX: 0, thrust: true, down: false }, 1 / 60, { runSpeedMul: 1, fuelRefillMul: 1, jetOffline: true });
+      expect(b.jetting).toBe(false);
+      top = Math.min(top, b.y);
+    }
+    expect(36 * TILE - top, 'never higher than a hop').toBeLessThan(EMP_RISE_PX);
+    expect(b.grounded, 'and gravity brings them back').toBe(true);
+  });
+
+  it('flies as normal once it wears off', () => {
+    const b = standing();
+    stepPlayer(RIG7, b, { moveX: 0, thrust: false, down: false }, 1 / 60);
+    for (let i = 0; i < 90; i++) stepPlayer(RIG7, b, { moveX: 0, thrust: true, down: false }, 1 / 60);
+    expect(36 * TILE - b.y).toBeGreaterThan(EMP_RISE_PX * 2);
   });
 });

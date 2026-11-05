@@ -35,6 +35,7 @@ import {
 
 // Import all reducer arg schemas
 import BackToLobbyReducer from "./back_to_lobby_reducer";
+import ChooseGrenadeReducer from "./choose_grenade_reducer";
 import ChoosePrimaryReducer from "./choose_primary_reducer";
 import CreateRoomReducer from "./create_room_reducer";
 import DevTeleportReducer from "./dev_teleport_reducer";
@@ -268,6 +269,7 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("back_to_lobby", BackToLobbyReducer),
+  __reducerSchema("choose_grenade", ChooseGrenadeReducer),
   __reducerSchema("choose_primary", ChoosePrimaryReducer),
   __reducerSchema("create_room", CreateRoomReducer),
   __reducerSchema("dev_teleport", DevTeleportReducer),
