@@ -45,9 +45,19 @@ and FPS are always shown under the timer; everyone's ping is on the mini leaderb
 | Reload | T | Reload button |
 | Emote | Q | Emote button (beside the leaderboard) |
 | Scoreboard | Hold Tab | Tap the mini leaderboard |
+| Send a favourite sticker | 1 to 4 | Pick from the tray |
 | Menu / detailed stats | Esc / F3 | ≡ button / Settings |
 
 Touch buttons sit on an arc around the aim stick and only appear when the mode uses them.
+
+Every key can be changed in **Settings**, which also has camera shake and particle sliders and a
+colour-blind palette (Okabe-Ito colours, with orange against blue for teams). Gamepads work too: left
+stick moves, right stick aims, RT fires, A or LB jets, RB throws, LT knifes, X reloads, Y swaps and B
+opens the emotes.
+
+While you wait to respawn, your view stays on the spot where you died, and your movement controls pan
+it around the map. The death screen says what killed you, how much health your killer has left and how
+much damage you dealt to them.
 
 ### Maps
 
@@ -270,10 +280,14 @@ outcome that matters:
   teleports never count, season points need a second person in the room, one round pays at most 300,
   and locked stickers are refused by the server.
 
+Rooms created with `?dev=1` allow test teleports. They are labelled TEST ROOM for everyone inside and
+never count for levels or the season board.
+
 Two limits are inherent to a client-rendered game and are not fixable with server checks: a modified
 client can draw information it already receives (positions of everyone in its room are public so
 they can be rendered), and it can aim perfectly or ignore its own spread. The server still decides
-whether a claimed hit is legal. For a public deployment, pair this with platform-level rate limiting
+whether a claimed hit is legal. Jetpack fuel is also simulated by the client, so a modified client can
+ignore it in rooms that turn Infinite jetpack off; speed and walls are still enforced. For a public deployment, pair this with platform-level rate limiting
 and a way to receive reports; never rely on a client-side anti-cheat.
 
 ```text

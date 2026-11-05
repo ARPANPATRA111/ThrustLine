@@ -18,7 +18,7 @@ import { Particles } from '../render/particles';
 import { Effects } from '../render/effects';
 import { SoldierView, playerColor, playerCss } from '../render/soldier';
 import type { Audio } from '../audio/audio';
-import { type Hud, rankPlayers } from '../ui/hud';
+import { CAUSE_NAMES, type Hud, rankPlayers } from '../ui/hud';
 import { Actor, type ActorInput, type FxSink, type SimRules, type Target, type WorldView, emptyInput } from './actor';
 import { BotManager } from './bot';
 import { Camera } from './camera';
@@ -119,6 +119,8 @@ export class Game implements WorldView {
   camera = new Camera();
   running = false;
   killedBy = '';
+  /** Second line of the death screen: what killed you and how the fight went. */
+  killRecap = '';
   debug = false;
   /** Counters for automated tests: hits this client dealt, explosions seen. */
   hitsDealt = 0;
@@ -160,6 +162,13 @@ export class Game implements WorldView {
   private emotes = new Map<string, EmoteView>();
   /** Where the local player died: the camera holds here until respawn. */
   private deathSpot: { x: number; y: number } | null = null;
+  /** How far the player has panned away from the death spot while waiting. */
+  private lookX = 0;
+  private lookY = 0;
+  /** Damage this life to each player, for the death recap. */
+  private dealt = new Map<string, number>();
+  /** Player setting: share of the particle budget to use, 0..1. */
+  private particleScale = 1;
   /** Local-clock time of the last emote this client sent (optimistic rate limit). */
   private localEmoteAt = 0;
   private input: ActorInput = emptyInput();
@@ -361,6 +370,8 @@ export class Game implements WorldView {
       const snap = this.local.applyServer(p, ps);
       if (snap === 'respawn') {
         this.deathSpot = null;
+        this.lookX = this.lookY = 0;
+        this.dealt.clear();
         this.camera.follow(this.local.body.x, this.local.centerY, this.local.aim, false, 0, true);
         this.effects.ring(this.local.body.x, this.local.centerY, 60, playerColor(p.colorIdx, this.teams ? p.team : 0), 0.5, true);
       } else if (wasAlive && !p.alive) {
@@ -468,7 +479,8 @@ export class Game implements WorldView {
   private hillColor(h: Hill): number {
     if (h.state === C.HILL_CONTESTED) return 0xff4d6d;
     if (h.state === C.HILL_EMPTY) return 0x22d3ee;
-    return this.hillIsMine(h) ? 0x7cff4f : 0xffd54a;
+    if (this.hillIsMine(h)) return document.body.classList.contains('cb') ? 0x56b4e9 : 0x7cff4f;
+    return 0xffd54a;
   }
 
   private drawHill(): void {
@@ -520,6 +532,7 @@ export class Game implements WorldView {
     this.sparks(e.x, e.y, vColor, 6);
     if (attackerKey === this.net.myKey && victimKey !== this.net.myKey) {
       this.hitsDealt++;
+      this.dealt.set(victimKey, (this.dealt.get(victimKey) ?? 0) + e.dmg);
       const sx = (e.x - this.camera.left) * this.camera.zoom;
       const sy = (e.y - this.camera.top) * this.camera.zoom;
       this.hud.hit(sx, sy, e.killed);
@@ -549,6 +562,9 @@ export class Game implements WorldView {
     if (pos) this.deathBurst(pos.x, pos.y, this.colorOf(vKey));
     if (vKey === this.net.myKey) {
       this.killedBy = self ? (e.cause === C.CAUSE_ACID ? 'Dissolved in acid' : 'Blown up by your own grenade') : `Eliminated by ${killer?.name ?? '?'}`;
+      const hp = killer?.alive ? Math.ceil(killer.hp) : 0;
+      const did = Math.round(this.dealt.get(kKey) ?? 0);
+      this.killRecap = self ? '' : `${CAUSE_NAMES[e.cause] ?? ''} · they have ${hp} HP left · you dealt ${did}`;
       this.audio.play('death', 0.75);
     }
     if (kKey === this.net.myKey && !self) {
@@ -889,7 +905,7 @@ export class Game implements WorldView {
         const sniper = local.weapon === W_SNIPER;
         this.camera.follow(x, y - C.PLAYER_H / 2, local.aim, sniper, dt);
       }
-      this.aimLine.visible = show && this.controls.usingTouch;
+      this.aimLine.visible = show && (this.controls.usingTouch || this.controls.usingPad);
       this.audio.setJet(show && local.body.jetting);
     }
 
@@ -983,8 +999,14 @@ export class Game implements WorldView {
     const cam = this.camera;
     if ((!local || !local.alive || !playing) && this.running) {
       cam.hold(dt);
-      // Dead: keep the view pinned to the death spot for the whole respawn wait.
-      if (local && !local.alive && playing && this.deathSpot) cam.snapTo(this.deathSpot.x, this.deathSpot.y);
+      // Dead: the view stays on the death spot for the whole respawn wait, unless the player
+      // pans away with the movement controls to see what is going on.
+      if (local && !local.alive && playing && this.deathSpot) {
+        const pan = 620 * dt;
+        this.lookX += this.input.moveX * pan;
+        this.lookY += ((this.input.down ? 1 : 0) - (this.input.thrust ? 1 : 0)) * pan;
+        cam.snapTo(this.deathSpot.x + this.lookX, this.deathSpot.y + this.lookY);
+      }
     }
     const z = cam.zoom;
     this.world.scale.set(z);
@@ -1194,6 +1216,13 @@ export class Game implements WorldView {
 
   // ------------------------------------------------------------------ quality governor
 
+  /** Comfort settings. */
+  setComfort(shake: number, particles: number): void {
+    this.camera.shakeScale = shake;
+    this.particleScale = particles;
+    this.applyQualityStep(this.qualityStep);
+  }
+
   setQuality(q: Quality): void {
     this.quality = q;
     this.applyQualityStep(q === 'low' ? QUALITY_STEPS.length - 1 : 0);
@@ -1207,7 +1236,7 @@ export class Game implements WorldView {
       this.app.renderer.resolution = res;
       this.onResize();
     }
-    this.particles.cap = qs.particles;
+    this.particles.cap = Math.max(10, Math.round(qs.particles * this.particleScale));
   }
 
   /** Auto quality: step down after 3 s under 50 fps, back up after 10 s above 58. */

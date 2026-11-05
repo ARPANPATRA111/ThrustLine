@@ -13,6 +13,8 @@ export class Camera {
   /** Screen px per world px. */
   zoom = 1;
   private shakeAmt = 0;
+  /** Player setting: how much of the camera shake to keep, 0..1. */
+  shakeScale = 1;
   shakeX = 0;
   shakeY = 0;
 
@@ -67,7 +69,7 @@ export class Camera {
   }
 
   shake(amount: number): void {
-    this.shakeAmt = Math.min(18, Math.max(this.shakeAmt, amount));
+    this.shakeAmt = Math.min(18, Math.max(this.shakeAmt, amount * this.shakeScale));
   }
 
   get left(): number { return this.x - this.viewW / 2; }

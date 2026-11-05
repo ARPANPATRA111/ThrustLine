@@ -5,7 +5,7 @@ import { WEAPON_DRAW, WEAPON_SIZE } from '../render/atlas';
 import { playerCss } from '../render/soldier';
 import type { Player } from '../module_bindings/types';
 
-const CAUSE_NAMES: Record<number, string> = { 0: 'pistol', 1: 'AR', 2: 'shotgun', 3: 'sniper', 4: 'knife', 5: 'frag', 6: 'SMG', 7: 'railgun', 10: 'acid' };
+export const CAUSE_NAMES: Record<number, string> = { 0: 'pistol', 1: 'AR', 2: 'shotgun', 3: 'sniper', 4: 'knife', 5: 'frag', 6: 'SMG', 7: 'railgun', 10: 'acid' };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
