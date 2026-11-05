@@ -84,6 +84,26 @@ export const HILL_EMPTY = 0;
 export const HILL_CONTESTED = 1;
 export const HILL_HELD = 2;
 
+// ---------- Capture the Flag ----------
+export const FLAG_HOME = 0;
+export const FLAG_CARRIED = 1;
+export const FLAG_DROPPED = 2;
+/** First team to this many captures ends the round. */
+export const FLAG_CAPS_TO_WIN = 3;
+/** A dropped flag goes home by itself after this long. */
+export const FLAG_RETURN_SEC = 15;
+export const FLAG_RETURN_DEV_SEC = 5;
+/** How close a body has to come to touch a flag: sideways, then upward from the flag's foot. */
+export const FLAG_TOUCH_X = 30;
+export const FLAG_TOUCH_UP = 64;
+/** Carrying the flag home is scored a little further out, so a fast pass over the stand counts. */
+export const FLAG_BASE_X = 72;
+export const FLAG_BASE_UP = 96;
+export const SCORE_FLAG_CAPTURE = 300;
+export const SCORE_FLAG_TAKEN = 25;
+export const SCORE_FLAG_RETURN = 50;
+export const SCORE_CARRIER_KILL = 50;
+
 // ---------- Sudden death ----------
 export const SUDDEN_DEATH_SEC = 30;
 export const SUDDEN_DEATH_DEV_SEC = 12;
@@ -170,6 +190,7 @@ export const DEFAULT_RULES = {
 /** What a round is played for. */
 export const OBJECTIVE_KILLS = 0;
 export const OBJECTIVE_HILL = 1;
+export const OBJECTIVE_FLAG = 2;
 /** Arena options, stored in `room.match` next to the original house rules. */
 /** `match.map` value meaning "a different map every round". */
 export const MAP_ROTATE = 255;

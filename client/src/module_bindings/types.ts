@@ -57,6 +57,28 @@ export const EmoteLog = __t.object("EmoteLog", {
 });
 export type EmoteLog = __Infer<typeof EmoteLog>;
 
+export const Flag = __t.object("Flag", {
+  id: __t.u64(),
+  roomId: __t.u64(),
+  team: __t.u8(),
+  state: __t.u8(),
+  carrier: __t.option(__t.identity()),
+  x: __t.f32(),
+  y: __t.f32(),
+  returnAtMicros: __t.i64(),
+  caps: __t.u32(),
+});
+export type Flag = __Infer<typeof Flag>;
+
+export const FlagJob = __t.object("FlagJob", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+  flagId: __t.u64(),
+  roomId: __t.u64(),
+  returnAtMicros: __t.i64(),
+});
+export type FlagJob = __Infer<typeof FlagJob>;
+
 export const Grenade = __t.object("Grenade", {
   id: __t.u64(),
   roomId: __t.u64(),

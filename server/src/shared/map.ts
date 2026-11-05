@@ -1,7 +1,7 @@
 // The arenas, stored as ASCII art and parsed once at load. Every map is MAP_COLS x MAP_ROWS.
 // # solid   = one-way platform   ~ acid   . empty
 // S spawn   H health pack        A ammo crate   G grenade crate
-// P shield
+// P shield              r / b  team base spawn      1 / 2  red and blue flag stand
 // H and P set how many of each a map has; they appear on a random open spot (see `spots`).
 import { DROP_CLEAR_TILES, SPOT_SPAWN_GAP_TILES, TILE } from './config';
 
@@ -33,7 +33,7 @@ export const RIG7_ROWS: readonly string[] = [
   '#.............................................####.............................................#',
   '#..............................................................................................#',
   '#..............................................................................................#',
-  '#......S................................................................................S......#',
+  '#..1.r.S.r.r........................................................................b.b.S.b.2..#',
   '#############......................................................................#############',
   '#..............==========..............................................==========..............#',
   '#...........................................A......A...........................................#',
@@ -78,6 +78,11 @@ export interface TilePos {
 export interface PickupMarker extends TilePos {
   kind: number;
 }
+/** A team's home in Capture the Flag: where its flag stands and where its players spawn. */
+export interface TeamBase {
+  flag: TilePos;
+  spawns: TilePos[];
+}
 /** A rectangle of tiles: a King of the Hill zone. */
 export interface Zone extends TilePos {
   tw: number;
@@ -97,6 +102,8 @@ export interface GameMap {
   drops: TilePos[];
   /** King of the Hill zones, each resting on a platform or the floor. */
   hills: Zone[];
+  /** Capture the Flag homes: index 0 is red, 1 is blue. */
+  bases: TeamBase[];
 }
 
 /** Parse ASCII rows into a GameMap. Throws if any row has the wrong width or an unknown char. */
@@ -104,6 +111,8 @@ export function parseMap(rows: readonly string[], cols = MAP_COLS, hills: Zone[]
   const tiles = new Uint8Array(cols * rows.length);
   const spawns: TilePos[] = [];
   const pickups: PickupMarker[] = [];
+  const baseSpawns: TilePos[][] = [[], []];
+  const stands: (TilePos | undefined)[] = [undefined, undefined];
   rows.forEach((row, ty) => {
     if (row.length !== cols) {
       throw new Error(`Map row ${ty} has ${row.length} chars, expected ${cols}`);
@@ -121,12 +130,17 @@ export function parseMap(rows: readonly string[], cols = MAP_COLS, hills: Zone[]
         case 'A': pickups.push({ tx, ty, kind: PICKUP_AMMO }); break;
         case 'G': pickups.push({ tx, ty, kind: PICKUP_GRENADE }); break;
         case 'P': pickups.push({ tx, ty, kind: PICKUP_SHIELD }); break;
+        case 'r': baseSpawns[0].push({ tx, ty }); break;
+        case 'b': baseSpawns[1].push({ tx, ty }); break;
+        case '1': stands[0] = { tx, ty }; break;
+        case '2': stands[1] = { tx, ty }; break;
         default: throw new Error(`Unknown map char '${ch}' at ${tx},${ty}`);
       }
       tiles[ty * cols + tx] = code;
     }
   });
-  const map: GameMap = { cols, rows: rows.length, tiles, spawns, pickups, spots: [], drops: [], hills };
+  const bases = stands[0] && stands[1] ? [{ flag: stands[0], spawns: baseSpawns[0] }, { flag: stands[1], spawns: baseSpawns[1] }] : [];
+  const map: GameMap = { cols, rows: rows.length, tiles, spawns, pickups, spots: [], drops: [], hills, bases };
   map.spots = findSpots(map);
   map.drops = map.spots.filter((s) => clearAbove(map, s, DROP_CLEAR_TILES));
   return map;
@@ -135,13 +149,14 @@ export function parseMap(rows: readonly string[], cols = MAP_COLS, hills: Zone[]
 /** Every tile a pickup can sit on: footing below, room for a body, not by a spawn or the acid. */
 function findSpots(map: GameMap): TilePos[] {
   const out: TilePos[] = [];
+  const keepClear = [...map.spawns, ...map.bases.flatMap((b) => [b.flag, ...b.spawns])];
   for (let ty = 2; ty < map.rows - 1; ty++) {
     for (let tx = 1; tx < map.cols - 1; tx++) {
       if (tileAt(map, tx, ty) !== T_EMPTY || tileAt(map, tx, ty - 1) !== T_EMPTY) continue;
       const floor = tileAt(map, tx, ty + 1);
       if (floor !== T_SOLID && floor !== T_ONEWAY) continue;
       if (tileAt(map, tx - 1, ty + 1) === T_ACID || tileAt(map, tx + 1, ty + 1) === T_ACID) continue;
-      if (map.spawns.some((s) => Math.abs(s.tx - tx) < SPOT_SPAWN_GAP_TILES && Math.abs(s.ty - ty) < SPOT_SPAWN_GAP_TILES)) continue;
+      if (keepClear.some((s) => Math.abs(s.tx - tx) < SPOT_SPAWN_GAP_TILES && Math.abs(s.ty - ty) < SPOT_SPAWN_GAP_TILES)) continue;
       out.push({ tx, ty });
     }
   }
@@ -176,7 +191,7 @@ export const HELIOS_ROWS: readonly string[] = [
   '#..............................................................................................#',
   '#..............................................................................................#',
   '#..............................................................................................#',
-  '#....S....................................................................................S....#',
+  '#.1.rS.r.r............................................................................b.b.Sb.2.#',
   '##########............................................................................##########',
   '#...............S..........H........................................H..........S...............#',
   '#.............======####======....................................======####======.............#',
@@ -269,6 +284,22 @@ export function boxTouchesTile(
     }
   }
   return false;
+}
+
+/**
+ * Where something dropped at (x, y) comes to rest: the top of the first floor or platform below it.
+ * Null if it falls into the acid or out of the map.
+ */
+export function restingY(map: GameMap, x: number, y: number): number | null {
+  const tx = Math.floor(x / TILE);
+  const from = Math.floor((y - 1) / TILE);
+  if (tileAt(map, tx, from) === T_ACID) return null; // already in it, whatever lies underneath
+  for (let ty = from + 1; ty < map.rows; ty++) {
+    const code = tileAt(map, tx, ty);
+    if (code === T_ACID) return null;
+    if (code === T_SOLID || code === T_ONEWAY) return ty * TILE;
+  }
+  return null;
 }
 
 /** World position (feet centre) of a spawn tile: the player stands on the tile below. */

@@ -46,7 +46,7 @@ const TIPS = [
 ];
 
 /** Indexed by the room's objective. */
-const OBJECTIVE_NAMES = ['Deathmatch', 'King of the Hill'];
+const OBJECTIVE_NAMES = ['Deathmatch', 'King of the Hill', 'Capture the Flag'];
 
 const SCREENS = ['scr-loading', 'scr-home', 'scr-lobby', 'scr-game'];
 function showScreen(id: string): void {
@@ -341,6 +341,8 @@ async function boot(): Promise<void> {
     notice: (e) => game.onNotice(e),
     hillUpsert: (h) => game.hillUpsert(h),
     hillDelete: () => game.hillDelete(),
+    flagUpsert: (f, old) => { if (f.roomId === myRoomId) game.flagUpsert(f, old); },
+    flagDelete: (f) => game.flagDelete(f),
   };
   // The connection may already be up (it was started during loading): start the clock sync now.
   if (net.conn) time.start();
@@ -589,10 +591,14 @@ async function boot(): Promise<void> {
     $('winner').classList.toggle('hidden', !ended || ranked.length === 0);
     if (teams) {
       // Team match: group by team, team with the higher total wins.
-      const [red, blue] = game.teamScores();
+      const caps = game.flagCaps();
+      const [red, blue] = caps ?? game.teamScores();
       ranked = [...ranked.filter((p) => p.team === C.TEAM_RED), ...ranked.filter((p) => p.team === C.TEAM_BLUE)];
       const myTeam = myRow()?.team ?? 0;
-      const win = red === blue ? 0 : red > blue ? C.TEAM_RED : C.TEAM_BLUE;
+      // Level on captures, the team with more points takes it, as it does for XP.
+      const [tieRed, tieBlue] = game.teamScores();
+      const lead = red !== blue ? red - blue : caps ? tieRed - tieBlue : 0;
+      const win = lead === 0 ? 0 : lead > 0 ? C.TEAM_RED : C.TEAM_BLUE;
       $('winner-name').innerHTML = win === 0 ? `DRAW · ${red} – ${blue}` : `<span style="color:${TEAM_CSS[win]}">${TEAM_NAMES[win]} TEAM WINS</span> · ${Math.max(red, blue)} – ${Math.min(red, blue)}${win === myTeam ? ' · VICTORY' : ''}`;
     } else if (ended && ranked[0]) {
       $('winner-name').textContent = ranked[0].identity.toHexString() === net.myKey ? 'YOU WIN!' : `${ranked[0].name} wins`;
