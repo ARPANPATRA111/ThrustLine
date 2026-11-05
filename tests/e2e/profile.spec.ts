@@ -77,6 +77,7 @@ test('a finished round pays XP and season points, and locked stickers are refuse
   await a.waitForTimeout(400);
   await a.click('#btn-start');
   for (const p of [a, b]) await p.waitForSelector('#scr-game:not(.hidden)');
+  await a.waitForFunction(() => (window as any).__tl.game.room?.state === 1 && (window as any).__tl.game.local?.alive, null, { timeout: 12_000 }); // past the loadout screen
 
   // A brand-new pilot can use the first four stickers, not the rest; the server enforces it.
   const send = (i: number) => a.evaluate((n) => (window as any).__tl.net.conn.reducers.emote({ emote: n }).then(() => 'ok', (e: Error) => e.message), i);

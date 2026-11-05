@@ -159,14 +159,43 @@ fixed 120 Hz steps of gravity, axis-separated movement, bounces with restitution
 
 - The client precomputes the whole flight path once and draws the grenade at the path point for
   `serverNow()` ([game.ts](../client/src/game/game.ts) `grenadeInsert`).
-- The scheduled `detonate` reducer runs 300 steps (2.5 s × 120 Hz) and explodes at the result
-  ([index.ts](../server/src/index.ts) line 995).
+- The scheduled `detonate` reducer runs one step per tick of the fuse and explodes at the result
+  ([index.ts](../server/src/index.ts) `detonate`).
 
 So the explosion happens exactly where everyone saw the grenade, without streaming its position.
-Damage falls linearly from 90 at the centre to 0 at 150 px, needs line of sight, and is halved on the
-thrower. Each client applies the knockback to its own soldier (it owns its movement).
+Damage falls linearly from 80 at the centre to 0 at the blast radius, needs line of sight, and applies
+to the thrower too. It is capped at 80 after Frenzy. Each client applies the knockback to its own
+soldier (it owns its movement).
 
-## 7b. Radar and off-screen arrows
+**Impact grenades** add two checks. Touching the map depends only on the throw, so `firstTouchTick` runs
+the flight once at throw time and the fuse on the row becomes that tick. Nothing else changes: clients
+draw the same path and the same reducer detonates it. Touching a player depends on where that player
+goes, so at the end of each `sync` the server walks the stretch of flight covered by that packet and
+tests it against the sender's body, interpolated between their last two positions, on the sender's
+clock (`bodyContact`). A grenade that reached you on your screen hits you, however late the packet
+arrives.
+
+## 7a. EMP lift budget
+
+[validate.ts](../server/src/shared/validate.ts) `spendRise`
+
+Clients own their movement, so "the jetpack is off" has to be checked from positions. The vertical speed
+of a jump and of a jet are close, so speed alone cannot tell them apart. What differs is how far you can
+go: a jump lifts `v² / 2g` = 87 px and then gravity wins. While an EMP is active the server keeps a
+budget of that height plus 40 px. Rising spends it, and only standing on real ground (`isStandingOn`)
+refills it. A blast's knockback is exempt, since that lift is real. Enforcement starts 0.4 s after the
+hit, because the client only learns of the EMP a round trip later and may still be climbing.
+
+## 7b. Random pickup spots
+
+[map.ts](../server/src/shared/map.ts) `findSpots`, [spawn.ts](../server/src/shared/spawn.ts) `pickSpot`
+
+Each map derives its spots once at load: every empty tile with footing below, room for a body above, and
+clear of spawns, flag stands and the edge of the acid. Airdrops use the subset with 8 tiles of open air.
+`pickSpot` filters out anything under the acid, within 12 tiles of another pickup or within 320 px of a
+living player, then picks at random with `ctx.random`. If nothing passes, it relaxes rather than fail.
+
+## 7c. Radar and off-screen arrows
 
 [client/src/render/radar.ts](../client/src/render/radar.ts). Each frame the game lists every living
 player with "me / ally / enemy" and how long ago they last fired (shots, knife swings, grenades).
@@ -194,5 +223,11 @@ The brain is a set of human-like limits, tuned per difficulty (Easy / Normal / H
 - **Burst fire:** it fires in bursts with pauses; semi-auto weapons are tapped at a human rate.
 - **Target choice:** nearer enemies are likelier, with randomness and a penalty for players other bots
   already chase, so bots don't all gang up on the human.
+- **Routes:** [nav.ts](../server/src/shared/nav.ts) runs a breadth-first search out from the goal over
+  every tile a body fits in, avoiding acid. The distance field is cached per goal, so eight bots heading
+  for one flag cost one search. A bot looks 3 tiles along the falling distance, aims for the middle of
+  that tile, and fires the jets if the route climbs. A body can span three tiles in the air, so it also
+  checks the tile ahead at head and foot height, or it would pin itself under a tunnel's edge. Over
+  open air it holds height; with floor close below it walks.
 - **Movement:** keeps a weapon-specific distance, strafes and hops, flies over walls and acid, hunts
   your last known position for a few seconds after losing you, then patrols between spawn points.

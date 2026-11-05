@@ -141,6 +141,7 @@ test('phone layout: the tray drops from the button and never covers the respawn 
   await page.waitForSelector('#scr-lobby:not(.hidden)');
   await page.click('#btn-start');
   await page.waitForSelector('#scr-game:not(.hidden)');
+  await page.waitForFunction(() => (window as any).__tl.game.room?.state === 1 && (window as any).__tl.game.local?.alive);
 
   // The tray hangs directly below the emote button, right-aligned with it.
   const btn = (await page.locator('#btn-emote').boundingBox())!;

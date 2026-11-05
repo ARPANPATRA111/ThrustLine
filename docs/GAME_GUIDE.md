@@ -146,15 +146,16 @@ through the `@shared` alias.
 server/src/index.ts          The server module: all tables, reducers, scheduled jobs (~1300 lines)
 server/src/shared/           Pure TypeScript used by server AND client (no DOM, no randomness)
   config.ts                  Every tunable number (speeds, damage, timers, netcode tolerances)
-  map.ts                     RIG-7 as ASCII art, parser, tile queries
+  map.ts                     The five maps as ASCII art, parser, pickup spots, tile queries
+  nav.ts                     Route finding for CPU players (breadth-first distance fields)
   physics.ts                 stepPlayer(): movement, jetpack, box-vs-tile collision, one-way platforms
   raycast.ts                 castTiles() (DDA grid walk), rayVsBox() (slab test), lineOfSight()
-  grenade.ts                 Deterministic grenade flight (normal and zero-g)
-  weapons.ts                 Weapon table, allowed weapons per mode, damage falloff
-  spawn.ts                   Smart spawn selection, shuffle
+  grenade.ts                 Deterministic grenade flight, first touch, contact with a moving body
+  weapons.ts                 Weapon and grenade tables, what each mode allows, damage falloff
+  spawn.ts                   Smart spawn selection, random pickup spots, shuffle
   validate.ts                Movement / shot / melee validation helpers
   names.ts                   Random callsigns
-  *.test.ts                  46 unit tests
+  *.test.ts                  Unit tests
 client/src/main.ts           Boot, loading, screen router, all button wiring
 client/src/net/              connection.ts (connect, subscriptions), timesync.ts (clock sync),
                              interp.ts (snapshot buffer + adaptive delay)
@@ -281,6 +282,20 @@ its position. The client precomputes the whole path once and looks it up each fr
 **Floating grenades** (house rule): the same simulation with gravity off and a 0.99 drag factor
 per step, so grenades drift where thrown and slow to a stop in mid-air.
 
+**Grenade types** (`GRENADES` in `shared/weapons.ts`): a player carries one type per life, stored on
+their row, so a client cannot claim another. All cap at 80 damage after Frenzy and hurt their thrower.
+
+- **Frag:** 1.5 s fuse, 170 px blast.
+- **Impact:** touching the map is a pure function of the throw, so `firstTouchTick` runs at throw time
+  and the row simply gets that shorter fuse. Touching a player cannot be known in advance, so each
+  `sync` checks the stretch of flight it covers against the sender's body, on the sender's timeline
+  (`bodyContact`): if the grenade reached you on your screen, it hit you. The player struck takes the
+  full 80, and the blast is smaller (130 px).
+- **EMP:** no damage. Everyone in range, thrower included, gets `empUntilMicros` 3 s ahead. The client
+  turns flight off through `jetOffline`; hops still work. The server enforces it with `spendRise`: with
+  the jetpack dead a player may rise only as far as a jump carries them, refilled on real ground. A
+  0.4 s grace covers the round trip before the client hears about it.
+
 ---
 
 ## 9. Multiplayer networking (the core of the project)
@@ -381,25 +396,29 @@ are deterministic.
 
 | Table | Public? | Holds |
 | --- | --- | --- |
-| `room` | yes | code, host, state (lobby / playing / ended), mode, round length, teams flag, house rules, match options, map, Quick Play flag, round times |
-| `player` | yes | name, colour, team, alive, HP, shield, railgun shots, life id, kills, deaths, score, streak, weapon, ammo, timers, correction, ping, connected flag |
+| `room` | yes | code, host, state (lobby / playing / ended / loadout), mode, round length, teams flag, house rules, match options, map, Quick Play flag, round times |
+| `player` | yes | name, colour, team, alive, HP, shield, railgun shots, grenade type, EMP timer, life id, kills, deaths, score, streak, weapon, ammo, timers, correction, ping, connected flag |
 | `pstate` | yes | position, velocity, aim, flags, sender timestamp (hot, 20 Hz) |
 | `pmeta` | no | anti-cheat bookkeeping: last sync, previous position, fire times, position history, time debt, movement credit, connection id |
 | `throttle` | no | per-identity limits on creating rooms, joining and pings |
 | `pickup` | yes | crate kind, tile, when it becomes available again |
-| `grenade` | yes | owner, start position and velocity, throw time, fuse, zero-g flag |
+| `grenade` | yes | owner, type, start position and velocity, throw time, fuse, zero-g flag |
 | `hill` | yes | King of the Hill: live zone, who holds it, when it moves |
+| `flag` | yes | Capture the Flag: state, carrier, resting place, return time, captures |
 | `profile` | yes | **permanent**: XP, lifetime stats, season points |
 | `season_board` | yes | **permanent**: top 20 of the current season |
+| `transfer_key` | no | **permanent**: each player's secret for claiming their progress on a new server |
+| `legacy_profile` | no | profiles imported from an old server, waiting for their key |
 | `kicked` | no | who the host removed from which room |
 | `emote_log` | no | per-player emote cooldown |
-| `respawn_job`, `round_end_job`, `lobby_job`, `detonate_job`, `pickup_job`, `airdrop_job`, `hill_job`, `drop_job` | no | one-shot timers |
+| `respawn_job`, `round_end_job`, `lobby_job`, `detonate_job`, `pickup_job`, `airdrop_job`, `hill_job`, `flag_job`, `loadout_job`, `drop_job` | no | one-shot timers |
 | `shot_ev`, `hit_ev`, `kill_ev`, `melee_ev`, `boom_ev`, `pickup_ev`, `emote_ev`, `pong_ev`, `kick_ev`, `notice_ev` | yes (event) | broadcast-once events |
 
 **Reducers**: `createRoom`, `quickPlay`, `joinRoom`, `leaveRoom`, `kickPlayer`, `updateRoomSettings`,
-`switchTeam`, `movePlayerTeam`, `backToLobby`, `startRound`, `choosePrimary`, `emote`, `ping`, `sync`,
-`devTeleport` (test rooms only); scheduled: `doRespawn`, `endRound`, `returnToLobby`, `detonate`,
-`restorePickup`, `airdrop`, `hillTick`, `dropPlayer`; lifecycle: `onConnect`, `onDisconnect`.
+`switchTeam`, `movePlayerTeam`, `backToLobby`, `startRound`, `choosePrimary`, `chooseGrenade`, `emote`,
+`ping`, `sync`, `registerTransfer`, `devTeleport` (test rooms only); scheduled: `openRound`, `doRespawn`,
+`endRound`, `returnToLobby`, `detonate`, `restorePickup`, `returnFlag`, `airdrop`, `hillTick`,
+`dropPlayer`; lifecycle: `onConnect`, `onDisconnect`.
 
 **There is no server tick.** Instead of a loop running every 16 ms, everything timed is a one-shot
 schedule (respawn in 5 s, round end, grenade fuse 1.5 s, pickup back in 20 s, lobby in 12 s, one hill
@@ -409,10 +428,11 @@ server cheap and simple.
 **Room lifecycle (state machine)**
 
 ```text
-createRoom → LOBBY ──startRound──▶ PLAYING ──round_end_job──▶ ENDED ──lobby_job (12 s)──▶ LOBBY
-                ▲                                               │  └─backToLobby (host)──▶ LOBBY
-                └───────────────────────startRound (Play again)─┘
-quickPlay → PLAYING ──round_end_job──▶ ENDED ──lobby_job (12 s)──▶ PLAYING (no lobby, next map)
+createRoom → LOBBY ──startRound──▶ LOADOUT ──loadout_job (8 s)──▶ PLAYING ──round_end_job or 3 captures──▶ ENDED ──lobby_job (12 s)──▶ LOBBY
+                ▲                                                                                      │  └─backToLobby (host)──▶ LOBBY
+                └──────────────────────────────────────────startRound (Play again)─────────────────────┘
+quickPlay → LOADOUT ──▶ PLAYING ──▶ ENDED ──lobby_job (12 s)──▶ LOADOUT (no lobby, next map and objective)
+Blades and Snipers have nothing to choose, so they go straight from LOBBY to PLAYING.
 last human leaves → room, pickups, jobs and its CPU players deleted
 ```
 
@@ -436,12 +456,12 @@ Boom (unlimited frags, max 3 live, knife backup), Snipers (sniper + knife).
 
 **House rules (host)**: round 2/3/5/8/10 min; health 50/100/150/200; CPU skill;
 infinite jetpack; infinite ammo; pickups on/off; airdrops on/off; acid on/off; Frenzy on/off; sudden
-death on/off; deathmatch or King of the Hill; map or rotation; free-for-all or red vs blue; friendly
+death on/off; deathmatch, King of the Hill or Capture the Flag; map or rotation; free-for-all or red vs blue; friendly
 fire (teams only); floating grenades. Respawn is fixed at 5 s for everyone.
 Every toggle starts **on**, so a fresh room is the fastest, most chaotic version; the host turns
 off what the group does not want.
 
-**Scoring**: kill +100; holding the hill +10 a second; killing a bounty (3-kill streak, glowing gold with a crown) +50 extra;
+**Scoring**: kill +100; holding the hill +10 a second; capturing a flag +300, taking one +25, returning your own +50, killing the carrier +50 extra; killing a bounty (3-kill streak, glowing gold with a crown) +50 extra;
 dying to acid or your own grenade −50; killing a teammate (friendly fire) −50 and no kill credit.
 Leaderboard: score, then kills, then fewer deaths. Team match: the team with the higher total wins.
 
@@ -454,6 +474,18 @@ from the round clock on both sides (`acidSurface`), so nothing is sent. Nobody s
 **King of the Hill**: one player (or team) alone in the zone scores +10 a second; two sides contest
 it. The zone moves every 40 s, or early if the acid reaches it. `hillTick` runs once a second.
 
+**Capture the Flag**: always teams, each spawning at its own fixed base (`GameMap.bases`). Touching the
+enemy flag carries it; reaching your own stand scores, whether or not your own flag is home, which
+stops two carriers from stalling a round. A carrier who dies or leaves drops the flag where they were
+(`restingY`); touching your own dropped flag sends it home, and it walks home after 15 s. Lost in the
+acid it goes home at once. First to 3 ends the round; otherwise captures decide it, then team score.
+Flag checks run at the end of `sync`, because a capture can end the round and write every player row.
+Sudden death is off in this objective, since the bases sit low.
+
+**Loadout**: `prepareRound` picks the map and objective and opens an 8 s `ROOM_LOADOUT` state, then
+`openRound` starts the round. The gun and grenade are locked while alive, and players joining a round
+in progress get 4 s on the deploy screen. The client saves the last pick and restores it in new rooms.
+
 **Power-ups**: a shield (+50) takes weapon damage before HP; acid ignores it. An airdrop lands every
 minute with a railgun: 150 damage, three shots, pierces bodies but not walls.
 
@@ -462,7 +494,15 @@ distance to the nearest living enemy (farthest first), pick randomly among the t
 gives everyone distinct spawns; in team matches red starts on the left half, blue on the right.
 
 **Pickups**: health +50 (capped at max HP), ammo refills the reserve, grenade crate +1 (max 3);
-each returns 20 s after being taken (shields 30 s); only taken if useful.
+each returns 20 s after being taken (shields 30 s); only taken if useful. A map's `H` and `P` markers
+only set how many it has: health and shields take a random spot from `GameMap.spots` at round start and
+every time they return, staying clear of each other, living players and the rising acid (`pickSpot`).
+Airdrops do the same on spots with open sky. Ammo and grenade crates stay on their markers.
+
+**Maps**: five, all 96 × 40, so nothing else needs to know which is in play. RIG-7 and HELIOS-9 are open;
+KILN-3 is tunnels; SKYREACH has no ground; CRYO-12 is towers and bridges. Each has its own palette
+(`THEMES` in `render/mapbake.ts`). A map test flies a body with the real physics from every spawn to the
+enemy flag, so a layout CPU players cannot cross fails the build.
 
 **Teams**: balanced on join, players can switch, host can move anyone. Soldiers use the team
 colour (red / blue), teammates carry a chevron above their name, the minimap always shows
@@ -492,6 +532,10 @@ as a human, so the server checks bots exactly like people and the server needs n
 - pick nearer targets more often, with randomness, avoiding players other bots already chase;
 - keep a weapon-specific distance, strafe, hop, fly over walls and acid, hunt your last known
   position for a few seconds, then patrol between spawn points;
+- find their way with `shared/nav.ts`: a breadth-first distance field per goal, shared by every bot
+  going there, walked a few tiles ahead so turns start before the corner;
+- in Capture the Flag, carry the flag home, recover their own, or go for the enemy's, shooting what
+  they pass. One in four stays back to guard the stand;
 - in team matches, never target teammates.
 
 Measured: against a player standing still at close range, Easy needs ~4–10 s, Normal ~4–20 s,
@@ -557,7 +601,7 @@ hidden, menus render the background at 30 fps.
 **Checked**: positions (inside the map, clear path, no wall crossings), speed against what physics
 allows right now (`spendMove`: run and hop speed plus a fading bonus from real recoil, lunges and
 blasts), a capped client clock, fire rate, ammo, weapon allowed in the mode, primary changes only
-while dead, shot origin near the shooter, hit claims (range, line of sight to some part of the current
+and grenade type changes only while dead, EMP lift (`spendRise`), flags touched by the checked position, shot origin near the shooter, hit claims (range, line of sight to some part of the current
 body, ray close to where the target was, pellets limited by the body's share of the cone, one body per
 pellet), knife targets (server computes them), grenade counts and cooldowns, pickup touching, team
 friendly-fire rule, host-only actions, kicked players can't rejoin, replayed packets, room and name
@@ -575,19 +619,21 @@ client-predicted shooters: full server physics would add latency to every key pr
 
 ## 17. Testing
 
-- **Unit tests (Vitest, 46)** in `server/src/shared/*.test.ts`: map format and symmetry; physics
+- **Unit tests (Vitest)** in `server/src/shared/*.test.ts`: map format and symmetry; physics
   (landing, walls, one-way platforms, fuel, hover, 10 s random input never enters a wall);
   raycasts (DDA vs brute force over 4,000 random rays, slab test); grenades (deterministic,
   bounces, never inside a wall, zero-g floats); spawns; validation (accepts legal moves/shots,
   rejects teleports, wall shots, rapid fire, out-of-range hits); jumping from every surface never
   falls through.
-- **End-to-end tests (Playwright, 7 suites)** open several real browsers and play:
+- **End-to-end tests (Playwright)** open several real browsers and play, among others:
   `smoke` (create/join by invite link, movement seen by all, kill in every kill feed, round end,
   screenshots), `weapons` (every weapon and mode), `pickups` (acid, health, grenade crate,
   respawn), `bots` (CPUs join, move, fight; audio and debug overlay), `rules` (house rules
   enforced, unique names, ping display, grenade button), `teams` (teams, friendly fire on/off,
   kick, return to lobby), `latency` (simulated ~250 ms ping with jitter: zero snap-backs and no
-  teleport-like jumps; also run against production on the real network).
+  teleport-like jumps; also run against production on the real network), `flag` (every Capture the
+  Flag rule, and CPU players reaching the flag on all five maps), `grenades` (impact, the 80 cap, EMP, a
+  client ignoring the EMP), `loadout`, `transfer` (claiming progress after a server move).
 - Typecheck: strict TypeScript, zero errors (`npm run typecheck`).
 
 ---
@@ -654,8 +700,7 @@ limited by distance (light in fibre covers ~200 km per millisecond, plus routing
 - Progress lives on an anonymous identity, so clearing site data starts a player over.
 - CPU players live in the host's tab: if the host closes the tab, the CPUs leave (in Quick Play the
   next host's tab adds new ones).
-- Future: more maps, weapon alt-fires, grenade variants, a killcam, server regions, spectators,
-  replays, voice/quick chat.
+- Future: weapon alt-fires, a killcam, server regions, spectators, replays, voice/quick chat.
 
 ---
 
