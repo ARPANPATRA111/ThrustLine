@@ -246,6 +246,37 @@ const kicked = table(
   },
 );
 
+/** A player's lifetime record. Unlike everything else here this is kept between visits. */
+const profile = table(
+  { name: 'profile', public: true },
+  {
+    identity: t.identity().primaryKey(),
+    name: t.string(),
+    xp: t.u32(),
+    kills: t.u32(),
+    deaths: t.u32(),
+    wins: t.u32(),
+    rounds: t.u32(),
+    bestKills: t.u32(),
+    /** Which season seasonScore belongs to (see C.seasonOf). */
+    season: t.u32(),
+    seasonScore: t.u32(),
+    lastPlayed: t.timestamp(),
+  },
+);
+
+/** The top of the current season, small enough for every client to subscribe to. */
+const seasonBoard = table(
+  { name: 'season_board', public: true },
+  {
+    identity: t.identity().primaryKey(),
+    name: t.string(),
+    level: t.u16(),
+    season: t.u32(),
+    score: t.u32(),
+  },
+);
+
 /** Private per-player cooldown for emotes (keeps a held key from flooding the room). */
 const emoteLog = table(
   { name: 'emote_log' },
@@ -388,6 +419,8 @@ const spacetimedb = schema({
   grenade,
   hill,
   kicked,
+  profile,
+  seasonBoard,
   emoteLog,
   respawnJob,
   roundEndJob,
@@ -415,6 +448,7 @@ type RoomRow = Infer<typeof room.rowType>;
 type PlayerRow = Infer<typeof player.rowType>;
 type MetaRow = Infer<typeof pmeta.rowType>;
 type PStateRow = Infer<typeof pstate.rowType>;
+type ProfileRow = Infer<typeof profile.rowType>;
 
 // ============================================================================
 // Small helpers
@@ -900,6 +934,20 @@ function openRoom(ctx: Ctx, name: string, mode: number, roundSec: number, dev: b
   return r;
 }
 
+/** A player came back (reload, reconnect or a reopened tab): keep their stats, use this connection. */
+function adoptConnection(ctx: Ctx, p: PlayerRow, r: RoomRow): void {
+  const meta = ctx.db.pmeta.identity.find(p.identity);
+  if (meta) ctx.db.pmeta.identity.update({ ...meta, connId: ctx.connectionId ?? undefined });
+  // The new page starts its packet counter at zero; accept it again.
+  const ps = ctx.db.pstate.identity.find(p.identity);
+  if (ps) ctx.db.pstate.identity.update({ ...ps, seq: 0 });
+  if (p.connected) return;
+  for (const job of [...ctx.db.dropJob.identity.filter(p.identity)]) ctx.db.dropJob.scheduledId.delete(job.scheduledId);
+  const back = { ...p, connected: true };
+  if (r.state === ROOM_PLAYING && !back.alive) back.respawnAtMicros = scheduleRespawn(ctx, back, C.JOIN_SPAWN_SEC);
+  ctx.db.player.identity.update(back);
+}
+
 /** Put the sender into a room that is already running: they deploy a moment later. */
 function joinInProgress(ctx: Ctx, r: RoomRow, name: string, isBot: boolean): void {
   addPlayerToRoom(ctx, r, name, isBot);
@@ -966,18 +1014,7 @@ export const joinRoom = spacetimedb.reducer(
     }
     const existing = ctx.db.player.identity.find(ctx.sender);
     if (existing && existing.roomId === r.id) {
-      // Rejoining the same room (page reload / reconnect): keep stats, adopt the new connection.
-      const meta = ctx.db.pmeta.identity.find(ctx.sender);
-      if (meta) ctx.db.pmeta.identity.update({ ...meta, connId: ctx.connectionId ?? undefined });
-      // The new page starts its packet counter at zero; accept it again.
-      const ps = ctx.db.pstate.identity.find(ctx.sender);
-      if (ps) ctx.db.pstate.identity.update({ ...ps, seq: 0 });
-      if (!existing.connected) {
-        for (const job of [...ctx.db.dropJob.identity.filter(ctx.sender)]) ctx.db.dropJob.scheduledId.delete(job.scheduledId);
-        const back = { ...existing, connected: true };
-        if (r.state === ROOM_PLAYING && !back.alive) back.respawnAtMicros = scheduleRespawn(ctx, back, C.JOIN_SPAWN_SEC);
-        ctx.db.player.identity.update(back);
-      }
+      adoptConnection(ctx, existing, r);
       return;
     }
     if (!throttleOk(ctx, 'join', secToMicros(C.ROOM_JOIN_COOLDOWN_SEC))) throw new SenderError('Slow down: try again in a moment');
@@ -1136,6 +1173,8 @@ export const emote = spacetimedb.reducer({ emote: t.u8() }, (ctx, { emote: which
   const { p, r } = requireMember(ctx);
   if (r.state !== ROOM_PLAYING) throw new SenderError('Emotes are for the match');
   if (which >= C.EMOTES.length) throw new SenderError('Unknown emote');
+  const level = C.levelOf(ctx.db.profile.identity.find(ctx.sender)?.xp ?? 0);
+  if (level < C.STICKER_LEVELS[which]) throw new SenderError(`Reach level ${C.STICKER_LEVELS[which]} to unlock that sticker`);
   const now = nowMicros(ctx);
   const last = ctx.db.emoteLog.identity.find(ctx.sender);
   if (last && now - last.lastMicros < secToMicros(C.EMOTE_COOLDOWN_SEC)) return;
@@ -1597,6 +1636,57 @@ export const doRespawn = spacetimedb.reducer({ onSchedule: respawnJob }, { job: 
   respawnPlayer(ctx, r, p);
 });
 
+/**
+ * Pay out a finished round. Dev rooms can teleport, so they never count. Season points need a
+ * human opponent: a room of your own CPU players earns XP but cannot climb the board.
+ */
+function awardRound(ctx: Ctx, r: RoomRow): void {
+  if (r.dev) return;
+  const everyone = roomPlayers(ctx, r.id);
+  const humans = everyone.filter((p) => !p.isBot && p.connected && p.lifeId > 0);
+  if (humans.length === 0) return;
+  const contested = humans.length >= 2;
+  const season = C.seasonOf(nowMs(ctx));
+  const top = [...everyone].sort((a, b) => b.score - a.score || b.kills - a.kills || a.deaths - b.deaths)[0];
+  const teamScore = (team: number) => everyone.filter((p) => p.team === team).reduce((n, p) => n + p.score, 0);
+  const red = teamScore(C.TEAM_RED);
+  const blue = teamScore(C.TEAM_BLUE);
+  const winningTeam = red === blue ? C.TEAM_NONE : red > blue ? C.TEAM_RED : C.TEAM_BLUE;
+
+  for (const p of humans) {
+    const won = r.teams ? p.team === winningTeam : p.identity.isEqual(top.identity);
+    const gain = C.roundXp(p.kills, won);
+    const old = ctx.db.profile.identity.find(p.identity);
+    const base: ProfileRow = old ?? { identity: p.identity, name: p.name, xp: 0, kills: 0, deaths: 0, wins: 0, rounds: 0, bestKills: 0, season, seasonScore: 0, lastPlayed: ctx.timestamp };
+    const next: ProfileRow = {
+      ...base,
+      name: p.name,
+      xp: base.xp + gain,
+      kills: base.kills + p.kills,
+      deaths: base.deaths + p.deaths,
+      wins: base.wins + (won ? 1 : 0),
+      rounds: base.rounds + 1,
+      bestKills: Math.max(base.bestKills, p.kills),
+      season,
+      seasonScore: (base.season === season ? base.seasonScore : 0) + (contested ? gain : 0),
+      lastPlayed: ctx.timestamp,
+    };
+    if (old) ctx.db.profile.identity.update(next);
+    else ctx.db.profile.insert(next);
+    if (contested) postToBoard(ctx, next);
+  }
+}
+
+/** Keep the season board to the top scores of the current season. */
+function postToBoard(ctx: Ctx, pr: ProfileRow): void {
+  for (const row of [...ctx.db.seasonBoard.iter()]) if (row.season !== pr.season) ctx.db.seasonBoard.identity.delete(row.identity);
+  const entry = { identity: pr.identity, name: pr.name, level: C.levelOf(pr.xp), season: pr.season, score: pr.seasonScore };
+  if (ctx.db.seasonBoard.identity.find(pr.identity)) ctx.db.seasonBoard.identity.update(entry);
+  else ctx.db.seasonBoard.insert(entry);
+  const rows = [...ctx.db.seasonBoard.iter()].sort((a, b) => b.score - a.score);
+  for (const row of rows.slice(C.SEASON_BOARD_SIZE)) ctx.db.seasonBoard.identity.delete(row.identity);
+}
+
 export const endRound = spacetimedb.reducer({ onSchedule: roundEndJob }, { job: roundEndJob.rowType }, (ctx, { job }) => {
   if (!ctx.senderAuth.isInternal) throw new SenderError('Scheduler only');
   const r = ctx.db.room.id.find(job.roomId);
@@ -1604,6 +1694,7 @@ export const endRound = spacetimedb.reducer({ onSchedule: roundEndJob }, { job: 
   // Show the results for a few seconds, then everyone returns to the lobby automatically.
   const lobbyAt = nowMicros(ctx) + secToMicros(C.LOBBY_RETURN_SEC);
   ctx.db.room.id.update({ ...r, state: ROOM_ENDED, lobbyAtMicros: lobbyAt });
+  awardRound(ctx, r);
   ctx.db.lobbyJob.insert({ scheduledId: 0n, scheduledAt: atMicros(lobbyAt), roomId: r.id, roundNo: r.roundNo });
   clearRoomJobs(ctx, r.id, false);
   // Stats stay for the leaderboard; mark everyone dead so nobody keeps playing.
@@ -1749,6 +1840,10 @@ export const restorePickup = spacetimedb.reducer({ onSchedule: pickupJob }, { jo
 
 export const onConnect = spacetimedb.clientConnected((ctx) => {
   console.info(`client connected ${ctx.sender.toHexString().slice(0, 8)}`);
+  // Still in a room from before (a reopened tab has no saved room code): straight back in.
+  const p = ctx.db.player.identity.find(ctx.sender);
+  const r = p ? ctx.db.room.id.find(p.roomId) : undefined;
+  if (p && r) adoptConnection(ctx, p, r);
 });
 
 export const onDisconnect = spacetimedb.clientDisconnected((ctx) => {

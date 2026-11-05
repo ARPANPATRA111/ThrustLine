@@ -9,8 +9,9 @@ Open the link and press **Quick Play** to drop into a public match straight away
 rounds run back to back, and CPU players fill any empty seats. To play with friends, **Create room**,
 then press **Share** (or **Copy invite**) in the lobby and send the link to your group: anyone who opens
 it lands straight in your room with an automatic callsign (a new one is picked if two people choose the
-same name). No accounts. If your connection drops, your slot and score are held for 30 seconds so you
-can come back; your soldier leaves the map while you are away, so nobody can farm you.
+same name). No sign-up: your level and season points stay with this browser. If your connection drops,
+your slot and score are held for 30 seconds so you can come back; your soldier leaves the map while you
+are away, so nobody can farm you.
 
 ![Gameplay](docs/screenshots/gameplay.png)
 
@@ -114,6 +115,17 @@ Red vs Blue: soldiers, name tags, the minimap and the kill feed use the team col
 carry a small chevron above their name. The score bar under the timer shows the two team totals;
 the team with the higher total wins.
 
+### Levels and seasons
+
+Every finished round pays XP: 25 for playing, 10 per kill and 50 for winning, up to 300 a round. Levels
+unlock stickers (four are free; the rest open at levels 2 to 5), and the number keys 1 to 4 send your
+favourite stickers without opening the picker. Rounds played with at least one other person in the
+room also earn season points. The **Season** board on the home screen lists the top 20 and restarts
+every month. Test rooms (`?dev=1`) never count.
+
+Your progress lives on an identity saved in this browser. Clearing site data starts you over. A second
+tab plays as a separate guest.
+
 ### Radar
 
 The minimap (top left) always shows you and your teammates. An enemy appears on it only for a few
@@ -179,7 +191,8 @@ npm run gen                          # regenerate client bindings (only after sc
 npm run dev                          # Vite on http://localhost:5173
 ```
 
-Open several tabs: each tab is a separate player (the identity token lives in `sessionStorage`).
+Open several tabs: the first tab uses the identity saved in `localStorage`, and each further tab is a
+separate guest player with its own `sessionStorage` identity.
 
 Checks:
 
@@ -253,6 +266,9 @@ outcome that matters:
 - **Identity:** room codes must match the alphabet exactly, room creation/joins and pings are
   rate-limited per identity, and names drop control, zero-width and bidirectional characters so two
   players cannot appear to share a name.
+- **Progress:** XP and season points are awarded by the server at round end. Rooms that allow test
+  teleports never count, season points need a second person in the room, one round pays at most 300,
+  and locked stickers are refused by the server.
 
 Two limits are inherent to a client-rendered game and are not fixable with server checks: a modified
 client can draw information it already receives (positions of everyone in its room are public so

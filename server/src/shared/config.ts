@@ -78,6 +78,18 @@ export const SUDDEN_DEATH_DEV_SEC = 12;
 export const SUDDEN_DEATH_FROM_Y = 36 * TILE;
 export const SUDDEN_DEATH_TO_Y = 17 * TILE;
 
+// ---------- Progression ----------
+export const XP_ROUND_BASE = 25;
+export const XP_PER_KILL = 10;
+export const XP_WIN = 50;
+/** Most XP a round can pay, which limits what farming a friend can earn. */
+export const XP_ROUND_CAP = 300;
+export const SEASON_BOARD_SIZE = 20;
+/** Level needed for each sticker; the index matches EMOTES. */
+export const STICKER_LEVELS = [1, 1, 1, 1, 2, 3, 4, 5];
+/** How many stickers have a number key. */
+export const QUICK_STICKERS = 4;
+
 // ---------- Scoring ----------
 export const SCORE_KILL = 100;
 export const SCORE_BOUNTY_BONUS = 50;
@@ -283,6 +295,29 @@ export const CAUSE_ACID = 10;
 // ---------- Room-wide announcements (notice_ev.kind) ----------
 export const NOTICE_AIRDROP = 0;
 export const NOTICE_HILL_MOVED = 1;
+
+/** Level 1 needs 0 XP, level 2 needs 100, level 3 needs 400, level 4 needs 900... */
+export function levelOf(xp: number): number {
+  return Math.floor(Math.sqrt(xp / 100)) + 1;
+}
+export function xpForLevel(level: number): number {
+  return (level - 1) * (level - 1) * 100;
+}
+
+/** XP for one finished round. */
+export function roundXp(kills: number, won: boolean): number {
+  return Math.min(XP_ROUND_CAP, XP_ROUND_BASE + kills * XP_PER_KILL + (won ? XP_WIN : 0));
+}
+
+/** Seasons are calendar months (UTC), numbered so that later seasons are larger. */
+export function seasonOf(ms: number): number {
+  const d = new Date(ms);
+  return d.getUTCFullYear() * 12 + d.getUTCMonth();
+}
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export function seasonName(season: number): string {
+  return `${MONTHS[season % 12]} ${Math.floor(season / 12)}`;
+}
 
 /**
  * World y of the rising acid during sudden death, or Infinity before it starts. Like Frenzy this

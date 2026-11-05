@@ -66,8 +66,10 @@ import PickupRow from "./pickup_table";
 import PickupEvRow from "./pickup_ev_table";
 import PlayerRow from "./player_table";
 import PongEvRow from "./pong_ev_table";
+import ProfileRow from "./profile_table";
 import PstateRow from "./pstate_table";
 import RoomRow from "./room_table";
+import SeasonBoardRow from "./season_board_table";
 import ShotEvRow from "./shot_ev_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -202,6 +204,17 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, PongEvRow),
+  profile: __table({
+    name: 'profile',
+    indexes: [
+      { accessor: 'identity', name: 'profile_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'profile_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, ProfileRow),
   pstate: __table({
     name: 'pstate',
     indexes: [
@@ -231,6 +244,17 @@ const tablesSchema = __schema({
       { name: 'room_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, RoomRow),
+  seasonBoard: __table({
+    name: 'season_board',
+    indexes: [
+      { accessor: 'identity', name: 'season_board_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'season_board_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, SeasonBoardRow),
   shotEv: __table({
     name: 'shot_ev',
     indexes: [
