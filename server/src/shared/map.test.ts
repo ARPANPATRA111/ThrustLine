@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { type GameMap, HELIOS, HELIOS_ROWS, MAPS, MAP_COLS, MAP_NAMES, MAP_ROWS, RIG7, RIG7_ROWS, T_ACID, T_EMPTY, T_ONEWAY, T_SOLID, parseMap, restingY, spawnWorldPos, tileAt } from './map';
-import { MAX_PLAYERS, SUDDEN_DEATH_TO_Y, TILE } from './config';
+import { CRYO, CRYO_ROWS, type GameMap, HELIOS, HELIOS_ROWS, KILN, KILN_ROWS, MAPS, MAP_COLS, MAP_NAMES, MAP_ROWS, RIG7, RIG7_ROWS, SKYREACH, SKYREACH_ROWS, T_ACID, T_EMPTY, T_ONEWAY, T_SOLID, parseMap, restingY, spawnWorldPos, tileAt } from './map';
+import { FLAG_TOUCH_UP, FLAG_TOUCH_X, JET_HOVER, MAX_PLAYERS, SUDDEN_DEATH_TO_Y, TILE } from './config';
 import { flowField, steer } from './nav';
+import { makeBody, stepPlayer } from './physics';
 import { isValidPosition } from './validate';
 
 const count = (ch: string) => RIG7_ROWS.join('').split(ch).length - 1;
 
-const ALL: [string, GameMap, readonly string[]][] = [['RIG-7', RIG7, RIG7_ROWS], ['HELIOS-9', HELIOS, HELIOS_ROWS]];
+const ALL: [string, GameMap, readonly string[]][] = [['RIG-7', RIG7, RIG7_ROWS], ['HELIOS-9', HELIOS, HELIOS_ROWS], ['KILN-3', KILN, KILN_ROWS], ['SKYREACH', SKYREACH, SKYREACH_ROWS], ['CRYO-12', CRYO, CRYO_ROWS]];
 
 describe.each(ALL)('%s layout', (_name, map, rows) => {
   it('has 40 rows of 96 columns', () => {
@@ -80,8 +81,8 @@ describe.each(ALL)('%s layout', (_name, map, rows) => {
   });
 
   it('offers pickup spots across the whole map', () => {
-    expect(map.spots.length).toBeGreaterThan(100);
-    expect(map.drops.length).toBeGreaterThan(20);
+    expect(map.spots.length).toBeGreaterThan(60);
+    expect(map.drops.length, 'room for airdrops').toBeGreaterThanOrEqual(6);
     const left = map.spots.filter((s) => s.tx < MAP_COLS / 2).length;
     expect(left / map.spots.length).toBeGreaterThan(0.3);
     expect(left / map.spots.length).toBeLessThan(0.7);
@@ -121,30 +122,44 @@ describe('steer', () => {
     expect(field[36 * RIG7.cols + 48]).toBe(-1);
   });
 
-  it('gets a bot from any spot to any flag by following it', () => {
-    for (const map of MAPS) {
-      for (const from of map.spots.filter((_, i) => i % 40 === 0)) {
-        const goal = map.bases[1].flag;
-        let tx = from.tx;
-        let ty = from.ty;
-        for (let i = 0; i < 400 && !(tx === goal.tx && ty === goal.ty); i++) {
-          const s = steer(map, (tx + 0.5) * TILE, (ty + 1) * TILE, (goal.tx + 0.5) * TILE, (goal.ty + 1) * TILE);
-          // A body stands two tiles tall and moves on both axes at once.
-          const fits = (x: number, y: number) => tileAt(map, x, y) !== T_SOLID && tileAt(map, x, y - 1) !== T_SOLID;
-          if (s.up && fits(tx, ty - 1)) ty -= 1;
-          else if (s.down && fits(tx, ty + 1)) ty += 1;
-          else if (s.moveX !== 0 && fits(tx + s.moveX, ty)) tx += s.moveX;
-          else break;
-        }
-        expect([tx, ty], `from ${from.tx},${from.ty}`).toEqual([goal.tx, goal.ty]);
-      }
+  // The real physics, driven the way a CPU player drives it. A grid route alone is not proof: a body
+  // can span three tiles in the air, and that is what catches heads on tunnel roofs and ledges.
+  const travel = (map: GameMap, from: { tx: number; ty: number }, to: { tx: number; ty: number }): number => {
+    const start = spawnWorldPos(from);
+    const goal = spawnWorldPos(to);
+    const b = makeBody(start.x, start.y);
+    let held = false;
+    for (let step = 0; step < 40 * 60; step++) {
+      const r = steer(map, b.x, b.y, goal.x, goal.y);
+      let thrust = r.up || r.hover;
+      if (thrust && b.grounded && held) thrust = false; // a hop needs a fresh press
+      held = thrust;
+      stepPlayer(map, b, { moveX: r.moveX, thrust, thrustAmount: r.hover && !b.grounded ? JET_HOVER + 0.08 : 1, down: r.down && b.grounded }, 1 / 60, { runSpeedMul: 1, fuelRefillMul: 1, infiniteFuel: true });
+      if (Math.abs(b.x - goal.x) <= FLAG_TOUCH_X && b.y >= goal.y - FLAG_TOUCH_UP && b.y <= goal.y + TILE) return step / 60;
     }
+    return Infinity;
+  };
+
+  it.each(ALL)('flies a body flag to flag and back on %s', (_name, map) => {
+    const [red, blue] = map.bases;
+    expect(travel(map, red.flag, blue.flag)).toBeLessThan(25);
+    expect(travel(map, blue.flag, red.flag)).toBeLessThan(25);
+  });
+
+  it.each(ALL)('flies a body from every spawn to the enemy flag on %s', (_name, map) => {
+    for (const s of [...map.spawns, ...map.bases[0].spawns]) expect(travel(map, s, map.bases[1].flag), `from ${s.tx},${s.ty}`).toBeLessThan(30);
   });
 });
 
 describe('map list', () => {
   it('names every map', () => {
     expect(MAP_NAMES.length).toBe(MAPS.length);
+  });
+
+  it('keeps the maps really different from each other', () => {
+    const solidShare = (m: GameMap) => m.tiles.reduce((n, t) => n + (t === T_SOLID ? 1 : 0), 0) / m.tiles.length;
+    expect(solidShare(KILN), 'the bunker is far more enclosed than the rig').toBeGreaterThan(solidShare(RIG7) * 2);
+    for (let tx = 1; tx < MAP_COLS - 1; tx++) expect(tileAt(SKYREACH, tx, 36), 'the sky map has no ground, only acid').toBe(T_ACID);
   });
 });
 

@@ -1,8 +1,8 @@
 // Route finding for CPU players. A jetpack can reach any open tile, so a route is a breadth-first
 // walk over the tiles a body fits through, kept away from the acid. Each goal gets one distance
 // field, shared by every bot heading there, so the cost stays flat however many bots are playing.
-import { TILE } from './config';
-import { type GameMap, T_ACID, T_SOLID, tileAt } from './map';
+import { PLAYER_H, PLAYER_W, TILE } from './config';
+import { type GameMap, T_ACID, T_ONEWAY, T_SOLID, tileAt } from './map';
 
 /** Does a body fit with its feet in this tile? It stands two tiles tall. */
 function fits(map: GameMap, tx: number, ty: number): boolean {
@@ -72,6 +72,8 @@ export interface Steer {
 
 /** How far ahead along the route to look, so a turn starts before the corner. */
 const LOOKAHEAD = 3;
+/** Floor this close below a level route means walking, not hovering. */
+const HOVER_DROP_TILES = 3;
 
 /** Which way to go from a body at (x, feetY) to reach (gx, gy). */
 export function steer(map: GameMap, x: number, feetY: number, gx: number, gy: number): Steer {
@@ -100,12 +102,34 @@ export function steer(map: GameMap, x: number, feetY: number, gx: number, gy: nu
     cx = bx;
     cy = by;
   }
-  const moveX = Math.sign(cx - tx);
-  const lift = cy - ty;
   // Nothing routed (already there, or walled in): head straight for it.
   if (cx === tx && cy === ty) {
     return { moveX: Math.abs(gx - x) > 20 ? Math.sign(gx - x) : 0, up: gy < feetY - 40, down: gy > feetY + 60, hover: false };
   }
-  const below = tileAt(map, cx, cy + 1);
-  return { moveX, up: lift < 0, down: lift > 0, hover: lift === 0 && below !== T_SOLID };
+  // Aim for the middle of the tile ahead. A body overhanging a ledge or a hatch would otherwise sit
+  // on its edge for ever, with the route pointing straight down past it.
+  const middle = (cx + 0.5) * TILE;
+  const moveX = Math.abs(middle - x) > 3 ? Math.sign(middle - x) : 0;
+  const lift = cy - ty;
+  const step: Steer = { moveX, up: lift < 0, down: lift > 0, hover: lift === 0 && !floorClose(map, cx, cy) };
+  // A body can span three tiles in the air, so a level route can still catch the head or the feet.
+  if (moveX !== 0) {
+    const ahead = Math.floor((x + moveX * (PLAYER_W / 2 + 3)) / TILE);
+    if (tileAt(map, ahead, Math.floor((feetY - PLAYER_H) / TILE)) === T_SOLID) {
+      step.up = false;
+      step.hover = false;
+    } else if (tileAt(map, ahead, Math.floor((feetY - 1) / TILE)) === T_SOLID) {
+      step.up = true;
+    }
+  }
+  return step;
+}
+
+/** Is there something to walk on just below this tile? If so a bot walks instead of hovering. */
+function floorClose(map: GameMap, tx: number, ty: number): boolean {
+  for (let i = 1; i <= HOVER_DROP_TILES; i++) {
+    const code = tileAt(map, tx, ty + i);
+    if (code === T_SOLID || code === T_ONEWAY) return true;
+  }
+  return false;
 }

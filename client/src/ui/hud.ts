@@ -156,6 +156,7 @@ export class Hud {
     const key = text === null ? '' : `${cls}:${text}`;
     if (!this.changed('hill', key)) return;
     this.hillChip.classList.toggle('hidden', text === null);
+    document.body.classList.toggle('has-chip', text !== null);
     if (text !== null) {
       this.hillChip.textContent = text;
       this.hillChip.className = `hill-chip ${cls}`;

@@ -1,8 +1,65 @@
-// Bake RIG-7 into a few big textures at load, so the whole static map costs ~6 sprites per
-// frame. Tiles are never drawn per frame. Also builds the parallax backdrops and acid texture.
+// Bake each map into a few big textures, so the whole static map costs ~6 sprites per frame.
+// Tiles are never drawn per frame. Also builds the parallax backdrops and acid texture.
 import { Container, Sprite, Texture, TilingSprite } from 'pixi.js';
 import { MAP_CHUNK, TILE } from '@shared/config';
 import { type GameMap, MAP_H, MAP_W, T_ACID, T_ONEWAY, T_SOLID, tileAt } from '@shared/map';
+
+/** How a map looks. Layouts differ on their own; colour makes them unmistakable at a glance. */
+export interface MapTheme {
+  rock: [string, string];
+  /** Shadowed side and underside faces. */
+  shade: string;
+  under: string;
+  /** Faint highlight on the lit edge of a wall. */
+  edge: string;
+  /** Hazard stripes under overhangs. */
+  stripe: string;
+  /** The walkable top of solid tiles. */
+  lip: string;
+  neon: string;
+  /** r,g,b of the glow under the neon. */
+  glow: string;
+  /** Catwalks: frame, top rail, and the frame's r,g,b. */
+  mesh: string;
+  rail: string;
+  meshRgb: string;
+  /** Lit windows in deep rock. */
+  windows: [string, string];
+  /** A colour washed over the backdrop, and how strong. */
+  wash: number;
+  washAlpha: number;
+  /** Show the girders behind the map. */
+  girders: boolean;
+}
+
+/** Indexed by map id. */
+export const THEMES: MapTheme[] = [
+  { // RIG-7: blue steel and cyan neon
+    rock: ['#2d3866', '#222b52'], shade: '#19203f', under: '#121833', edge: 'rgba(120,140,220,0.25)', stripe: 'rgba(255,200,60,0.18)',
+    lip: '#5b6b9a', neon: '#7ff0ff', glow: '34,211,238', mesh: '#8d9ad0', rail: '#ffd54a', meshRgb: '141,154,208',
+    windows: ['rgba(34,211,238,0.55)', 'rgba(255,190,90,0.5)'], wash: 0x000000, washAlpha: 0, girders: true,
+  },
+  { // HELIOS-9: sun-bleached bronze and gold
+    rock: ['#5a4630', '#43331f'], shade: '#2e2214', under: '#1f170d', edge: 'rgba(240,200,130,0.22)', stripe: 'rgba(255,160,60,0.22)',
+    lip: '#a98a5c', neon: '#ffd98a', glow: '255,190,90', mesh: '#c9a877', rail: '#fff0c0', meshRgb: '201,168,119',
+    windows: ['rgba(255,210,120,0.6)', 'rgba(255,140,70,0.5)'], wash: 0xc8742a, washAlpha: 0.16, girders: true,
+  },
+  { // KILN-3: basalt and furnace light
+    rock: ['#2e2425', '#211a1b'], shade: '#150f10', under: '#0e0a0a', edge: 'rgba(255,120,60,0.2)', stripe: 'rgba(255,90,40,0.28)',
+    lip: '#6d4438', neon: '#ff8a4a', glow: '255,110,50', mesh: '#a8644a', rail: '#ffb36b', meshRgb: '168,100,74',
+    windows: ['rgba(255,120,50,0.7)', 'rgba(255,190,90,0.5)'], wash: 0x8a2a10, washAlpha: 0.28, girders: true,
+  },
+  { // SKYREACH: mossy stone in morning light
+    rock: ['#3f5a58', '#2c4447'], shade: '#21363a', under: '#18292d', edge: 'rgba(190,255,220,0.2)', stripe: 'rgba(0,0,0,0)',
+    lip: '#7bb48f', neon: '#c8ffd8', glow: '150,255,190', mesh: '#b4d8c8', rail: '#ffe6b0', meshRgb: '180,216,200',
+    windows: ['rgba(0,0,0,0)', 'rgba(0,0,0,0)'], wash: 0xe0678f, washAlpha: 0.3, girders: false,
+  },
+  { // CRYO-12: pale ice and white light
+    rock: ['#5f7f9c', '#46627e'], shade: '#324a62', under: '#22364a', edge: 'rgba(235,250,255,0.35)', stripe: 'rgba(200,240,255,0.2)',
+    lip: '#bfe0f2', neon: '#ffffff', glow: '190,235,255', mesh: '#d4ecf8', rail: '#ffffff', meshRgb: '212,236,248',
+    windows: ['rgba(190,240,255,0.6)', 'rgba(255,255,255,0.4)'], wash: 0x4aa8d8, washAlpha: 0.24, girders: true,
+  },
+];
 
 /** Cheap deterministic hash so decorative details are the same on every load. */
 function hash(x: number, y: number): number {
@@ -12,7 +69,7 @@ function hash(x: number, y: number): number {
 }
 
 /** Draw one tile of the map into a 2D context at (px, py). */
-function drawTile(g: CanvasRenderingContext2D, map: GameMap, tx: number, ty: number, px: number, py: number): void {
+function drawTile(g: CanvasRenderingContext2D, map: GameMap, tx: number, ty: number, px: number, py: number, T: MapTheme): void {
   const code = tileAt(map, tx, ty);
   if (code === T_SOLID) {
     // 4-neighbour mask: which faces are exposed to open space?
@@ -22,8 +79,8 @@ function drawTile(g: CanvasRenderingContext2D, map: GameMap, tx: number, ty: num
     const right = tileAt(map, tx + 1, ty) !== T_SOLID;
     // Brushed-metal body: a gentle vertical gradient per tile.
     const grad = g.createLinearGradient(0, py, 0, py + TILE);
-    grad.addColorStop(0, '#2d3866');
-    grad.addColorStop(1, '#222b52');
+    grad.addColorStop(0, T.rock[0]);
+    grad.addColorStop(1, T.rock[1]);
     g.fillStyle = grad;
     g.fillRect(px, py, TILE, TILE);
     // Panel seams and a soft inner highlight.
@@ -36,7 +93,7 @@ function drawTile(g: CanvasRenderingContext2D, map: GameMap, tx: number, ty: num
     const h = hash(tx, ty);
     if (!up && !down && !left && !right) {
       if (h < 0.07) {
-        g.fillStyle = h < 0.035 ? 'rgba(34,211,238,0.55)' : 'rgba(255,190,90,0.5)';
+        g.fillStyle = h < 0.035 ? T.windows[0] : T.windows[1];
         g.fillRect(px + 6, py + 12, TILE - 12, 6);
         g.fillStyle = 'rgba(255,255,255,0.35)';
         g.fillRect(px + 6, py + 12, TILE - 12, 1.5);
@@ -45,25 +102,25 @@ function drawTile(g: CanvasRenderingContext2D, map: GameMap, tx: number, ty: num
         for (let i = 0; i < 4; i++) g.fillRect(px + 7, py + 8 + i * 5, TILE - 14, 2);
       }
     }
-    if (left) { g.fillStyle = '#19203f'; g.fillRect(px, py, 3, TILE); g.fillStyle = 'rgba(120,140,220,0.25)'; g.fillRect(px + 3, py, 1, TILE); }
-    if (right) { g.fillStyle = '#19203f'; g.fillRect(px + TILE - 3, py, 3, TILE); }
+    if (left) { g.fillStyle = T.shade; g.fillRect(px, py, 3, TILE); g.fillStyle = T.edge; g.fillRect(px + 3, py, 1, TILE); }
+    if (right) { g.fillStyle = T.shade; g.fillRect(px + TILE - 3, py, 3, TILE); }
     if (down) {
-      g.fillStyle = '#121833';
+      g.fillStyle = T.under;
       g.fillRect(px, py + TILE - 5, TILE, 5);
       // Hazard stripes on undersides.
-      g.fillStyle = 'rgba(255,200,60,0.18)';
+      g.fillStyle = T.stripe;
       for (let i = -8; i < TILE; i += 10) { g.beginPath(); g.moveTo(px + i, py + TILE); g.lineTo(px + i + 5, py + TILE - 5); g.lineTo(px + i + 10, py + TILE - 5); g.lineTo(px + i + 5, py + TILE); g.fill(); }
     }
     if (up) {
       // Walkable top: steel lip with a neon edge and a glow that spills onto the wall below.
-      g.fillStyle = '#5b6b9a';
+      g.fillStyle = T.lip;
       g.fillRect(px, py, TILE, 6);
       const glow = g.createLinearGradient(0, py + 6, 0, py + 16);
-      glow.addColorStop(0, 'rgba(34,211,238,0.22)');
-      glow.addColorStop(1, 'rgba(34,211,238,0)');
+      glow.addColorStop(0, `rgba(${T.glow},0.22)`);
+      glow.addColorStop(1, `rgba(${T.glow},0)`);
       g.fillStyle = glow;
       g.fillRect(px, py + 6, TILE, 10);
-      g.fillStyle = '#7ff0ff';
+      g.fillStyle = T.neon;
       g.fillRect(px, py, TILE, 2);
       g.fillStyle = '#0b1020';
       g.beginPath();
@@ -74,11 +131,11 @@ function drawTile(g: CanvasRenderingContext2D, map: GameMap, tx: number, ty: num
   } else if (code === T_ONEWAY) {
     // See-through mesh catwalk: a bright top rail, a lattice you can see (and shoot) through,
     // and a thin lower rail. Visibly different from solid walls.
-    g.fillStyle = '#8d9ad0';
+    g.fillStyle = T.mesh;
     g.fillRect(px, py, TILE, 4);
-    g.fillStyle = '#ffd54a';
+    g.fillStyle = T.rail;
     g.fillRect(px, py, TILE, 1.5);
-    g.strokeStyle = 'rgba(141,154,208,0.55)';
+    g.strokeStyle = `rgba(${T.meshRgb},0.55)`;
     g.lineWidth = 1.2;
     g.beginPath();
     for (let i = 0; i < TILE; i += 8) {
@@ -88,7 +145,7 @@ function drawTile(g: CanvasRenderingContext2D, map: GameMap, tx: number, ty: num
       g.lineTo(px + i, py + 13);
     }
     g.stroke();
-    g.fillStyle = 'rgba(141,154,208,0.7)';
+    g.fillStyle = `rgba(${T.meshRgb},0.7)`;
     g.fillRect(px, py + 13, TILE, 2);
     // Support struts every few tiles.
     if (tx % 4 === 0) { g.fillStyle = 'rgba(91,107,154,0.35)'; g.fillRect(px + 14, py + 15, 4, 10); }
@@ -106,7 +163,7 @@ function drawTile(g: CanvasRenderingContext2D, map: GameMap, tx: number, ty: num
 }
 
 /** Bake the map into MAP_CHUNK-sized textures and return a container of sprites. */
-export function bakeMap(map: GameMap): Container {
+export function bakeMap(map: GameMap, theme: MapTheme): Container {
   const layer = new Container();
   const tilesPerChunk = MAP_CHUNK / TILE;
   for (let cy = 0; cy * MAP_CHUNK < MAP_H; cy++) {
@@ -119,7 +176,7 @@ export function bakeMap(map: GameMap): Container {
       const g = canvas.getContext('2d')!;
       for (let ty = 0; ty < h / TILE; ty++) {
         for (let tx = 0; tx < w / TILE; tx++) {
-          drawTile(g, map, cx * tilesPerChunk + tx, cy * tilesPerChunk + ty, tx * TILE, ty * TILE);
+          drawTile(g, map, cx * tilesPerChunk + tx, cy * tilesPerChunk + ty, tx * TILE, ty * TILE, theme);
         }
       }
       const s = new Sprite(Texture.from(canvas));
@@ -130,17 +187,27 @@ export function bakeMap(map: GameMap): Container {
   return layer;
 }
 
-/** Bounding rectangle of all acid tiles (the pit). */
-export function acidRect(map: GameMap): { x: number; y: number; w: number; h: number } {
-  let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** One rectangle per acid pool. A map can have several, so a single bounding box would not do. */
+export function acidRects(map: GameMap): Rect[] {
+  const out: Rect[] = [];
   for (let ty = 0; ty < map.rows; ty++) {
     for (let tx = 0; tx < map.cols; tx++) {
-      if (tileAt(map, tx, ty) === T_ACID) {
-        x0 = Math.min(x0, tx); y0 = Math.min(y0, ty); x1 = Math.max(x1, tx); y1 = Math.max(y1, ty);
-      }
+      if (tileAt(map, tx, ty) !== T_ACID || tileAt(map, tx, ty - 1) === T_ACID || tileAt(map, tx - 1, ty) === T_ACID) continue;
+      let w = 1;
+      while (tileAt(map, tx + w, ty) === T_ACID) w++;
+      let h = 1;
+      while (tileAt(map, tx, ty + h) === T_ACID) h++;
+      out.push({ x: tx * TILE, y: ty * TILE, w: w * TILE, h: h * TILE });
     }
   }
-  return { x: x0 * TILE, y: y0 * TILE, w: (x1 - x0 + 1) * TILE, h: (y1 - y0 + 1) * TILE };
+  return out;
 }
 
 /** Scrolling acid surface texture. */

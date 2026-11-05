@@ -30,11 +30,8 @@ const SKILL = [
 
 const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 
-/** What a bot needs to know about a map: the acid pit's extent and where to patrol. */
+/** What a bot needs to know about a map: where to patrol. */
 interface Nav {
-  pitL: number;
-  pitR: number;
-  pitTop: number;
   /** The spawn points, spread over every height of the map. */
   waypoints: { x: number; y: number }[];
 }
@@ -43,16 +40,7 @@ const NAV = new Map<GameMap, Nav>();
 function navFor(map: GameMap): Nav {
   let nav = NAV.get(map);
   if (!nav) {
-    let left = Infinity, right = -1, top = Infinity;
-    for (let ty = 0; ty < map.rows; ty++) {
-      for (let tx = 0; tx < map.cols; tx++) {
-        if (tileAt(map, tx, ty) !== T_ACID) continue;
-        left = Math.min(left, tx);
-        right = Math.max(right, tx);
-        top = Math.min(top, ty);
-      }
-    }
-    nav = { pitL: left * C.TILE, pitR: (right + 1) * C.TILE, pitTop: top * C.TILE, waypoints: map.spawns.map(spawnWorldPos) };
+    nav = { waypoints: map.spawns.map(spawnWorldPos) };
     NAV.set(map, nav);
   }
   return nav;
@@ -260,10 +248,15 @@ export class BotBrain {
       for (let k = 0; k <= 4; k++) {
         if (tileAt(map, Math.floor((cx + dir * k * C.TILE) / C.TILE), feetTy) === T_ACID) thrust = true;
       }
-      if (nav.pitL <= cx && cx <= nav.pitR && b.y > nav.pitTop - 160 && b.fuel > 1) thrust = true;
+      // Over a pool and low: climb before the jets run out of air under the feet.
+      const tileX = Math.floor(cx / C.TILE);
+      for (let k = 1; k <= 5; k++) if (tileAt(map, tileX, feetTy + k) === T_ACID && b.fuel > 1) thrust = true;
       if (inAcid) {
         thrust = true;
-        moveX = cx - nav.pitL < nav.pitR - cx ? -1 : 1;
+        // Out by the nearest shore.
+        let reach = 1;
+        while (reach < 48 && tileAt(map, tileX - reach, feetTy) === T_ACID && tileAt(map, tileX + reach, feetTy) === T_ACID) reach++;
+        moveX = tileAt(map, tileX - reach, feetTy) !== T_ACID ? -1 : 1;
       }
     }
     // Sudden death: stay above the rising acid.
