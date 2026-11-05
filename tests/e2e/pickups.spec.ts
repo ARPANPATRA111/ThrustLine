@@ -38,9 +38,14 @@ test('acid burns, pickups heal and refill, death respawns', async ({ browser }) 
   const burnt = (await row()).hp;
   console.log(`hp after standing in acid: ${burnt.toFixed(1)}`);
 
-  // Health pack (H at tile 42,17 on the centre wing): +50 HP, capped at 100.
-  await teleport(42 * 32 + 16, 18 * 32);
-  await expect.poll(async () => (await row()).hp, { timeout: 3000 }).toBeGreaterThan(burnt + 20);
+  // Health packs appear on a random spot: go to wherever this one is. It heals, then comes back
+  // somewhere else.
+  const packs = () => page.evaluate(() => (window as any).__tl.game.debugState().pickups.filter((k: any) => k.kind === 0));
+  const pack = (await packs())[0];
+  const others = (await packs()).slice(1);
+  await teleport((pack.tx + 0.5) * 32, (pack.ty + 1) * 32);
+  await expect.poll(async () => (await row()).hp, { timeout: 3000 }).toBeGreaterThan(burnt);
+  await expect.poll(async () => (await packs()).filter((k: any) => !k.ready).length, { timeout: 3000 }).toBe(1);
   console.log(`hp after health pack: ${(await row()).hp.toFixed(1)}`);
 
   // Grenade crate (G at tile 40,5): throw one frag first, then pick up +1.
@@ -61,4 +66,12 @@ test('acid burns, pickups heal and refill, death respawns', async ({ browser }) 
   expect((await row()).life).toBeGreaterThan(before.life);
   await expect(page.locator('#scr-respawn')).toBeHidden();
   console.log('acid death and respawn: ok');
+
+  // The health pack from earlier returns on a new spot, and the two packs stay spread out.
+  await expect.poll(async () => (await packs()).every((k: any) => k.ready), { timeout: 25_000 }).toBe(true);
+  const after = await packs();
+  const back = after.find((k: any) => !others.some((o: any) => o.tx === k.tx && o.ty === k.ty));
+  expect(back, 'the used pack is still on the map').toBeTruthy();
+  expect(`${back.tx},${back.ty}`, 'it moved').not.toBe(`${pack.tx},${pack.ty}`);
+  console.log(`health pack moved from ${pack.tx},${pack.ty} to ${back.tx},${back.ty}`);
 });

@@ -3,7 +3,7 @@
 import { type Application, Container, Graphics, Sprite, type Texture, TilingSprite } from 'pixi.js';
 import type { Identity } from 'spacetimedb';
 import * as C from '@shared/config';
-import { MAPS, MAP_H, MAP_NAMES, MAP_W, PICKUP_DROP, PICKUP_SHIELD, inZone } from '@shared/map';
+import { MAPS, MAP_H, MAP_NAMES, MAP_W, PICKUP_DROP, PICKUP_SHIELD, inZone, movesAround } from '@shared/map';
 import { fuseTicks, grenadePath } from '@shared/grenade';
 import { W_FRAG, W_KNIFE, W_PISTOL, W_RAIL, W_SMG, W_SNIPER, canThrow, isGun, pickupActive } from '@shared/weapons';
 import type { BoomEv, EmoteEv, Grenade, Hill, HitEv, KillEv, MeleeEv, NoticeEv, Pickup, PickupEv, Player, Pstate, Room, ShotEv } from '../module_bindings/types';
@@ -449,6 +449,11 @@ export class Game implements WorldView {
       this.pickups.set(p.id, v);
     } else if (p.kind === PICKUP_DROP && v.row.availableAtMicros !== 0n && p.availableAtMicros === 0n) {
       this.effects.ring(v.sprite.x, v.baseY, 70, 0xffd54a, 0.5, true); // touchdown
+    } else if (v.row.tx !== p.tx || v.row.ty !== p.ty) {
+      // Health and shields come back somewhere new.
+      v.baseY = p.ty * C.TILE + C.TILE / 2;
+      v.sprite.position.set(p.tx * C.TILE + C.TILE / 2, v.baseY);
+      this.effects.ring(v.sprite.x, v.baseY, 50, p.kind === PICKUP_SHIELD ? 0x22d3ee : 0xff4d6d, 0.5, true);
     }
     v.row = p;
   }
@@ -1157,6 +1162,8 @@ export class Game implements WorldView {
     }
     for (const p of this.pickups.values()) {
       if (p.row.kind === PICKUP_DROP) out.push({ x: p.sprite.x, y: p.baseY, color: 0xffd54a, kind: 'objective', firedAgo: 0 });
+      // They move around, so the minimap shows where they turned up.
+      else if (movesAround(p.row.kind) && p.sprite.visible) out.push({ x: p.sprite.x, y: p.baseY, color: p.row.kind === PICKUP_SHIELD ? 0x22d3ee : 0xff4d6d, kind: 'item', firedAgo: 0 });
     }
     const hill = this.hillRect();
     if (hill && !(this.local?.alive && this.inHill())) {

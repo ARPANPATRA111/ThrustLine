@@ -15,7 +15,7 @@ describe.each(ALL)('%s layout', (_name, map, rows) => {
 
   it('only uses supported characters and is mirror-symmetric', () => {
     for (const row of rows) {
-      expect(row).toMatch(/^[#=~.SHAGPD]+$/);
+      expect(row).toMatch(/^[#=~.SHAGP]+$/);
       expect(row).toBe([...row].reverse().join(''));
     }
   });
@@ -28,7 +28,7 @@ describe.each(ALL)('%s layout', (_name, map, rows) => {
   });
 
   it('puts every marker directly above a solid or one-way tile', () => {
-    for (const m of [...map.spawns, ...map.pickups, ...map.drops]) {
+    for (const m of [...map.spawns, ...map.pickups, ...map.spots]) {
       expect([T_SOLID, T_ONEWAY]).toContain(tileAt(map, m.tx, m.ty + 1));
     }
   });
@@ -50,6 +50,24 @@ describe.each(ALL)('%s layout', (_name, map, rows) => {
         for (let ty = z.ty; ty < z.ty + z.th; ty++) expect(tileAt(map, tx, ty), `tile ${tx},${ty}`).not.toBe(T_SOLID);
       }
       expect(footing, `zone at ${z.tx},${z.ty}`).toBeGreaterThanOrEqual(6);
+    }
+  });
+
+  it('offers pickup spots across the whole map', () => {
+    expect(map.spots.length).toBeGreaterThan(100);
+    expect(map.drops.length).toBeGreaterThan(20);
+    const left = map.spots.filter((s) => s.tx < MAP_COLS / 2).length;
+    expect(left / map.spots.length).toBeGreaterThan(0.3);
+    expect(left / map.spots.length).toBeLessThan(0.7);
+  });
+
+  it('never puts a spot on the acid, in a wall or by a spawn', () => {
+    for (const s of map.spots) {
+      expect(tileAt(map, s.tx, s.ty)).toBe(T_EMPTY);
+      expect(tileAt(map, s.tx, s.ty - 1)).toBe(T_EMPTY);
+      expect(tileAt(map, s.tx, s.ty + 1)).not.toBe(T_ACID);
+      expect(isValidPosition(map, (s.tx + 0.5) * TILE, (s.ty + 1) * TILE), `spot ${s.tx},${s.ty}`).toBe(true);
+      for (const sp of map.spawns) expect(Math.abs(sp.tx - s.tx) >= 4 || Math.abs(sp.ty - s.ty) >= 4, `spot ${s.tx},${s.ty}`).toBe(true);
     }
   });
 
@@ -78,11 +96,9 @@ describe('RIG-7 map', () => {
     expect(count('A')).toBe(4);
     expect(count('G')).toBe(2);
     expect(count('P')).toBe(2);
-    expect(count('D')).toBe(8);
     expect(count('~')).toBe(32);
     expect(RIG7.spawns.length).toBe(8);
     expect(RIG7.pickups.length).toBe(10);
-    expect(RIG7.drops.length).toBe(8);
   });
 
   it('treats everything outside the map as solid', () => {

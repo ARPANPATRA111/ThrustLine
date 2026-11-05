@@ -1,5 +1,5 @@
 // Smart spawn selection: never next to where you died, and far from living enemies.
-import { SPAWN_MIN_DIST_FROM_DEATH, SPAWN_RANDOM_TOP_N } from './config';
+import { SPAWN_MIN_DIST_FROM_DEATH, SPAWN_RANDOM_TOP_N, SPOT_MIN_GAP_TILES, SPOT_MIN_PLAYER_PX } from './config';
 import { type TilePos, spawnWorldPos } from './map';
 
 export interface Point {
@@ -39,4 +39,19 @@ export function shuffledSpawnOrder(count: number, random: () => number): number[
     order[j] = t;
   }
   return order;
+}
+
+/**
+ * A random spot for a pickup: spread out from the other pickups, away from living players and
+ * above `maxFeetY`. With nothing that clear, any spot above the acid will do.
+ */
+export function pickSpot(spots: readonly TilePos[], taken: readonly TilePos[], players: readonly Point[], random: () => number, maxFeetY = Infinity): TilePos {
+  const safe = spots.filter((s) => spawnWorldPos(s).y <= maxFeetY);
+  const open = safe.filter((s) => {
+    const p = spawnWorldPos(s);
+    return taken.every((t) => Math.hypot(t.tx - s.tx, t.ty - s.ty) >= SPOT_MIN_GAP_TILES)
+      && players.every((q) => Math.hypot(q.x - p.x, q.y - p.y) >= SPOT_MIN_PLAYER_PX);
+  });
+  const pool = open.length > 0 ? open : safe.length > 0 ? safe : spots;
+  return pool[Math.floor(random() * pool.length) % pool.length];
 }

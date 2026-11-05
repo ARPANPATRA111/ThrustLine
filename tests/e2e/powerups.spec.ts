@@ -60,8 +60,9 @@ test('a shield soaks damage before health', async ({ browser }) => {
   const before = await row(b);
   expect(before.shield).toBe(0);
 
-  // Shield pickup on the upper-left platform.
-  await teleport(b, 28 * 32 + 16, 9 * 32);
+  // Shields appear on a random spot, so go to wherever this one landed.
+  const spot = (await st(b)).pickups.find((k: any) => k.kind === 3);
+  await teleport(b, (spot.tx + 0.5) * 32, (spot.ty + 1) * 32);
   await expect.poll(async () => (await row(b)).shield, { timeout: 4000 }).toBe(50);
   await expect(b.locator('#notice')).toContainText('SHIELD UP');
 

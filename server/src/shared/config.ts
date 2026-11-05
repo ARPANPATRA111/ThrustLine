@@ -50,6 +50,14 @@ export const HEALTH_PACK_HP = 50;
 export const GRENADE_CRATE_MAX = 3;
 /** Pickup hit box is one tile centred on its marker tile. */
 export const PICKUP_SIZE = 32;
+/** Health and shields move each time they come back: this far from each other... */
+export const SPOT_MIN_GAP_TILES = 12;
+/** ...and this far from any living player, so nobody just waits for one to appear underfoot. */
+export const SPOT_MIN_PLAYER_PX = 320;
+/** A spot this close to a spawn point is never used. */
+export const SPOT_SPAWN_GAP_TILES = 4;
+/** Tiles of open air an airdrop crate needs above its landing spot. */
+export const DROP_CLEAR_TILES = 8;
 
 // ---------- Power-ups ----------
 export const SHIELD_MAX = 50;

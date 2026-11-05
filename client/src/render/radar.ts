@@ -11,8 +11,11 @@ export interface RadarEntry {
   x: number;
   y: number;
   color: number;
-  /** 'objective' is something everyone should find: always on the minimap, arrow when off-screen. */
-  kind: 'me' | 'ally' | 'enemy' | 'objective';
+  /**
+   * 'objective' is something everyone should find: always on the minimap, arrow when off-screen.
+   * 'item' is a small minimap dot with no arrow.
+   */
+  kind: 'me' | 'ally' | 'enemy' | 'objective' | 'item';
   /** ms since this player last fired (Infinity if never). */
   firedAgo: number;
 }
@@ -20,7 +23,7 @@ export interface RadarEntry {
 /** How long an enemy stays on the minimap after firing, and how long its edge arrow lasts. */
 const REVEAL_MS = 3000;
 const ARROW_MS = 2200;
-const POOL = 10;
+const POOL = 16;
 
 export class Radar {
   root = new Container();
@@ -115,7 +118,7 @@ export class Radar {
         s.visible = true;
         s.position.set(e.x * sxk, e.y * syk);
         s.tint = e.kind === 'me' ? 0xffffff : e.color;
-        s.scale.set(e.kind === 'me' || e.kind === 'objective' ? 1.1 : 0.9);
+        s.scale.set(e.kind === 'me' || e.kind === 'objective' ? 1.1 : e.kind === 'item' ? 0.6 : 0.9);
         s.alpha = e.kind === 'enemy' ? Math.max(0.25, 1 - e.firedAgo / REVEAL_MS) : 1;
       }
       // Edge arrow: an off-screen enemy that just fired.
