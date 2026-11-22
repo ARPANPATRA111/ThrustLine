@@ -45,6 +45,7 @@ Every deviation from the build brief, and every non-obvious choice, one line eac
 - The knife lunge's vertical part is halved · a full upward lunge felt like a jump.
 - Air drag of 300 px/s² when no direction is held (brief is silent) · keeps blast-jump momentum but lets you stop eventually.
 - Quality governor steps never raise resolution above `devicePixelRatio` · no point rendering 2× on a 1× screen.
+- The quality governor runs only while a game is on screen and saves its step in `localStorage` · menus render at 30 fps on purpose, which used to push every device to the lowest step; a saved step spares weak phones a slow start.
 - `window.__tl` exposes the game objects · used by the Playwright tests (`debugState()`, `devTeleport`).
 
 ## CPU players (added at the developer's request)

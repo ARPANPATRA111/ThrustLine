@@ -116,6 +116,15 @@ const QUALITY_STEPS = [
   { res: 1, particles: C.PARTICLE_CAP_LOW, parallax: 3 },
   { res: 1, particles: C.PARTICLE_CAP_LOW, parallax: 1 },
 ];
+const QUALITY_KEY = 'tl:quality-step';
+
+/** Auto quality starts where this device settled last time; a first visit with 4 GB of memory or less starts at 1x. */
+function startingStep(): number {
+  const saved = Number(localStorage.getItem(QUALITY_KEY) ?? -1);
+  if (QUALITY_STEPS[saved]) return saved;
+  const memoryGb = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;
+  return memoryGb <= 4 ? 2 : 0;
+}
 
 export class Game implements WorldView {
   map = MAPS[0];
@@ -1445,7 +1454,7 @@ export class Game implements WorldView {
 
   setQuality(q: Quality): void {
     this.quality = q;
-    this.applyQualityStep(q === 'low' ? QUALITY_STEPS.length - 1 : 0);
+    this.applyQualityStep(q === 'low' ? QUALITY_STEPS.length - 1 : q === 'auto' ? startingStep() : 0);
   }
 
   private applyQualityStep(step: number): void {
@@ -1459,16 +1468,24 @@ export class Game implements WorldView {
     this.particles.cap = Math.max(10, Math.round(qs.particles * this.particleScale));
   }
 
-  /** Auto quality: step down after 3 s under 50 fps, back up after 10 s above 58. */
+  /**
+   * Auto quality, judged only while a game is on screen (menus are capped at 30 fps): step down
+   * after 3 s under 50 fps, back up after 10 s above 58. The level is kept for the next visit.
+   */
   private governQuality(dt: number): void {
     const inst = 1 / Math.max(dt, 1e-3);
     this.fps += (inst - this.fps) * Math.min(1, dt * 2);
-    if (this.quality !== 'auto') return;
+    if (this.quality !== 'auto' || !this.running) { this.fpsLow = 0; this.fpsHigh = 0; return; }
     if (this.fps < 50) { this.fpsLow += dt; this.fpsHigh = 0; }
     else if (this.fps > 58) { this.fpsHigh += dt; this.fpsLow = 0; }
     else { this.fpsLow = 0; this.fpsHigh = 0; }
-    if (this.fpsLow > 3 && this.qualityStep < QUALITY_STEPS.length - 1) { this.applyQualityStep(this.qualityStep + 1); this.fpsLow = 0; }
-    if (this.fpsHigh > 10 && this.qualityStep > 0) { this.applyQualityStep(this.qualityStep - 1); this.fpsHigh = 0; }
+    if (this.fpsLow > 3 && this.qualityStep < QUALITY_STEPS.length - 1) { this.stepQuality(this.qualityStep + 1); this.fpsLow = 0; }
+    if (this.fpsHigh > 10 && this.qualityStep > 0) { this.stepQuality(this.qualityStep - 1); this.fpsHigh = 0; }
+  }
+
+  private stepQuality(step: number): void {
+    this.applyQualityStep(step);
+    localStorage.setItem(QUALITY_KEY, String(step));
   }
 
   onResize(): void {
