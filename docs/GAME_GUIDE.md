@@ -658,6 +658,8 @@ npm run deploy         # typecheck, tests, generate bindings, publish module, bu
   with a private key in their browser (`scripts/move-data.mjs`, `registerTransfer`).
 - Schema changes must migrate in place: `profile` and `season_board` are permanent, so never pass
   `--delete-data` to production. Add new tables, or add columns at the end of a table with `.default()`.
+- Android: `android/` is the Google Play app, a Trusted Web Activity that opens the site in Chrome,
+  so web deploys update it too. `android/README.md` has the build and release steps.
 
 ---
 
