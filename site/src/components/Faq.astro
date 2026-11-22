@@ -2,40 +2,26 @@
 import { FAQ } from '../data/faq';
 ---
 
-<section id="faq" class="section faq" aria-labelledby="faq-title">
-  <div class="wrap narrow">
-    <div class="section-head center" data-reveal>
-      <p class="kicker">FAQ</p>
-      <h2 id="faq-title" class="h2">Questions, <em>answered.</em></h2>
-    </div>
-    <div class="list" data-reveal>
-      {FAQ.map((item, i) => (
-        <details open={i === 0}>
-          <summary><h3>{item.q}</h3><span class="plus" aria-hidden="true"></span></summary>
-          <p>{item.a}</p>
-        </details>
-      ))}
-    </div>
-    <p class="more" data-reveal>
-      More detail in the <a href="/privacy/">privacy policy</a> and <a href="/data-safety/">data safety</a> pages.
-    </p>
-  </div>
-</section>
+<div class="faq" data-reveal>
+  {FAQ.map((item) => (
+    <details>
+      <summary><h2>{item.q}</h2><span class="plus" aria-hidden="true"></span></summary>
+      <p>{item.a}</p>
+    </details>
+  ))}
+</div>
 
 <style>
-  .faq { background: var(--bg1); }
-  .narrow { max-width: 860px; }
-  .list { display: grid; gap: 10px; }
-  details { border-radius: 14px; border: 1px solid var(--line); background: rgba(14, 20, 44, 0.55); transition: border-color 0.2s, background 0.2s; }
-  details[open] { border-color: rgba(34, 211, 238, 0.4); background: rgba(14, 20, 44, 0.85); }
-  summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 22px; cursor: pointer; list-style: none; }
+  .faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+  details { border-radius: 12px; border: 1px solid var(--line); background: rgba(14, 20, 44, 0.6); transition: border-color 0.2s; }
+  details[open] { border-color: rgba(34, 211, 238, 0.45); }
+  summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; cursor: pointer; list-style: none; }
   summary::-webkit-details-marker { display: none; }
-  h3 { font: 600 18px/1.35 var(--ui); }
-  .plus { position: relative; flex: none; width: 22px; height: 22px; }
-  .plus::before, .plus::after { content: ''; position: absolute; left: 3px; right: 3px; top: 10px; height: 2px; border-radius: 2px; background: var(--cyan); transition: transform 0.25s; }
+  h2 { font: 600 16px/1.35 var(--ui); }
+  .plus { position: relative; flex: none; width: 16px; height: 16px; }
+  .plus::before, .plus::after { content: ''; position: absolute; left: 2px; right: 2px; top: 7px; height: 2px; border-radius: 2px; background: var(--cyan); transition: transform 0.25s; }
   .plus::after { transform: rotate(90deg); }
   details[open] .plus::after { transform: rotate(0deg); }
-  details p { padding: 0 22px 22px; color: var(--soft); }
-  .more { margin-top: 26px; text-align: center; color: var(--muted); }
-  .more a { color: var(--cyan); }
+  details p { padding: 0 16px 16px; font-size: 15px; color: var(--soft); }
+  @media (max-width: 760px) { .faq { grid-template-columns: 1fr; } }
 </style>

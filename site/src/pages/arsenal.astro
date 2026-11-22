@@ -1,0 +1,54 @@
+---
+import { Image } from 'astro:assets';
+import Base from '../layouts/Base.astro';
+import PageHead from '../components/PageHead.astro';
+import Arsenal from '../components/Arsenal.astro';
+import CtaPanel from '../components/CtaPanel.astro';
+import pk0 from '../assets/game/pk0.png';
+import pk1 from '../assets/game/pk1.png';
+import pk2 from '../assets/game/pk2.png';
+import pk3 from '../assets/game/pk3.png';
+import pk4 from '../assets/game/pk4.png';
+
+const pickups = [
+  { img: pk0, name: 'Health', text: '+50 health, up to your maximum. Moves to a new spot every time it comes back.' },
+  { img: pk3, name: 'Shield', text: '+50 shield that takes damage before your health. Survives a sniper hit. Back after 30 s.' },
+  { img: pk1, name: 'Ammo', text: 'Refills your reserve. Always in the same place, so you know where to resupply.' },
+  { img: pk2, name: 'Grenade', text: 'One more grenade, up to three. Fixed spot, back 20 seconds after it is taken.' },
+  { img: pk4, name: 'Airdrop', text: 'Parachutes in every minute and lands 4 s after the warning. Holds the railgun.' },
+];
+---
+
+<Base title="Arsenal · THRUSTLINE" description="Every weapon in THRUSTLINE with real stats: pistol, AR, SMG, shotgun, sniper, railgun, knife, frag, impact and EMP grenades, plus health, shields and airdrops.">
+  <PageHead kicker="Arsenal" title="Same kit" accent="for everyone." lead="No unlocks, no upgrades, no pay-to-win. Skill and position decide every fight." />
+  <Arsenal />
+  <section class="section" aria-labelledby="pickups-title">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <p class="kicker">Pickups</p>
+        <h2 id="pickups-title" class="h2">Grab it <em>before they do.</em></h2>
+      </div>
+      <div class="pickups">
+        {pickups.map((p, i) => (
+          <article class="panel" data-reveal={String((i % 4) + 1)}>
+            <Image src={p.img} alt="" width={72} height={72} />
+            <h3>{p.name}</h3>
+            <p>{p.text}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+  <CtaPanel />
+</Base>
+
+<style>
+  .pickups { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .pickups article { padding: 22px; }
+  .pickups :global(img) { width: 64px; height: 64px; margin: -6px 0 0 -6px; }
+  .pickups h3 { margin-top: 10px; font: 400 21px/1.1 var(--display); }
+  .pickups p { margin-top: 8px; color: var(--soft); font-size: 15px; }
+  @media (max-width: 1080px) { .pickups { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 680px) { .pickups { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 420px) { .pickups { grid-template-columns: 1fr; } }
+</style>

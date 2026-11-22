@@ -69,6 +69,12 @@ const imageUrl = new URL(image, SITE_URL).href;
     </main>
     <Footer />
     <script>
+      import Lenis from 'lenis';
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        const lenis = new Lenis({ lerp: 0.11, anchors: { offset: -80 } });
+        const raf = (t: number) => { lenis.raf(t); requestAnimationFrame(raf); };
+        requestAnimationFrame(raf);
+      }
       const items = document.querySelectorAll<HTMLElement>('[data-reveal]');
       const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
       if (reduce || !('IntersectionObserver' in window)) {

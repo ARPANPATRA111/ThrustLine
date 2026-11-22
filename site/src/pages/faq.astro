@@ -1,0 +1,29 @@
+---
+import Base from '../layouts/Base.astro';
+import PageHead from '../components/PageHead.astro';
+import Faq from '../components/Faq.astro';
+import { FAQ } from '../data/faq';
+import { ISSUES_URL } from '../config';
+
+const jsonLd = [{
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: FAQ.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+}];
+---
+
+<Base title="FAQ · THRUSTLINE" description="Answers about THRUSTLINE: price, accounts, playing with friends, devices, low-end phones, the Android app, data and open source." jsonLd={jsonLd}>
+  <PageHead kicker="FAQ" title="Quick" accent="answers." lead="Everything players ask most, in one place." />
+  <section class="section tight">
+    <div class="wrap">
+      <Faq />
+      <p class="more" data-reveal>Something else? <a href={ISSUES_URL}>Open an issue on GitHub</a>, or read the <a href="/privacy/">privacy policy</a> and <a href="/data-safety/">data safety</a> pages.</p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .tight { padding-top: 16px; }
+  .more { margin-top: 24px; color: var(--muted); }
+  .more a { color: var(--cyan); }
+</style>

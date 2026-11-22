@@ -3,12 +3,14 @@ import Logo from './Logo.astro';
 import { GAME_URL } from '../config';
 
 const links = [
-  { href: '/#features', label: 'Features' },
-  { href: '/#modes', label: 'Modes' },
-  { href: '/#maps', label: 'Maps' },
-  { href: '/#arsenal', label: 'Arsenal' },
-  { href: '/#faq', label: 'FAQ' },
+  { href: '/gameplay/', label: 'Gameplay' },
+  { href: '/modes/', label: 'Modes & Maps' },
+  { href: '/arsenal/', label: 'Arsenal' },
+  { href: '/how-to-play/', label: 'How to play' },
+  { href: '/download/', label: 'Download' },
+  { href: '/faq/', label: 'FAQ' },
 ];
+const path = Astro.url.pathname;
 ---
 
 <header class="top">
@@ -18,7 +20,7 @@ const links = [
       <span class="word">THRUST<span>LINE</span></span>
     </a>
     <nav class="links" aria-label="Main">
-      {links.map((l) => <a href={l.href}>{l.label}</a>)}
+      {links.map((l) => <a href={l.href} aria-current={path === l.href ? 'page' : undefined}>{l.label}</a>)}
     </nav>
     <a class="btn primary play" href={GAME_URL} rel="noopener">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor" /></svg>
@@ -29,7 +31,7 @@ const links = [
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" /></svg>
       </summary>
       <nav class="sheet" aria-label="Mobile">
-        {links.map((l) => <a href={l.href}>{l.label}</a>)}
+        {links.map((l) => <a href={l.href} aria-current={path === l.href ? 'page' : undefined}>{l.label}</a>)}
         <a class="btn primary" href={GAME_URL} rel="noopener">Play now</a>
       </nav>
     </details>
@@ -51,11 +53,12 @@ const links = [
   .word span { background: var(--brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .links { display: flex; gap: 6px; margin-left: auto; }
   .links a {
-    padding: 8px 14px; border-radius: 10px; text-decoration: none;
+    padding: 9px 12px; border-radius: 10px; text-decoration: none;
     font: 600 15px/1 var(--ui); letter-spacing: 0.06em; color: var(--soft);
     transition: color 0.15s, background 0.15s;
   }
-  .links a:hover { color: var(--ink); background: rgba(255, 255, 255, 0.05); }
+  .links a:hover, .links a[aria-current] { color: var(--ink); background: rgba(255, 255, 255, 0.06); }
+  .links a[aria-current] { box-shadow: inset 0 -2px 0 var(--cyan); }
   .play { --h: 42px; padding: 0 18px; font-size: 14px; white-space: nowrap; }
   .menu { display: none; position: relative; }
   .menu summary {
@@ -70,10 +73,10 @@ const links = [
     background: rgba(10, 15, 34, 0.97); box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.7);
   }
   .sheet a:not(.btn) { padding: 12px 14px; border-radius: 10px; text-decoration: none; font-weight: 600; color: var(--soft); }
-  .sheet a:not(.btn):hover { background: rgba(255, 255, 255, 0.05); color: var(--ink); }
+  .sheet a:not(.btn):hover, .sheet a[aria-current] { background: rgba(255, 255, 255, 0.06); color: var(--ink); }
   .sheet .btn { margin-top: 6px; }
 
-  @media (max-width: 900px) {
+  @media (max-width: 1080px) {
     .links { display: none; }
     .play { margin-left: auto; }
     .menu { display: block; }

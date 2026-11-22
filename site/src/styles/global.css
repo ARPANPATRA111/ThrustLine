@@ -27,16 +27,25 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; scroll-padding-top: 84px; -webkit-text-size-adjust: 100%; }
+html { scroll-padding-top: 84px; -webkit-text-size-adjust: 100%; }
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
 
 body {
   margin: 0;
   min-height: 100vh;
   background: var(--bg1);
   color: var(--ink);
+  isolation: isolate;
   font: 400 17px/1.6 var(--ui);
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image: linear-gradient(rgba(130, 150, 230, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(130, 150, 230, 0.04) 1px, transparent 1px);
+  background-size: 56px 56px;
 }
 
 img, video, svg { display: block; max-width: 100%; }
@@ -64,7 +73,13 @@ ul, ol { margin: 0; padding: 0; }
 
 /* ---------- Sections ---------- */
 .section { position: relative; padding: clamp(64px, 9vw, 112px) 0; }
-.section-head { max-width: 720px; margin-bottom: clamp(36px, 5vw, 56px); }
+.section-head { max-width: 720px; margin-bottom: clamp(32px, 5vw, 52px); }
+.page-head { padding: clamp(118px, 16vw, 168px) 0 clamp(8px, 2vw, 24px); }
+.page-head h1 { font: 400 clamp(40px, 7vw, 80px)/1 var(--display); letter-spacing: 0.01em; text-wrap: balance; }
+.page-head h1 em { font-style: normal; background: var(--brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.page-head .lead { max-width: 640px; }
+.panel { border-radius: var(--radius); border: 1px solid var(--line); background: rgba(14, 20, 44, 0.6); }
+@media (max-width: 620px) { .btn.lg { --h: 54px; width: 100%; } }
 .section-head.center { margin-inline: auto; text-align: center; }
 .kicker {
   display: inline-flex; align-items: center; gap: 10px; margin-bottom: 16px;
@@ -114,7 +129,7 @@ ul, ol { margin: 0; padding: 0; }
 }
 
 /* ---------- Scroll reveal ---------- */
-.js [data-reveal] { opacity: 0; transform: translateY(26px); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.js [data-reveal] { opacity: 0; transform: translateY(18px); transition: opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1), transform 0.9s cubic-bezier(0.16, 1, 0.3, 1); }
 .js [data-reveal].in { opacity: 1; transform: none; }
 .js [data-reveal='2'] { transition-delay: 0.08s; }
 .js [data-reveal='3'] { transition-delay: 0.16s; }

@@ -1,0 +1,100 @@
+---
+import Base from '../layouts/Base.astro';
+import PageHead from '../components/PageHead.astro';
+import CtaPanel from '../components/CtaPanel.astro';
+
+const steps = [
+  ['Open the game', 'Tap Play and then Tap to start. No download, no account.'],
+  ['Pick a callsign', 'Type a name or take a random one. Your level is saved on this device.'],
+  ['Quick Play or Create room', 'Join a live match at once, or make a room and share the invite link.'],
+];
+const controls = [
+  { title: 'Keyboard and mouse', rows: [['Move', 'A / D'], ['Jetpack', 'W or Space'], ['Drop through', 'S'], ['Aim and fire', 'Mouse, left click or E'], ['Knife', 'Right click or R'], ['Grenade', 'G'], ['Swap / Reload', 'F / T'], ['Emote', 'Q, or 1 to 4'], ['Scoreboard', 'Hold Tab']] },
+  { title: 'Touch', rows: [['Move', 'Left stick'], ['Jetpack', 'Push the left stick up'], ['Hover', 'A gentle push up'], ['Drop through', 'Pull the left stick down'], ['Aim', 'Right stick'], ['Fire', 'Right stick past halfway'], ['Knife, grenade, reload', 'Buttons by the right stick'], ['Scoreboard', 'Tap the mini leaderboard']] },
+  { title: 'Gamepad', rows: [['Move', 'Left stick'], ['Aim', 'Right stick'], ['Fire', 'RT'], ['Jetpack', 'A or LB'], ['Grenade', 'RB'], ['Knife', 'LT'], ['Reload / Swap', 'X / Y'], ['Emotes', 'B']] },
+];
+const scoring = [
+  ['Kill', '+100'], ['Kill a bounty (3-kill streak)', '+50 extra'], ['Hold the hill', '+10 a second'],
+  ['Capture the enemy flag', '+300'], ['Take the flag / return your own', '+25 / +50'], ['Kill the flag carrier', '+50 extra'],
+  ['Die to acid or your own grenade', '−50'], ['Kill a teammate', '−50'],
+];
+const tips = [
+  'Tap the jetpack for short hops; it refuels in about a second on the ground.',
+  'Shotgun recoil and grenade blasts launch you. Use them to cross gaps fast.',
+  'The minimap shows enemies only for a moment after they fire. Stay quiet to stay hidden.',
+  'Health and shields move after every pickup. Check the minimap to find them.',
+  'In the last 30 seconds the acid rises. Get high before it reaches you.',
+  'A gold glow means a bounty: that player is worth +50 to whoever stops them.',
+];
+---
+
+<Base title="How to Play · THRUSTLINE" description="How to play THRUSTLINE: quick start, keyboard, touch and gamepad controls, scoring and tips for the jetpack, pickups and the rising acid.">
+  <PageHead kicker="How to play" title="Ready in" accent="ten seconds." lead="Three steps to your first match, then everything you need to win it." />
+
+  <section class="section tight">
+    <div class="wrap steps">
+      {steps.map(([t, d], i) => <article class="panel" data-reveal={String(i + 1)}><span class="n">{i + 1}</span><h2>{t}</h2><p>{d}</p></article>)}
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="controls-title">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <p class="kicker">Controls</p>
+        <h2 id="controls-title" class="h2">Play it <em>your way.</em></h2>
+        <p class="lead">Every key can be remapped in Settings, and touch buttons appear only when your mode uses them.</p>
+      </div>
+      <div class="controls">
+        {controls.map((c, i) => (
+          <article class="panel" data-reveal={String(i + 1)}>
+            <h3>{c.title}</h3>
+            <dl>{c.rows.map(([a, k]) => <div><dt>{a}</dt><dd>{k}</dd></div>)}</dl>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="score-title">
+    <div class="wrap two">
+      <div data-reveal>
+        <p class="kicker">Scoring</p>
+        <h2 id="score-title" class="h2">Most points <em>wins.</em></h2>
+        <p class="lead">The highest score when the timer runs out takes the round. Ties go to kills, then fewer deaths.</p>
+        <dl class="score panel">{scoring.map(([e, v]) => <div><dt>{e}</dt><dd class:list={{ neg: v.startsWith('−') }}>{v}</dd></div>)}</dl>
+      </div>
+      <div data-reveal="2">
+        <p class="kicker">Tips</p>
+        <h2 class="h2">Fly <em>smarter.</em></h2>
+        <ul class="tips">{tips.map((t) => <li>{t}</li>)}</ul>
+      </div>
+    </div>
+  </section>
+
+  <CtaPanel />
+</Base>
+
+<style>
+  .tight { padding-top: 16px; }
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .steps article { padding: 24px; }
+  .n { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--brand); color: #041022; font: 400 18px/1 var(--display); }
+  .steps h2 { margin-top: 16px; font: 400 22px/1.15 var(--display); }
+  .steps p { margin-top: 8px; color: var(--soft); font-size: 15px; }
+  .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .controls article { padding: 24px; }
+  .controls h3 { font: 400 22px/1.1 var(--display); color: var(--cyan); margin-bottom: 14px; }
+  dl { margin: 0; display: grid; }
+  dl div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  dl div:last-child { border-bottom: 0; }
+  dt { color: var(--soft); font-size: 15px; }
+  dd { margin: 0; text-align: right; font: 600 15px/1.35 var(--ui); color: var(--ink); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
+  .score { margin-top: 28px; padding: 6px 22px; }
+  .score dd { color: var(--acid); font-family: var(--display); font-weight: 400; }
+  .score dd.neg { color: var(--red); }
+  .tips { list-style: none; display: grid; gap: 10px; margin-top: 28px; }
+  .tips li { position: relative; padding: 14px 16px 14px 42px; border-radius: 12px; border: 1px solid var(--line); background: rgba(14, 20, 44, 0.6); color: var(--soft); font-size: 15px; }
+  .tips li::before { content: ''; position: absolute; left: 16px; top: 19px; width: 12px; height: 12px; border-radius: 3px; background: var(--brand); }
+  @media (max-width: 980px) { .controls, .steps, .two { grid-template-columns: 1fr; } }
+</style>

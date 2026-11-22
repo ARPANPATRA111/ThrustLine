@@ -1,20 +1,6 @@
 ---
-import { Image, Picture } from 'astro:assets';
 import PlayStoreButton from './PlayStoreButton.astro';
 import { GAME_URL } from '../config';
-import hero from '../assets/shots/hero.webp';
-import bhai from '../assets/game/sticker-0.png';
-import dhamaka from '../assets/game/sticker-5.png';
-
-let seed = 7;
-const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-const embers = Array.from({ length: 22 }, () => ({
-  left: `${(rand() * 100).toFixed(1)}%`,
-  size: `${(2 + rand() * 4).toFixed(1)}px`,
-  delay: `${(-rand() * 14).toFixed(1)}s`,
-  duration: `${(9 + rand() * 9).toFixed(1)}s`,
-  drift: `${(rand() * 60 - 30).toFixed(0)}px`,
-}));
 
 const facts = [
   { n: '8', label: 'players a match' },
@@ -25,36 +11,20 @@ const facts = [
 ---
 
 <section class="hero" aria-labelledby="hero-title">
-  <Picture
-    src={hero}
-    widths={[800, 1280, 1920, 2560]}
-    sizes="100vw"
-    formats={['avif']}
-    fallbackFormat="webp"
-    alt="Three jetpack soldiers trading fire above an acid pool on the map HELIOS-9"
-    class="bg"
-    loading="eager"
-    fetchpriority="high"
-  />
+  <video class="bg" muted loop playsinline preload="metadata" poster="/media/gameplay.webp" aria-hidden="true">
+    <source src="/media/gameplay.mp4" type="video/mp4" />
+  </video>
   <div class="shade" aria-hidden="true"></div>
-  <div class="grid-lines" aria-hidden="true"></div>
-  <div class="embers" aria-hidden="true">
-    {embers.map((e) => <i style={`--l:${e.left};--s:${e.size};--d:${e.delay};--t:${e.duration};--x:${e.drift}`}></i>)}
-  </div>
-  <div class="floaters" aria-hidden="true">
-    <Image src={bhai} alt="" width={150} height={150} class="sticker s1" loading="eager" />
-    <Image src={dhamaka} alt="" width={118} height={118} class="sticker s2" loading="eager" />
-  </div>
 
   <div class="wrap inner">
-    <p class="eyebrow"><span class="live"></span>Free to play · Browser and Android</p>
+    <p class="label">Free multiplayer jetpack shooter</p>
     <h1 id="hero-title">
-      <span class="word"><span class="w1">THRUST</span><span class="w2">LINE</span></span>
+      <span class="word">THRUST<span class="w2">LINE</span></span>
       <span class="tag">Jetpack battles over an acid sea</span>
     </h1>
     <p class="lede">
-      A fast side-view shooter for up to 8 players. Fly, fight and capture the flag across five maps,
-      right in your browser or on Android. No sign-up, no ads, no waiting.
+      Up to 8 players fly, fight and capture the flag across five rigs. Play right now in your browser,
+      or on Android. No sign-up, no ads.
     </p>
     <div class="ctas">
       <a class="btn primary lg" href={GAME_URL}>
@@ -67,112 +37,59 @@ const facts = [
       {facts.map((f) => <li><strong>{f.n}</strong><span>{f.label}</span></li>)}
     </ul>
   </div>
-  <a class="cue" href="#highlights" aria-label="Scroll to highlights"><span></span></a>
+  <p class="live" aria-hidden="true"><span></span>Live match footage · HELIOS-9</p>
 </section>
+
+<script>
+  const video = document.querySelector<HTMLVideoElement>('.hero video');
+  const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+  if (video && !matchMedia('(prefers-reduced-motion: reduce)').matches && !conn?.saveData) {
+    void video.play().catch(() => {});
+  }
+</script>
 
 <style>
   .hero {
     position: relative; isolation: isolate; overflow: hidden;
-    min-height: max(680px, 100svh); display: flex; align-items: center;
-    padding: 120px 0 96px;
+    min-height: 100svh; display: flex; align-items: center; padding: 110px 0 90px;
   }
-  .hero :global(.bg) {
-    position: absolute; inset: 0; z-index: -3; width: 100%; height: 100%;
-    object-fit: cover; object-position: 62% 50%;
-    animation: drift 26s ease-in-out infinite alternate;
-  }
+  .bg { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
   .shade {
-    position: absolute; inset: 0; z-index: -2;
+    position: absolute; inset: 0; z-index: -1;
     background:
-      radial-gradient(60% 70% at 12% 30%, rgba(34, 211, 238, 0.18), transparent 70%),
-      linear-gradient(90deg, rgba(5, 8, 15, 0.97) 0%, rgba(5, 8, 15, 0.9) 42%, rgba(5, 8, 15, 0.55) 66%, rgba(5, 8, 15, 0.3) 100%),
-      linear-gradient(0deg, var(--bg1) 0%, transparent 28%),
-      linear-gradient(180deg, rgba(5, 8, 15, 0.7) 0%, transparent 22%);
+      linear-gradient(90deg, rgba(7, 11, 24, 0.95) 0%, rgba(7, 11, 24, 0.82) 38%, rgba(7, 11, 24, 0.35) 70%, rgba(7, 11, 24, 0.2) 100%),
+      linear-gradient(0deg, var(--bg1) 0%, rgba(7, 11, 24, 0) 30%),
+      linear-gradient(180deg, rgba(7, 11, 24, 0.75) 0%, rgba(7, 11, 24, 0) 20%);
   }
-  .grid-lines {
-    position: absolute; inset: 0; z-index: -1; opacity: 0.35;
-    background-image: linear-gradient(rgba(130, 150, 230, 0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(130, 150, 230, 0.07) 1px, transparent 1px);
-    background-size: 64px 64px;
-    mask-image: linear-gradient(90deg, #000 0%, transparent 55%);
-    -webkit-mask-image: linear-gradient(90deg, #000 0%, transparent 55%);
+  .label {
+    font: 700 13px/1 var(--ui); letter-spacing: 0.24em; text-transform: uppercase; color: var(--cyan);
+    animation: up 1s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
-  .embers { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
-  .embers i {
-    position: absolute; bottom: -10px; left: var(--l); width: var(--s); height: var(--s); border-radius: 50%;
-    background: #ff6b8b; box-shadow: 0 0 10px 2px rgba(255, 77, 109, 0.7);
-    animation: rise var(--t) linear var(--d) infinite;
+  h1 { display: grid; gap: 14px; margin-top: 22px; }
+  .word { font: 400 clamp(46px, 11vw, 140px)/0.92 var(--display); letter-spacing: 0.01em; animation: up 1s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both; }
+  .w2 { background: var(--brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .tag { font: 700 clamp(13px, 1.6vw, 18px)/1.3 var(--ui); letter-spacing: 0.3em; text-transform: uppercase; color: var(--soft); animation: up 1s cubic-bezier(0.16, 1, 0.3, 1) 0.14s both; }
+  .lede { max-width: 540px; margin-top: 24px; font-size: clamp(16px, 1.6vw, 19px); color: var(--soft); animation: up 1s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; animation: up 1s cubic-bezier(0.16, 1, 0.3, 1) 0.26s both; }
+  .facts { list-style: none; display: flex; flex-wrap: wrap; gap: 14px 32px; margin-top: 44px; animation: up 1s cubic-bezier(0.16, 1, 0.3, 1) 0.32s both; }
+  .facts li { display: grid; gap: 4px; padding-left: 14px; border-left: 2px solid rgba(34, 211, 238, 0.5); }
+  .facts strong { font: 400 30px/1 var(--display); }
+  .facts span { font: 600 11px/1.2 var(--ui); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  .live {
+    position: absolute; right: var(--gutter); bottom: 28px; display: flex; align-items: center; gap: 8px;
+    font: 600 12px/1 var(--ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--soft); opacity: 0.8;
   }
-  .embers i:nth-child(3n) { background: #7cff4f; box-shadow: 0 0 10px 2px rgba(124, 255, 79, 0.6); }
-  .embers i:nth-child(4n) { background: #67e8f9; box-shadow: 0 0 10px 2px rgba(34, 211, 238, 0.6); }
+  .live span { width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: pulse 2s infinite; }
+  @keyframes up { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 77, 109, 0.6); } 70%, 100% { box-shadow: 0 0 0 8px rgba(255, 77, 109, 0); } }
 
-  .floaters { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
-  .floaters :global(.sticker) { position: absolute; filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.55)); }
-  .floaters :global(.s1) { right: 7%; top: 21%; width: clamp(96px, 10vw, 150px); height: auto; animation: bob 6s ease-in-out infinite; }
-  .floaters :global(.s2) { right: 22%; bottom: 17%; width: clamp(80px, 8vw, 118px); height: auto; animation: bob 7s ease-in-out -2.5s infinite; }
-
-  .inner { position: relative; }
-  .eyebrow {
-    display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px 8px 12px; border-radius: 999px;
-    border: 1px solid rgba(34, 211, 238, 0.35); background: rgba(8, 14, 30, 0.6);
-    font: 700 13px/1 var(--ui); letter-spacing: 0.16em; text-transform: uppercase; color: #bff6ff;
-    animation: up 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-  }
-  .live { width: 8px; height: 8px; border-radius: 50%; background: var(--acid); box-shadow: 0 0 0 0 rgba(124, 255, 79, 0.7); animation: pulse 2s infinite; }
-  h1 { display: grid; gap: 14px; margin-top: 26px; }
-  .word {
-    font: 400 clamp(44px, 12vw, 148px)/0.9 var(--display); letter-spacing: 0.015em;
-    animation: up 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.08s both;
-  }
-  .w1 { color: #f3f6ff; text-shadow: 0 0 40px rgba(34, 211, 238, 0.35); }
-  .w2 {
-    background: var(--brand); background-size: 200% 100%;
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-    filter: drop-shadow(0 0 26px rgba(59, 130, 246, 0.45));
-    animation: sheen 7s ease-in-out infinite alternate;
-  }
-  .tag {
-    font: 700 clamp(15px, 1.7vw, 20px)/1.2 var(--ui); letter-spacing: 0.32em; text-transform: uppercase; color: var(--cyan);
-    animation: up 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.16s both;
-  }
-  .lede {
-    max-width: 560px; margin-top: 26px; font-size: clamp(17px, 1.7vw, 20px); color: var(--soft);
-    animation: up 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.24s both;
-  }
-  .ctas { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 34px; animation: up 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.32s both; }
-  .facts {
-    list-style: none; display: flex; flex-wrap: wrap; gap: 12px 34px; margin-top: 46px;
-    animation: up 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.4s both;
-  }
-  .facts li { display: grid; gap: 4px; padding-left: 16px; border-left: 2px solid rgba(34, 211, 238, 0.45); }
-  .facts strong { font: 400 34px/1 var(--display); }
-  .facts span { font: 600 12px/1.2 var(--ui); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
-
-  .cue { position: absolute; left: 50%; bottom: 26px; translate: -50% 0; width: 26px; height: 42px; border: 2px solid rgba(195, 203, 239, 0.45); border-radius: 14px; }
-  .cue span { position: absolute; left: 50%; top: 8px; width: 4px; height: 8px; margin-left: -2px; border-radius: 2px; background: var(--cyan); animation: wheel 1.8s ease-in-out infinite; }
-
-  @keyframes up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
-  @keyframes drift { from { transform: scale(1.06) translateX(0); } to { transform: scale(1.12) translateX(-1.5%); } }
-  @keyframes sheen { from { background-position: 0% 0; } to { background-position: 100% 0; } }
-  @keyframes rise { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(var(--x), -105vh); opacity: 0; } }
-  @keyframes bob { 0%, 100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-16px) rotate(4deg); } }
-  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(124, 255, 79, 0.65); } 70% { box-shadow: 0 0 0 10px rgba(124, 255, 79, 0); } 100% { box-shadow: 0 0 0 0 rgba(124, 255, 79, 0); } }
-  @keyframes wheel { 0% { opacity: 0; transform: translateY(0); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(12px); } }
-
-  @media (max-width: 900px) {
-    .shade {
-      background:
-        linear-gradient(180deg, rgba(5, 8, 15, 0.6) 0%, rgba(5, 8, 15, 0.82) 45%, var(--bg1) 100%);
-    }
-    .floaters :global(.s2) { display: none; }
-    .floaters :global(.s1) { top: auto; bottom: 16%; right: 6%; opacity: 0.9; }
-  }
-  @media (max-width: 560px) {
-    .hero { padding-top: 104px; }
-    .eyebrow { font-size: 11px; letter-spacing: 0.1em; }
-    .tag { font-size: 13px; letter-spacing: 0.16em; }
-    .floaters { display: none; }
-    .ctas :global(.btn) { width: 100%; }
-    .facts { gap: 14px 22px; }
-    .facts strong { font-size: 28px; }
+  @media (max-width: 760px) {
+    .hero { align-items: flex-end; padding: 96px 0 56px; }
+    .bg { object-position: 60% 50%; }
+    .shade { background: linear-gradient(180deg, rgba(7, 11, 24, 0.5) 0%, rgba(7, 11, 24, 0.55) 28%, rgba(7, 11, 24, 0.92) 60%, var(--bg1) 100%); }
+    .tag { letter-spacing: 0.16em; }
+    .facts { gap: 12px 22px; margin-top: 30px; }
+    .facts strong { font-size: 24px; }
+    .live { left: var(--gutter); right: auto; top: 84px; bottom: auto; }
   }
 </style>

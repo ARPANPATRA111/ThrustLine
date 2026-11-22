@@ -1,0 +1,42 @@
+---
+import Base from '../layouts/Base.astro';
+import PageHead from '../components/PageHead.astro';
+import Features from '../components/Features.astro';
+import Progression from '../components/Progression.astro';
+import CtaPanel from '../components/CtaPanel.astro';
+
+const checks = [
+  ['Movement', 'Every position is checked against the map and the physics. Teleports and wall clips snap back.'],
+  ['Hits', 'Each shot is checked for range, cover and where the target really was, adjusted for lag.'],
+  ['Weapons', 'Only your loadout can fire, at no more than its real fire rate.'],
+  ['Progress', 'XP and season points are awarded by the server at round end, never by your browser.'],
+];
+---
+
+<Base title="Gameplay · THRUSTLINE" description="How THRUSTLINE plays: an analog jetpack, blast-jumping, bounties, Frenzy, the rising acid, CPU players, levels and a server that referees every hit.">
+  <PageHead kicker="Gameplay" title="Built around" accent="the jetpack." lead="Speed, height and the acid below. Every mechanic pushes you into the air and into the fight." />
+  <Features />
+  <section class="section" aria-labelledby="fair-title">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <p class="kicker">Fair play</p>
+        <h2 id="fair-title" class="h2">The server is <em>the referee.</em></h2>
+        <p class="lead">Your browser draws the game; the server decides it. Here is what it checks on every update.</p>
+      </div>
+      <div class="checks">
+        {checks.map(([t, d], i) => <article class="panel" data-reveal={String(i + 1)}><h3>{t}</h3><p>{d}</p></article>)}
+      </div>
+    </div>
+  </section>
+  <Progression />
+  <CtaPanel />
+</Base>
+
+<style>
+  .checks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .checks article { padding: 24px; }
+  .checks h3 { font: 400 22px/1.1 var(--display); color: var(--cyan); }
+  .checks p { margin-top: 10px; color: var(--soft); font-size: 15px; }
+  @media (max-width: 980px) { .checks { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .checks { grid-template-columns: 1fr; } }
+</style>
