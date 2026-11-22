@@ -209,7 +209,9 @@ grenade key) is applied to exactly one step. The 0.1 s cap stops a frozen tab fr
   shakes briefly on shots and blasts, clamps to the map, and zooms in on short phone screens
   (view height = screen height × 1.08, between 420 and 680 world px).
 - **Quality governor**: if FPS stays under 50 for 3 s, it lowers resolution, then particles, then
-  parallax layers; it steps back up after 10 s above 58.
+  parallax layers; it steps back up after 10 s above 58. It only judges a running game (menus are
+  capped at 30 fps) and remembers its level for the next visit. A first visit on a device with 4 GB
+  of memory or less starts at 1× resolution.
 
 ---
 
@@ -656,6 +658,8 @@ npm run deploy         # typecheck, tests, generate bindings, publish module, bu
   with a private key in their browser (`scripts/move-data.mjs`, `registerTransfer`).
 - Schema changes must migrate in place: `profile` and `season_board` are permanent, so never pass
   `--delete-data` to production. Add new tables, or add columns at the end of a table with `.default()`.
+- Android: `android/` is the Google Play app, a Trusted Web Activity that opens the site in Chrome,
+  so web deploys update it too. `android/README.md` has the build and release steps.
 
 ---
 

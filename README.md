@@ -1,230 +1,82 @@
 # THRUSTLINE
 
-A side-view jetpack shooter (free-for-all or red vs blue teams) for 1–8 players, playable in the browser on phones and laptops.
-Riggers, jetpack contractors, fight over abandoned sky refineries above an acid sea.
+A side-view jetpack shooter for 1–8 players, free-for-all or red vs blue, in the browser on phones
+and laptops and as an Android app. Riggers, jetpack contractors, fight over abandoned sky
+refineries above an acid sea.
 
-**Play:** https://thrustline-drab.vercel.app · **Database:** SpacetimeDB Maincloud, `thrustline-zhtm`
-
-Open the link and press **Quick Play** to drop into a public match straight away: there is no lobby,
-rounds run back to back, and CPU players fill any empty seats. To play with friends, **Create room**,
-then press **Share** (or **Copy invite**) in the lobby and send the link to your group: anyone who opens
-it lands straight in your room with an automatic callsign (a new one is picked if two people choose the
-same name). No sign-up: your level and season points stay with this browser. If your connection drops,
-your slot and score are held for 30 seconds so you can come back; your soldier leaves the map while you
-are away, so nobody can farm you.
+**Play:** https://thrustline-drab.vercel.app · **Website:** https://thrustline.pages.dev · **Android:** [android/](android/README.md) · **Database:** SpacetimeDB Maincloud, `thrustline-zhtm`
 
 ![Gameplay](docs/screenshots/gameplay.png)
 
+Press **Quick Play** to join a public match at once: CPU players fill empty seats and rounds run
+back to back. To play with friends, **Create room** and send the invite link from the lobby; anyone
+who opens it lands in your room. There is no sign-up. Your level and season points stay with your
+browser, and if your connection drops, your slot and score are held for 30 seconds.
+
 ## How to play
 
-Most score when the timer runs out wins.
+The highest score when the timer runs out wins.
 
 | Event | Score |
 | --- | --- |
 | Kill | +100 |
+| Kill a **bounty** (a player on a 3-kill streak, glowing gold) | +50 extra |
 | Hold the hill (King of the Hill) | +10 a second |
 | Bring the enemy flag home (Capture the Flag) | +300 |
-| Take the enemy flag / return your own | +25 / +50 |
-| Kill the flag carrier | +50 extra |
-| Kill a **bounty** target (a player on a 3-kill streak, glowing gold with a crown) | +50 extra |
-| Die to acid or your own grenade | −50 |
+| Take the enemy flag / return your own / kill the carrier | +25 / +50 / +50 extra |
+| Die to acid or your own grenade, or kill a teammate | −50 |
 
-Leaderboard order: score, then kills, then fewer deaths. HP has no regeneration; you respawn after a
-fixed 5 seconds with 1.5 s of spawn protection (a bubble; it ends early if you attack). Your ping
-and FPS are always shown under the timer; everyone's ping is on the mini leaderboard and scoreboard.
+You respawn 5 seconds after dying, with 1.5 s of spawn protection. Health does not regenerate.
 
 ### Controls
 
-| Action | Keyboard & mouse | Touch (landscape) |
+| Action | Keyboard and mouse | Touch (landscape) |
 | --- | --- | --- |
-| Move | A / D | Left stick (rests bottom-left; slides to wherever your left thumb lands) |
-| Jetpack (tap = hop, hold = fly) | W or Space | Push the left stick up: analog. A gentle push hovers (you can drift sideways at one height), further climbs |
-| Drop through a platform | S | Pull the left stick firmly straight down |
-| Aim | Mouse | Right stick direction |
-| Fire | Left click or E (hold for AR) | Push the right stick past ~55 % (keeps firing while held) |
-| Knife | Right click or R | Knife button |
-| Grenade | G | Grenade button (Arms and Boom) |
-| Swap weapon | F | Swap button |
-| Reload | T | Reload button |
-| Emote | Q | Emote button (beside the leaderboard) |
-| Scoreboard | Hold Tab | Tap the mini leaderboard |
-| Send a favourite sticker | 1 to 4 | Pick from the tray |
-| Menu / detailed stats | Esc / F3 | ≡ button / Settings |
+| Move | A / D | Left stick |
+| Jetpack (tap to hop, hold to fly) | W or Space | Push the left stick up; a gentle push hovers |
+| Drop through a platform | S | Pull the left stick down |
+| Aim and fire | Mouse, left click or E | Right stick, pushed past halfway |
+| Knife · grenade · swap · reload | Right click or R · G · F · T | Buttons around the right stick |
+| Emote · scoreboard · menu | Q · hold Tab · Esc | Emote button · tap the mini leaderboard · ≡ |
 
-Touch buttons sit on an arc around the aim stick and only appear when the mode uses them.
+Every key can be remapped in **Settings**, which also has a colour-blind palette and camera shake
+and particle sliders. Gamepads work too.
 
-Every key can be changed in **Settings**, which also has camera shake and particle sliders and a
-colour-blind palette (Okabe-Ito colours, with orange against blue for teams). Gamepads work too: left
-stick moves, right stick aims, RT fires, A or LB jets, RB throws, LT knifes, X reloads, Y swaps and B
-opens the emotes.
+### Modes and maps
 
-While you wait to respawn, your view stays on the spot where you died, and your movement controls pan
-it around the map. The death screen says what killed you, how much health your killer has left and how
-much damage you dealt to them.
+The host sets up the room in the lobby; everyone sees the settings and the server enforces them.
 
-### Loadout
+- **Loadouts:** Arms (pistol, a primary of your choice, knife, grenades), Blades (knives only),
+  Boom (grenades only) and Snipers.
+- **Objectives:** Deathmatch, King of the Hill or Capture the Flag; free-for-all or teams up to 4v4.
+- **Maps:** RIG-7, HELIOS-9, KILN-3, SKYREACH and CRYO-12, or a different one every round.
+- **House rules:** round length, health, CPU skill, infinite fuel and ammo, pickups, airdrops,
+  acid, Frenzy, sudden death, friendly fire and floating grenades.
 
-Arms and Boom rounds open with an 8 second loadout screen, showing the map and the objective. Pick a
-gun and one grenade type. They stay with you until you die: both are locked for the whole life, and you
-can change them during the 5 second respawn wait. Your last pick is saved for the next room. Blades and
-Snipers have nothing to choose, so they skip the screen.
+Arms and Boom rounds open with an 8 second loadout screen: the gun and grenade you pick stay with
+you until you die. Quick Play rotates the maps and objectives.
 
-### Maps
+### What makes it THRUSTLINE
 
-| Map | Layout |
-| --- | --- |
-| **RIG-7** | The refinery: long catwalks, a low central pit and open air between the decks |
-| **HELIOS-9** | Two shores around a wide acid well, with towers, a centre pillar and islands to fight over |
-| **KILN-3** | A foundry cut into rock: tunnels, shafts and one big furnace hall. Close fights, no room to hide |
-| **SKYREACH** | No ground at all: islands over an acid sea, so every jump is a commitment |
-| **CRYO-12** | Two towers with hatches between their floors, joined by long bridges over a chasm |
-
-Quick Play rotates through the maps and cycles Deathmatch, King of the Hill and Capture the Flag.
-
-### Modes (host chooses in the lobby)
-
-| Mode | Loadout | Pickups |
-| --- | --- | --- |
-| **Arms** (default) | Pistol, one primary (AR, SMG, shotgun or sniper, picked on the respawn screen), knife, 2 frags | Health, ammo, grenade, shield, airdrops |
-| **Blades** (melee only) | Knife only, +15 % run speed | Health, shield |
-| **Boom** (grenades only) | Unlimited frags (0.85 s cooldown, max 3 live), knife backup | Health, shield |
-| **Snipers** | Sniper rifle and knife | Health, ammo, shield, airdrops |
-
-### House rules (host sets them in the lobby)
-
-| Setting | Options |
-| --- | --- |
-| Round length | 2, 3, 5, 8 or 10 minutes (30 s in `?dev=1` rooms) |
-| Health | 50, 100, 150 or 200 HP |
-| CPU skill | Easy, Normal, Hard |
-| Infinite jetpack | Fuel never runs out |
-| Infinite ammo | No reloading; unlimited grenades in Arms |
-| Pickups | Crates on or off |
-| Airdrops | A railgun crate parachutes in every minute (needs Pickups) |
-| Sudden death | The acid rises for the last 30 s (needs Acid hazard) |
-| Acid hazard | The pit burns, or is harmless |
-| Final-minute Frenzy | On or off |
-| Match type | Free-for-all, or Red vs Blue teams (1v1, 2v2 … 4v4; up to 8 players) |
-| Objective | Deathmatch, or King of the Hill |
-| Map | RIG-7, HELIOS-9, or Rotate (a different map every round) |
-| Friendly fire | Teams only, on by default: teammates' hits count (a teamkill costs 50) |
-| Floating grenades | Zero-g: grenades drift where you throw them and slow to a stop |
-
-Everyone in the room sees the settings; only the host can change them. Every toggle starts **on**
-(infinite jetpack, infinite ammo, pickups, airdrops, acid, Frenzy, sudden death, floating grenades), so a fresh room is the
-fastest, most chaotic version; the host turns off whatever the group does not want. The server
-enforces every rule. The host can also **kick** a player (✕ on their row; they can't rejoin that
-room) and move players between teams (⇄). In a team match each player can press **Switch team**.
-
-After a round, everyone sees the results, then the whole room returns to the lobby automatically
-after 12 seconds (the host can press **Play again** or **Lobby now** sooner).
-
-### King of the Hill
-
-A glowing zone appears on the map and on the minimap. One player alone in it (or one team, in a team
-match) scores +10 a second; if two sides are inside, it is contested and nobody scores. The zone moves
-every 40 seconds, and early if the rising acid reaches it. Kills still count, so defending it is a real
-choice. The line under the timer always says who holds it.
-
-### Capture the Flag
-
-Red against blue, from fixed homes: each team always spawns at its own base, beside its flag. Touch the
-enemy flag to carry it, with nothing to press, and reach your own stand to score. Your own flag does
-not have to be home. The first team to 3 captures ends the round; otherwise captures decide it when the
-timer runs out, and team score breaks a tie.
-
-If the carrier dies or disconnects, the flag falls where they were. Touch your own dropped flag to send
-it home, or it walks home by itself after 15 seconds. A flag lost in the acid goes home at once. The
-line under the timer says what your team should be doing, and flags show on the minimap with arrows at
-the screen edge. Sudden death stays out of this objective, because the bases sit low on the map.
-
-### Sudden death
-
-For the last 30 seconds of a round the acid climbs from the floor to about the middle of the map.
-Everything below the surface burns at the usual 30 HP/s, so a round cannot end with everyone hiding on
-the ground floor. Nobody spawns under it.
-
-### Teams
-
-Red vs Blue: soldiers, name tags, the minimap and the kill feed use the team colour, and teammates
-carry a small chevron above their name. The score bar under the timer shows the two team totals;
-the team with the higher total wins.
-
-### Levels and seasons
-
-Every finished round pays XP: 25 for playing, 10 per kill and 50 for winning, up to 300 a round. Levels
-unlock stickers (four are free; the rest open at levels 2 to 5), and the number keys 1 to 4 send your
-favourite stickers without opening the picker. Rounds played with at least one other person in the
-room also earn season points. The **Season** board on the home screen lists the top 20 and restarts
-every month. Test rooms (`?dev=1`) never count.
-
-Your progress lives on an identity saved in this browser. Clearing site data starts you over. A second
-tab plays as a separate guest.
-
-### Radar
-
-The minimap (top left) always shows you and your teammates. An enemy appears on it only for a few
-seconds after they fire, so hiding works until you shoot. When an enemy who is **off-screen** fires,
-an arrow at the screen edge points toward them; enemies already on screen get no arrow.
-
-### Ping
-
-The game server is SpacetimeDB Maincloud, which runs in Virginia, USA. From India the network round
-trip alone is about 230–250 ms, so that is the ping you will see. The netcode is built to stay smooth
-and fair at that latency (see Architecture). A lower ping would need a SpacetimeDB server closer to
-the players. **[deploy/README.md](deploy/README.md)** is the whole move to your own server on any provider, including
-carrying every player's level across (measured ~25–40 ms from India vs ~250 ms to Maincloud).
-
-### Weapons
-
-| Weapon | Damage | Rate | Mag / reserve | Notes |
-| --- | --- | --- | --- | --- |
-| Pistol | 18 | 4/s | 12 / ∞ | Always carried |
-| AR | 11 | 10/s | 30 / 120 | Automatic; spread grows while moving |
-| SMG | 8 | 14/s | 35 / 140 | Latency-friendly: many fast shots and forgiving spread; falls off past 450 px |
-| Shotgun | 10 × 10 | 1.3/s | 7 / 28 | All pellets at point blank kill; falls off past 200 px; recoil throws you back (blast-jumping) |
-| Sniper | 100 | 0.85/s | 4 / 16 | One clean body hit kills; pinpoint while still; camera leads 320 px |
-| Knife | 55 | 2/s | — | Short lunge |
-| Frag | up to 80 | — | 2 per life | 1.5 s fuse, bounces, large blast, knockback |
-| Impact | up to 80 | — | 2 per life | Bursts on the first player, wall or floor it touches; 1.8 s fuse if it hits nothing; smaller blast |
-| EMP | 0 | — | 2 per life | Jetpacks in range go offline for 3 s, jumps still work; 6 s cooldown |
-| Railgun | 150 | 0.9/s | 3 shots | Airdrop only; pierces every body on the line, walls still stop it; infinite ammo does not apply |
-
-No grenade does more than 80, even in Frenzy, so none can one-shot a full-health pilot. They hurt their
-thrower like anyone else, and an EMP catches its thrower too. You carry one type per life.
-
-### Power-ups
-
-| Pickup | Effect |
-| --- | --- |
-| **Shield** | +50 shield. Damage takes the shield first, so a shield survives a one-shot sniper hit. Acid goes straight through. Back after 30 s. |
-| **Airdrop** | First crate 30 s into the round, then one a minute (one at a time). It is announced, shown on the minimap, and marked with an arrow when off-screen. It lands 4 s later and whoever reaches it gets the railgun. |
-
-Health packs and shields appear on a random open spot and move every time they come back, and the
-minimap shows where they turned up. Airdrops land on a random spot with open sky. Ammo and grenade
-crates stay put, so resupply is always somewhere you know.
-
-Solid metal (glowing cyan edges) blocks bullets. The see-through mesh catwalks (yellow top rail) are
-one-way platforms: you can jump up through them and bullets pass through them.
-
-## What makes it THRUSTLINE (customisation)
-
-- **Jetpack fuel:** 100 fuel, ~2.9 s of flight, refills after 0.12 s on the ground (a full tank in ~1.4 s). Tap for a hop, hold to fly.
-- **Blast-jumping:** shotgun recoil (520) and grenade knockback (700) push you; chain them with the jetpack to move fast.
+- **Jetpack:** about 2.9 s of flight, and a full tank again within 1.4 s on the ground.
+- **Blast-jumping:** shotgun recoil and grenade blasts throw you; chain them with the jetpack.
 - **Bounty:** a 3-kill streak makes you glow gold and worth +50 to whoever stops you.
-- **Frenzy:** the last 60 s: damage ×1.5, fuel refills twice as fast, red edge tint, FRENZY banner, faster music. Sudden death takes over from the last 30 s.
-- **Modes and house rules:** four loadouts plus host-set health, fuel, ammo, pickups, acid and Frenzy. Respawn is always 5 s.
-- **Emotes:** press Q (or tap the button beside the leaderboard) and pick one of eight Hinglish stickers. They pop above you and follow you while you move. The picker only opens when you ask for it and stays usable while dead; your sticker then stays at the death spot while you wait to respawn.
-- **Acid hazard:** the pit in the middle burns 30 HP/s while you're in it. You can fly out.
-- **Smart spawns:** never within 200 px of where you died, preferring points far from living enemies.
-- **CPU players:** computer opponents with three difficulty levels and human limits (reaction time,
-  aim error, burst fire, delayed perception). They join as real clients and obey the same server rules.
+- **Frenzy:** in the last minute damage is ×1.5 and fuel refills twice as fast. In the last 30 s
+  the acid rises from the floor.
+- **Pickups:** health, shields, ammo and grenade crates, and a railgun airdrop every minute.
+- **Radar:** an enemy shows on the minimap only for a few seconds after they fire.
+- **CPU players:** three skill levels with human limits. They join as real clients and obey the
+  same server rules.
+- **Levels and seasons:** finished rounds pay XP, levels unlock sticker emotes, and a monthly
+  season board lists the top 20.
 
-Every number lives in [server/src/shared/config.ts](server/src/shared/config.ts) and [server/src/shared/weapons.ts](server/src/shared/weapons.ts).
+Every number lives in [config.ts](server/src/shared/config.ts) and
+[weapons.ts](server/src/shared/weapons.ts). The full rules, the weapon table and the design are in
+the **[game guide](docs/GAME_GUIDE.md)**.
 
 ## Run locally
 
-Requirements: Node 20+, the [SpacetimeDB CLI](https://spacetimedb.com/install) (2.14+).
+Requirements: Node 20+ and the [SpacetimeDB CLI](https://spacetimedb.com/install) (2.14+).
 
 ```bash
 npm install
@@ -234,10 +86,8 @@ npm run gen                          # regenerate client bindings (only after sc
 npm run dev                          # Vite on http://localhost:5173
 ```
 
-Open several tabs: the first tab uses the identity saved in `localStorage`, and each further tab is a
-separate guest player with its own `sessionStorage` identity.
-
-Checks:
+Open several tabs to get several players: each extra tab is a separate guest. Rooms created with
+`?dev=1` allow test teleports, are labelled TEST ROOM and never count for levels or the season.
 
 ```bash
 npm run typecheck                    # strict TypeScript, server + client
@@ -258,20 +108,17 @@ npm run deploy                       # typecheck, tests, generate, publish to Ma
 `npm run deploy` publishes the module to the database named in `client/.env.production` and deploys
 the client from the repo root (see `vercel.json`).
 
-**Never use `--delete-data` on production.** `profile` and `season_board` hold every player's level and
-season points, and that flag erases them. Schema changes must migrate in place: add new tables, or add
-columns to the end of a table with `.default()`. The shape of an object column such as `MatchRules`
-cannot be changed in place, so add a new column instead. Try it on a throwaway local database first.
+**Never use `--delete-data` on production.** `profile` and `season_board` hold every player's level
+and season points. Schema changes must migrate in place: add new tables, or add columns to the end
+of a table with `.default()`. Try a change on a throwaway local database first.
 
-### Moving to your own server
-
-Production stays on Maincloud until the move is made. [deploy/README.md](deploy/README.md) is the whole
-runbook. Login tokens do not carry between servers, so players' levels move with a private key held in
-their browser ([scripts/move-data.mjs](scripts/move-data.mjs)).
+Maincloud runs in Virginia, about 250 ms from India, and the netcode is built to stay fair at that
+latency. [deploy/README.md](deploy/README.md) is the runbook for moving to your own server, closer
+to the players, with every player's level carried across.
 
 ### Offline LAN fallback
 
-No internet? One laptop hosts everything on the same Wi-Fi (or a phone hotspot, laptop as host):
+No internet? One laptop hosts everything on the same Wi-Fi or a phone hotspot:
 
 ```bash
 spacetime start
@@ -281,61 +128,37 @@ VITE_STDB_URI=ws://<laptop-ip>:3000 VITE_STDB_DB=thrustline-dev npx vite build
 npx vite preview --host              # players open http://<laptop-ip>:4173
 ```
 
-That page isn't a secure context, so WebGPU is unavailable and PixiJS uses WebGL.
+That page isn't a secure context, so PixiJS uses WebGL instead of WebGPU.
+
+## Android
+
+[android/](android/) is the Google Play app: a Trusted Web Activity that opens this site full
+screen in Chrome, so every web deploy updates the app as well. The release build is about 225 KB.
+[android/README.md](android/README.md) covers building, releasing and the road to Google Play, and
+[android/STORE_LISTING.md](android/STORE_LISTING.md) has the listing text.
+
+## Website
+
+[site/](site/README.md) is the game's home page at https://thrustline.pages.dev, with the privacy
+policy and data safety pages that Google Play links to. It is a static Astro site on Cloudflare
+Pages, deployed separately with `npm run deploy` inside `site/`.
 
 ## Architecture
 
-Each browser simulates its own soldier with the shared physics at a fixed 60 Hz and sends one `sync`
+Each client simulates its own soldier with the shared physics at a fixed 60 Hz and sends a `sync`
 reducer call every 50 ms (200 ms when idle) with its position and any shots, knife swings or throws.
-The SpacetimeDB module is the referee: it validates movement (no teleports, no walls), validates hit
-claims with tolerances that favour the shooter, and owns everything that decides the match (HP, kills,
-score, ammo, pickups, grenades, spawns, the clock). There is no server tick: respawns, round end,
-grenade fuses and pickup timers are one-shot scheduled reducers. Clients subscribe only to their room;
-other players are interpolated on the sender's own timeline, drawn just far enough in the past
-(adaptively, from measured lag and jitter) that there is always real data to show, and transient effects (shots, hits, kills,
-explosions) arrive through event tables. Grenades follow a deterministic simulation that server and
-clients run on the same stored inputs, so they explode exactly where they are drawn.
+The SpacetimeDB module is the referee: it checks movement against the map and the physics, checks
+every hit claim against cover and the target's lag-compensated history, and owns everything that
+decides the match (HP, kills, score, ammo, pickups, grenades, spawns, the clock). There is no server
+tick: respawns, round end, grenade fuses and pickup timers are one-shot scheduled reducers. Other
+players are interpolated on the sender's own timeline with an adaptive delay, and grenades follow a
+deterministic simulation that server and clients run on the same inputs.
 
-### Fair play (why cheating is limited)
-
-The browser is never trusted. Clients simulate their own soldier, but the module decides every
-outcome that matters:
-
-- **Movement:** every sync is checked against the map, the path travelled (no stepping through walls
-  or floors) and a capped client-clock debt (350 ms). Speed is held to what physics allows right now:
-  run and jet speed, plus a bonus only after a real push such as recoil, a knife lunge or a nearby
-  blast. A rejected position is answered with a correction counter and the client snaps back.
-- **Damage:** the server owns HP, kills, score, ammo and pickups. A client sends hit *claims*, and
-  each claim is checked against the shooter's server-side position, the weapon's range, a tile
-  raycast (cover wins) and the target's lag-compensated history. Fire rate is capped by the weapon
-  definition, and a shotgun claim cannot report more pellets than the target's size allows at that
-  distance.
-- **Actions:** only the equipped weapon from the mode's loadout can fire, and the gun and grenade type
-  can only change while respawning; shots, knives, reloads and grenade throws are rate-limited per player and
-  per weapon. A pellet stops at one body, so a shot cannot claim more targets than it has pellets;
-  only the railgun pierces.
-- **EMP:** with the jetpack offline, the server allows no more lift than a jump can give, and it refills
-  only on real ground, so a client that ignores the EMP is snapped back.
-- **Flags and grenades:** flags are touched by the server-checked position, and only the server moves
-  them. The grenade type comes from the player's row, never from the throw.
-- **Replays:** every sync carries a monotonically increasing sequence number. Replayed, duplicated or
-  late packets are dropped before they can act, and a reconnecting page starts a fresh sequence.
-- **Identity:** room codes must match the alphabet exactly, room creation/joins and pings are
-  rate-limited per identity, and names drop control, zero-width and bidirectional characters so two
-  players cannot appear to share a name.
-- **Progress:** XP and season points are awarded by the server at round end. Rooms that allow test
-  teleports never count, season points need a second person in the room, one round pays at most 300,
-  and locked stickers are refused by the server.
-
-Rooms created with `?dev=1` allow test teleports. They are labelled TEST ROOM for everyone inside and
-never count for levels or the season board.
-
-Two limits are inherent to a client-rendered game and are not fixable with server checks: a modified
-client can draw information it already receives (positions of everyone in its room are public so
-they can be rendered), and it can aim perfectly or ignore its own spread. The server still decides
-whether a claimed hit is legal. Jetpack fuel is also simulated by the client, so a modified client can
-ignore it in rooms that turn Infinite jetpack off; speed and walls are still enforced. For a public deployment, pair this with platform-level rate limiting
-and a way to receive reports; never rely on a client-side anti-cheat.
+The browser is never trusted. The server rejects impossible movement, blocked or out-of-range hits,
+the wrong weapon, fire faster than the weapon allows and replayed packets, and it awards all XP and
+season points itself. A modified client can still draw what it receives and aim perfectly; the
+server decides whether each hit is legal. The full list is in
+[the guide](docs/GAME_GUIDE.md#16-cheating-what-the-server-checks-and-what-it-trusts).
 
 ```text
 server/src/index.ts        tables, reducers, scheduled jobs, event tables (the referee)
@@ -345,11 +168,15 @@ client/src/game/           fixed-step loop, local player (Actor), camera, input,
 client/src/render/         generated atlas, baked map, soldier animation, particles, effects
 client/src/audio/          synthesised sounds and music, mixer
 client/src/ui/             HUD, touch controls, settings
+android/                   Google Play app (Trusted Web Activity)
+site/                      website, privacy policy and data safety page (Astro)
 tests/e2e/                 Playwright multi-client tests
-docs/                      ALGORITHMS.md, LAB_MAPPING.md, screenshots/
+docs/                      GAME_GUIDE.md, ALGORITHMS.md, LAB_MAPPING.md, screenshots/
 ```
 
-Full explanation for presenting and the viva: **[docs/GAME_GUIDE.md](docs/GAME_GUIDE.md)** · More detail: [docs/ALGORITHMS.md](docs/ALGORITHMS.md) · Lab requirements: [docs/LAB_MAPPING.md](docs/LAB_MAPPING.md) · Deviations: [DECISIONS.md](DECISIONS.md)
+More: [docs/GAME_GUIDE.md](docs/GAME_GUIDE.md) (full explanation) ·
+[docs/ALGORITHMS.md](docs/ALGORITHMS.md) · [docs/LAB_MAPPING.md](docs/LAB_MAPPING.md) ·
+[DECISIONS.md](DECISIONS.md)
 
 ## Stack
 
@@ -357,14 +184,15 @@ Full explanation for presenting and the viva: **[docs/GAME_GUIDE.md](docs/GAME_G
 | --- | --- | --- |
 | Language | TypeScript (strict) | One language for client, server and the shared simulation |
 | Client build | Vite | Fast dev server; static `dist/` that Vercel hosts directly |
-| Rendering | PixiJS v8 (WebGPU → WebGL) | Batched sprites from one atlas; WebGPU where available |
+| Rendering | PixiJS v8 (WebGPU → WebGL) | Batched sprites from one atlas; quality adapts to the device |
 | UI | Plain DOM + CSS | Crisp text, tiny bundle, no per-frame virtual DOM |
 | Audio | Web Audio API | Low latency; every sound synthesised in code |
 | Backend | SpacetimeDB 2.14 TypeScript module | Tables, reducers, subscriptions and scheduling in one place |
 | Client SDK | `spacetimedb` npm package | Typed bindings generated from the module |
+| Android | Trusted Web Activity (Kotlin) | A tiny app that runs this site in Chrome and updates with it |
 | Tests | Vitest + Playwright | Unit tests for the simulation; real multi-browser games end to end |
 | Hosting | Vercel + SpacetimeDB Maincloud | Static client on a CDN; managed database |
 
 All art and sound are generated in code at load. The only bundled assets are two open-licence (OFL)
-fonts, Russo One and Chakra Petch, installed from npm and served with the app. The whole client is
-about 240 KB of gzipped JavaScript and CSS plus 37 KB of fonts.
+fonts, Russo One and Chakra Petch. The whole client is about 240 KB of gzipped JavaScript and CSS
+plus 37 KB of fonts.

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">THRUSTLINE</string>
+    <string name="offline_title">You\'re offline</string>
+    <string name="offline_message">THRUSTLINE is played online. Connect to Wi-Fi or mobile data and try again.</string>
+    <string name="retry">Try again</string>
+    <string name="asset_statements" translatable="false">[{\"relation\": [\"delegate_permission/common.handle_all_urls\"], \"target\": {\"namespace\": \"web\", \"site\": \"https://thrustline-drab.vercel.app\"}}]</string>
+</resources>

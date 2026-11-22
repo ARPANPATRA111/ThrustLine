@@ -1,0 +1,44 @@
+---
+import Base from '../layouts/Base.astro';
+import PageHead from '../components/PageHead.astro';
+import Platforms from '../components/Platforms.astro';
+
+const reqs = [
+  { title: 'Browser', rows: [['Devices', 'Phones, tablets, laptops'], ['Browsers', 'Recent Chrome, Edge, Firefox or Safari'], ['Graphics', 'WebGL, or WebGPU when available'], ['Download', 'About 300 KB'], ['Connection', 'Wi-Fi or mobile data']] },
+  { title: 'Android app', rows: [['Android', '7.0 or newer'], ['App size', 'Under 1 MB'], ['Engine', 'Chrome, or the built-in WebView'], ['Permissions', 'Internet and network state only'], ['Progress', 'Shared with Chrome on the same phone']] },
+];
+---
+
+<Base title="Download · THRUSTLINE" description="Play THRUSTLINE free in any modern browser, or get the Android app: under 1 MB, Android 7.0 or newer, built to run smoothly on budget phones.">
+  <PageHead kicker="Download" title="Play anywhere," accent="instantly." lead="The browser version needs nothing installed. The Android app adds full screen, a landscape lock and invite links that open straight in the game." />
+  <Platforms />
+  <section class="section" aria-labelledby="req-title">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <p class="kicker">Requirements</p>
+        <h2 id="req-title" class="h2">Light by <em>design.</em></h2>
+        <p class="lead">Graphics scale to your device on their own, trading effects for frame rate on slower phones, so matches stay smooth.</p>
+      </div>
+      <div class="reqs">
+        {reqs.map((r, i) => (
+          <article class="panel" data-reveal={String(i + 1)}>
+            <h3>{r.title}</h3>
+            <dl>{r.rows.map(([a, b]) => <div><dt>{a}</dt><dd>{b}</dd></div>)}</dl>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .reqs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .reqs article { padding: 24px; }
+  .reqs h3 { font: 400 22px/1.1 var(--display); color: var(--cyan); margin-bottom: 12px; }
+  dl { margin: 0; }
+  dl div { display: flex; justify-content: space-between; gap: 16px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+  dl div:last-child { border-bottom: 0; }
+  dt { color: var(--soft); font-size: 15px; }
+  dd { margin: 0; text-align: right; font: 600 15px/1.35 var(--ui); }
+  @media (max-width: 760px) { .reqs { grid-template-columns: 1fr; } }
+</style>

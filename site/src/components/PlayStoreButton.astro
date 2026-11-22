@@ -1,0 +1,24 @@
+---
+import { PLAY_LIVE, PLAY_URL } from '../config';
+
+interface Props { size?: 'lg' | '' }
+const { size = 'lg' } = Astro.props;
+---
+
+{PLAY_LIVE ? (
+  <a class:list={['btn', 'store', size]} href={PLAY_URL}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="2" /><path d="M10 18h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+    <span class="txt"><small>Get it on</small>Google Play</span>
+  </a>
+) : (
+  <span class:list={['btn', 'store', size]} aria-disabled="true">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="2" /><path d="M10 18h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+    <span class="txt"><small>Android app</small>Coming to Google Play</span>
+  </span>
+)}
+
+<style>
+  .store { text-transform: none; letter-spacing: 0.02em; gap: 12px; }
+  .txt { display: grid; text-align: left; gap: 3px; font-size: 15px; }
+  .txt small { font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+</style>

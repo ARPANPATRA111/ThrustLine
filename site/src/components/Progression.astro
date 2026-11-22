@@ -1,0 +1,73 @@
+---
+import { Image } from 'astro:assets';
+import s0 from '../assets/game/sticker-0.png';
+import s1 from '../assets/game/sticker-1.png';
+import s2 from '../assets/game/sticker-2.png';
+import s3 from '../assets/game/sticker-3.png';
+import s4 from '../assets/game/sticker-4.png';
+import s5 from '../assets/game/sticker-5.png';
+import s6 from '../assets/game/sticker-6.png';
+import s7 from '../assets/game/sticker-7.png';
+
+const stickers = [
+  { src: s0, name: 'BHAI' }, { src: s1, name: 'OYE' }, { src: s2, name: 'JHAKAAS' }, { src: s3, name: 'BINDAAS' },
+  { src: s4, name: 'CHUP' }, { src: s5, name: 'DHAMAKA' }, { src: s6, name: 'KYA RE' }, { src: s7, name: 'TATA' },
+];
+---
+
+<section class="section progression" aria-labelledby="progress-title">
+  <div class="wrap split">
+    <div class="copy" data-reveal>
+      <p class="kicker">Progression</p>
+      <h2 id="progress-title" class="h2">Level up. <em>Talk trash.</em></h2>
+      <p class="lead">
+        Every finished round pays XP. Fire original Hinglish sticker emotes mid-match, four from the
+        start and four more as you level up, and climb a season board that crowns the top 20 every month.
+      </p>
+      <ul class="points">
+        <li><strong>XP every round</strong> for playing, kills and wins</li>
+        <li><strong>Stickers</strong> on the number keys or one tap away</li>
+        <li><strong>Monthly season</strong> with a fresh leaderboard</li>
+      </ul>
+    </div>
+    <div class="marquee" data-reveal="2" aria-label="The eight sticker emotes">
+      <div class="track">
+        {[...stickers, ...stickers].map((s, i) => (
+          <Image src={s.src} alt={i < stickers.length ? `${s.name} sticker` : ''} width={140} height={140} aria-hidden={i >= stickers.length ? 'true' : undefined} loading="lazy" />
+        ))}
+      </div>
+      <div class="track reverse" aria-hidden="true">
+        {[...stickers.slice(4), ...stickers.slice(0, 4), ...stickers.slice(4), ...stickers.slice(0, 4)].map((s) => (
+          <Image src={s.src} alt="" width={140} height={140} loading="lazy" />
+        ))}
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 56px; align-items: center; }
+  .points { list-style: none; display: grid; gap: 12px; margin-top: 28px; }
+  .points li { padding-left: 30px; position: relative; color: var(--soft); }
+  .points li::before { content: ''; position: absolute; left: 0; top: 7px; width: 14px; height: 14px; border-radius: 4px; background: var(--brand); box-shadow: 0 0 12px rgba(34, 211, 238, 0.5); }
+  .points strong { color: var(--ink); }
+  .marquee {
+    display: grid; gap: 18px; padding: 10px 0; min-width: 0; overflow: hidden;
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  }
+  .track { display: flex; gap: 18px; width: max-content; animation: slide 36s linear infinite; }
+  .track.reverse { animation-direction: reverse; animation-duration: 42s; }
+  .track :global(img) {
+    width: 140px; height: 140px; flex: none; filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.5));
+    transition: transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .track :global(img:hover) { transform: scale(1.1) rotate(-4deg); }
+  .marquee:hover .track { animation-play-state: paused; }
+  @keyframes slide { to { transform: translateX(calc(-50% - 9px)); } }
+
+  @media (max-width: 900px) {
+    .split { grid-template-columns: 1fr; gap: 36px; }
+    .track :global(img) { width: 108px; height: 108px; }
+  }
+</style>

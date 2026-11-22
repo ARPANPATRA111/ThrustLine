@@ -1,0 +1,28 @@
+---
+import PlayStoreButton from './PlayStoreButton.astro';
+import { GAME_URL } from '../config';
+---
+
+<section class="section cta-wrap">
+  <div class="wrap">
+    <div class="cta panel" data-reveal>
+      <div>
+        <h2 class="h2">Your squad is <em>one link away.</em></h2>
+        <p class="lead">Jump into Quick Play, or start a room and send the invite. Rounds take a few minutes; the rematch takes one tap.</p>
+      </div>
+      <div class="ctas">
+        <a class="btn primary lg" href={GAME_URL}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor" /></svg>
+          Play free now
+        </a>
+        <PlayStoreButton />
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .cta { display: grid; grid-template-columns: 1fr auto; gap: 32px; align-items: center; padding: clamp(28px, 5vw, 56px); border-color: rgba(34, 211, 238, 0.3); }
+  .ctas { display: grid; gap: 12px; }
+  @media (max-width: 860px) { .cta { grid-template-columns: 1fr; } .ctas { grid-template-columns: 1fr; } }
+</style>

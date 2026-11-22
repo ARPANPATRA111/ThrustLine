@@ -1,0 +1,136 @@
+---
+import { getImage } from 'astro:assets';
+import ArsenalPicker, { type Gear } from './ArsenalPicker';
+import { GRENADES, WEAPONS, W_AR, W_KNIFE, W_PISTOL, W_RAIL, W_SHOTGUN, W_SMG, W_SNIPER } from '../../../server/src/shared/weapons';
+import w0 from '../assets/game/w0.png';
+import w1 from '../assets/game/w1.png';
+import w2 from '../assets/game/w2.png';
+import w3 from '../assets/game/w3.png';
+import w4 from '../assets/game/w4.png';
+import w5 from '../assets/game/w5.png';
+import w6 from '../assets/game/w6.png';
+import w7 from '../assets/game/w7.png';
+import nade1 from '../assets/game/nade1.png';
+import nade2 from '../assets/game/nade2.png';
+
+const icons = [w0, w1, w2, w3, w4, w5, w6, w7];
+const MAX = { damage: 150, rate: 14, range: 2400, mag: 35, radius: 210 };
+const pct = (v: number, max: number) => Math.max(4, Math.round((v / max) * 100));
+
+const notes: Record<number, { role: string; text: string }> = {
+  [W_PISTOL]: { role: 'Sidearm', text: 'Always carried, never runs dry. Twelve rounds and an endless reserve.' },
+  [W_AR]: { role: 'Primary', text: 'Fully automatic all-rounder. Spread grows while you move, so stop to land long shots.' },
+  [W_SMG]: { role: 'Primary', text: 'Fourteen rounds a second with forgiving spread. Damage falls off past mid range.' },
+  [W_SHOTGUN]: { role: 'Primary', text: 'Ten pellets, and all of them at point blank drop a full-health pilot. The recoil launches you.' },
+  [W_SNIPER]: { role: 'Primary', text: 'One clean body hit kills. Pinpoint while still, and the camera leads further ahead.' },
+  [W_RAIL]: { role: 'Airdrop', text: 'Airdrop only. Three shots that pierce every body on the line. Walls still stop it.' },
+  [W_KNIFE]: { role: 'Melee', text: 'A short lunge for 55 damage, always in your hand.' },
+};
+
+async function icon(src: ImageMetadata) {
+  const img = await getImage({ src, format: 'webp' });
+  return { src: img.src, width: src.width, height: src.height };
+}
+
+const guns: Gear[] = await Promise.all([W_PISTOL, W_AR, W_SMG, W_SHOTGUN, W_SNIPER, W_RAIL].map(async (id) => {
+  const w = WEAPONS[id];
+  const damage = w.damage * Math.max(1, w.pellets);
+  return {
+    name: w.name, role: notes[id].role, text: notes[id].text, icon: await icon(icons[id]),
+    stats: [
+      { label: 'Damage', value: w.pellets > 1 ? `${w.pellets} × ${w.damage}` : String(damage), pct: pct(damage, MAX.damage) },
+      { label: 'Fire rate', value: `${w.rate}/s`, pct: pct(w.rate, MAX.rate) },
+      { label: 'Range', value: `${w.range} px`, pct: pct(w.range, MAX.range) },
+      { label: 'Magazine', value: String(w.mag), pct: pct(w.mag, MAX.mag) },
+    ],
+  };
+}));
+
+const knife = WEAPONS[W_KNIFE];
+const grenadeText = [
+  'A 1.5 second fuse that bounces off walls, with a big blast and knockback. It hurts its thrower too.',
+  'Bursts on the first player, wall or floor it touches. A smaller blast with no waiting.',
+  'No damage, but every jetpack in range goes offline for three seconds. Yours included.',
+];
+const grenadeIcons = [w5, nade1, nade2];
+const close: Gear[] = [
+  {
+    name: knife.name, role: notes[W_KNIFE].role, text: notes[W_KNIFE].text, icon: await icon(w4),
+    stats: [
+      { label: 'Damage', value: String(knife.damage), pct: pct(knife.damage, MAX.damage) },
+      { label: 'Swing rate', value: `${knife.rate}/s`, pct: pct(knife.rate, MAX.rate) },
+      { label: 'Reach', value: `${knife.range} px`, pct: pct(knife.range, MAX.range) },
+    ],
+  },
+  ...(await Promise.all(GRENADES.map(async (g, i) => ({
+    name: g.name, role: 'Grenade', text: grenadeText[i], icon: await icon(grenadeIcons[i]),
+    stats: [
+      { label: 'Damage', value: g.maxDamage ? `up to ${g.maxDamage}` : 'none', pct: pct(g.maxDamage, MAX.damage) },
+      { label: 'Blast radius', value: `${g.radius} px`, pct: pct(g.radius, MAX.radius) },
+    ],
+  })))),
+];
+---
+
+<section id="arsenal" class="section arsenal-section" aria-labelledby="arsenal-title">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <p class="kicker">Arsenal</p>
+      <h2 id="arsenal-title" class="h2">Ten tools. <em>Zero <span class="nowrap">pay-to-win.</span></em></h2>
+      <p class="lead">Everyone draws from the same kit. Pick a primary and a grenade type before each life, and grab the railgun when it drops.</p>
+    </div>
+    <div data-reveal>
+      <ArsenalPicker client:visible groups={[{ label: 'Guns', items: guns }, { label: 'Close and thrown', items: close }]} />
+    </div>
+  </div>
+</section>
+
+<style>
+</style>
+
+<style is:global>
+  .arsenal { display: grid; grid-template-columns: 1.15fr 1fr; gap: 22px; align-items: start; }
+  .gear-group + .gear-group { margin-top: 22px; }
+  .gear-group-label { margin-bottom: 12px; font: 700 12px/1 var(--ui); letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+  .gear-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+  .gear {
+    display: grid; justify-items: center; gap: 12px; padding: 18px 10px 14px; cursor: pointer;
+    border-radius: 14px; border: 1px solid var(--line); background: rgba(14, 20, 44, 0.55); color: var(--soft); font: inherit;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s, color 0.2s;
+  }
+  .gear:hover { border-color: var(--line-strong); color: var(--ink); transform: translateY(-2px); }
+  .gear.on { border-color: rgba(34, 211, 238, 0.7); color: var(--ink); background: linear-gradient(180deg, rgba(34, 211, 238, 0.14), rgba(14, 20, 44, 0.7)); }
+  .gear-icon { height: 34px; display: grid; place-items: center; }
+  .gear-icon img { max-height: 30px; max-width: 104px; width: auto; height: auto; }
+  .gear-name { font: 700 13px/1 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; }
+
+  .gear-panel {
+    position: relative; min-height: 440px; padding: 30px; border-radius: 20px; border: 1px solid var(--line-strong);
+    background: radial-gradient(80% 60% at 50% 0%, rgba(34, 211, 238, 0.12), transparent 70%), linear-gradient(180deg, rgba(20, 28, 60, 0.75), rgba(10, 15, 34, 0.85));
+    overflow: hidden;
+  }
+  .gear-hero {
+    height: 120px; display: grid; place-items: center; margin-bottom: 22px; border-radius: 14px;
+    background-image: linear-gradient(rgba(130, 150, 230, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(130, 150, 230, 0.08) 1px, transparent 1px);
+    background-size: 22px 22px; border: 1px solid var(--line);
+  }
+  .gear-hero img { max-height: 76px; max-width: 80%; width: auto; height: auto; filter: drop-shadow(0 8px 24px rgba(34, 211, 238, 0.35)); }
+  .gear-role {
+    display: inline-block; padding: 5px 9px; border-radius: 7px; font: 700 11px/1 var(--ui);
+    letter-spacing: 0.16em; text-transform: uppercase; color: #041022; background: var(--cyan);
+  }
+  .gear-title { margin-top: 12px; font: 400 34px/1 var(--display); }
+  .gear-text { margin-top: 10px; color: var(--soft); }
+  .gear-stats { display: grid; gap: 14px; margin: 24px 0 0; }
+  .gear-stat { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; }
+  .gear-stat dt { font: 600 13px/1 var(--ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .gear-stat dd { margin: 0; font: 700 14px/1 var(--ui); color: var(--ink); }
+  .gear-bar { grid-column: 1 / -1; height: 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+  .gear-bar span { display: block; height: 100%; border-radius: 8px; background: var(--brand); box-shadow: 0 0 14px rgba(34, 211, 238, 0.45); }
+
+  @media (max-width: 900px) {
+    .arsenal { grid-template-columns: 1fr; }
+    .gear-panel { order: -1; min-height: 0; }
+    .gear-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  }
+</style>

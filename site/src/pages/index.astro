@@ -1,0 +1,152 @@
+---
+import { Image } from 'astro:assets';
+import Base from '../layouts/Base.astro';
+import Hero from '../components/Hero.astro';
+import Highlights from '../components/Highlights.astro';
+import CtaPanel from '../components/CtaPanel.astro';
+import { DESCRIPTION, GAME_URL, REPO_URL, SITE_URL } from '../config';
+import skyreach from '../assets/shots/skyreach.webp';
+import kiln from '../assets/shots/kiln-3.webp';
+import cryo from '../assets/shots/cryo-12.webp';
+import rig from '../assets/shots/rig-7.webp';
+
+const pillars = [
+  { title: 'Fly', text: 'An analog jetpack: tap to hop, hold to climb, ease off to hover over the acid.' },
+  { title: 'Fight', text: 'Ten weapons from pistol to airdrop railgun, with recoil that throws you across the map.' },
+  { title: 'Win', text: 'Deathmatch, King of the Hill or Capture the Flag, solo or in teams up to 4v4.' },
+];
+
+const pages = [
+  { href: '/gameplay/', title: 'Gameplay', text: 'Jetpack, blast-jumping, bounties, Frenzy and the rising acid.', img: skyreach },
+  { href: '/modes/', title: 'Modes & Maps', text: 'Three objectives, four loadouts and five maps to master.', img: kiln },
+  { href: '/arsenal/', title: 'Arsenal', text: 'Every gun, grenade and power-up, with real stats from the game.', img: cryo },
+  { href: '/how-to-play/', title: 'How to play', text: 'Controls for touch, gamepad and keyboard, scoring and tips.', img: rig },
+];
+
+const updates = [
+  { tag: 'Soon', title: 'Android app', text: 'A full-screen app under 1 MB, heading to Google Play.' },
+  { tag: 'New', title: 'Capture the Flag', text: 'Red against blue from fixed bases. First to three captures wins.' },
+  { tag: 'New', title: 'Three new maps', text: 'KILN-3, SKYREACH and CRYO-12 join RIG-7 and HELIOS-9.' },
+  { tag: 'New', title: 'Impact and EMP grenades', text: 'Burst on contact, or knock every jetpack in range offline.' },
+  { tag: 'New', title: 'Loadout screen', text: 'Pick a gun and a grenade before each round. They stay yours until you die.' },
+];
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'VideoGame',
+    name: 'THRUSTLINE',
+    url: `${SITE_URL}/`,
+    description: DESCRIPTION,
+    image: `${SITE_URL}/og.jpg`,
+    genre: ['Action', 'Shooter', 'Multiplayer'],
+    gamePlatform: ['Web browser', 'Android'],
+    applicationCategory: 'Game',
+    operatingSystem: 'Web browser, Android 7.0 or newer',
+    playMode: ['MultiPlayer', 'SinglePlayer'],
+    numberOfPlayers: { '@type': 'QuantitativeValue', minValue: 1, maxValue: 8 },
+    inLanguage: 'en',
+    isAccessibleForFree: true,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', availability: 'https://schema.org/InStock', url: GAME_URL },
+    sameAs: [REPO_URL],
+  },
+  { '@context': 'https://schema.org', '@type': 'WebSite', name: 'THRUSTLINE', url: `${SITE_URL}/` },
+];
+---
+
+<Base title="THRUSTLINE: Free Multiplayer Jetpack Shooter" jsonLd={jsonLd}>
+  <Hero />
+
+  <section class="section pillars-wrap" aria-label="What THRUSTLINE is">
+    <div class="wrap pillars">
+      {pillars.map((p, i) => (
+        <article data-reveal={String(i + 1)}>
+          <span class="num">0{i + 1}</span>
+          <h2>{p.title}</h2>
+          <p>{p.text}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <Highlights />
+
+  <section class="section" aria-labelledby="explore-title">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <p class="kicker">Explore</p>
+        <h2 id="explore-title" class="h2">Everything about <em>the game.</em></h2>
+      </div>
+      <div class="explore">
+        {pages.map((p, i) => (
+          <a class="card tile" href={p.href} data-reveal={String((i % 4) + 1)}>
+            <Image src={p.img} alt="" widths={[480, 800]} sizes="(max-width: 760px) 100vw, 50vw" />
+            <div class="tile-copy">
+              <h3>{p.title} <span aria-hidden="true">→</span></h3>
+              <p>{p.text}</p>
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="news-title">
+    <div class="wrap news">
+      <div class="section-head" data-reveal>
+        <p class="kicker">What's new</p>
+        <h2 id="news-title" class="h2">Always <em>getting better.</em></h2>
+        <p class="lead">THRUSTLINE ships updates straight to the browser, so every player gets them the moment they land.</p>
+      </div>
+      <ol class="updates" data-reveal>
+        {updates.map((u) => (
+          <li>
+            <span class:list={['pill', { soon: u.tag === 'Soon' }]}>{u.tag}</span>
+            <div><h3>{u.title}</h3><p>{u.text}</p></div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </section>
+
+  <CtaPanel />
+</Base>
+
+<style>
+  .pillars-wrap { padding-top: 24px; }
+  .pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; border-radius: var(--radius); overflow: hidden; background: var(--line); border: 1px solid var(--line); }
+  .pillars article { padding: 30px; background: var(--bg1); }
+  .num { font: 700 13px/1 var(--ui); letter-spacing: 0.2em; color: var(--cyan); }
+  .pillars h2 { margin-top: 14px; font: 400 32px/1 var(--display); }
+  .pillars p { margin-top: 10px; color: var(--soft); }
+
+  .explore { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  .tile { display: block; text-decoration: none; aspect-ratio: 16 / 9; transition: opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1), transform 0.9s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s; }
+  .tile :global(img) { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+  .tile::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7, 11, 24, 0.1) 30%, rgba(7, 11, 24, 0.92) 100%); }
+  .tile:hover { border-color: rgba(34, 211, 238, 0.5); }
+  .tile:hover :global(img) { transform: scale(1.04); }
+  .tile-copy { position: absolute; z-index: 1; left: 24px; right: 24px; bottom: 22px; }
+  .tile h3 { font: 400 26px/1.1 var(--display); }
+  .tile h3 span { display: inline-block; color: var(--cyan); transition: transform 0.25s; }
+  .tile:hover h3 span { transform: translateX(6px); }
+  .tile p { margin-top: 6px; color: var(--soft); font-size: 15px; }
+
+  .news { display: grid; grid-template-columns: 1fr 1.2fr; gap: 48px; align-items: start; }
+  .updates { list-style: none; display: grid; gap: 10px; }
+  .updates li { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: start; padding: 18px 20px; border-radius: 14px; border: 1px solid var(--line); background: rgba(14, 20, 44, 0.6); }
+  .updates h3 { font: 700 17px/1.3 var(--ui); }
+  .updates p { margin-top: 4px; font-size: 15px; color: var(--soft); }
+  .pill { padding: 5px 9px; border-radius: 7px; font: 700 11px/1 var(--ui); letter-spacing: 0.14em; text-transform: uppercase; color: #041022; background: var(--cyan); }
+  .pill.soon { background: var(--acid); }
+
+  @media (max-width: 900px) {
+    .pillars { grid-template-columns: 1fr; }
+    .news { grid-template-columns: 1fr; gap: 8px; }
+  }
+  @media (max-width: 760px) {
+    .explore { grid-template-columns: 1fr; }
+    .tile { aspect-ratio: 4 / 3; }
+    .pillars article { padding: 24px; }
+  }
+</style>

@@ -1,0 +1,95 @@
+---
+import Doc from '../layouts/Doc.astro';
+import { ISSUES_URL } from '../config';
+
+const summary = [
+  { title: 'No data shared', text: 'Nothing goes to other companies for ads, analytics or anything else.' },
+  { title: 'Encrypted in transit', text: 'Every connection uses HTTPS or secure WebSockets.' },
+  { title: 'No account needed', text: 'Play without signing up. No email, phone or Google sign-in.' },
+  { title: 'Deletion on request', text: 'Ask on GitHub and your profile is removed from the server.' },
+];
+
+const rows = [
+  { type: 'Name', example: 'Your in-game callsign', purpose: 'App functionality', required: 'Optional. A random callsign is used if you pick none.' },
+  { type: 'Device or other IDs', example: 'A random player ID created on your device', purpose: 'App functionality', required: 'Required' },
+  { type: 'App activity: other actions', example: 'XP, level, kills, deaths, wins, rounds and season points', purpose: 'App functionality', required: 'Required' },
+  { type: 'App info and performance: other', example: 'Connection ping, shown to players in your room', purpose: 'App functionality', required: 'Required' },
+];
+---
+
+<Doc
+  title="Data Safety · THRUSTLINE"
+  heading="Data safety"
+  description="The data THRUSTLINE collects, why, whether it is shared, how it is protected and how to delete it, as declared on Google Play."
+  updated="22 November 2026"
+>
+  <p>
+    This page matches the Data safety section of THRUSTLINE on Google Play. The
+    <a href="/privacy/">privacy policy</a> explains each item in more detail.
+  </p>
+
+  <div class="summary">
+    {summary.map((s) => (
+      <div class="item">
+        <strong>{s.title}</strong>
+        <span>{s.text}</span>
+      </div>
+    ))}
+  </div>
+
+  <h2>Data collected</h2>
+  <p>All of it is used only to run the game. None of it is used for advertising, analytics or personalisation.</p>
+  <div class="table">
+    <table>
+      <thead><tr><th>Data type</th><th>What it is</th><th>Purpose</th><th>Required</th></tr></thead>
+      <tbody>
+        {rows.map((r) => <tr><td>{r.type}</td><td>{r.example}</td><td>{r.purpose}</td><td>{r.required}</td></tr>)}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Data not collected</h2>
+  <p>
+    Location, real names, email addresses, phone numbers, contacts, photos, videos, audio, files, messages,
+    browsing history, health, financial or payment information, installed apps, crash logs and the advertising ID.
+  </p>
+
+  <h2>Data shared</h2>
+  <p>
+    None. The game runs on SpacetimeDB Maincloud (Clockwork Labs), the game's website on Vercel and this website
+    on Cloudflare. They process data only to deliver THRUSTLINE, which Google Play does not count as sharing.
+  </p>
+
+  <h2>Security practices</h2>
+  <ul>
+    <li>Data is encrypted in transit with HTTPS and secure WebSockets.</li>
+    <li>The server validates every move, hit and pickup, so other players cannot change your data.</li>
+    <li>The code that handles your data is open source and can be reviewed by anyone.</li>
+  </ul>
+
+  <h2>Deleting your data</h2>
+  <p>
+    Clear the game site's data in your browser, or in the Android app long-press the icon, open
+    <em>Site settings</em> and clear the stored data. To remove your profile from the server as well,
+    <a href={ISSUES_URL}>open an issue on GitHub</a> with your callsign and level.
+  </p>
+
+  <h2>Android app permissions</h2>
+  <div class="table">
+    <table>
+      <thead><tr><th>Permission</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Internet</td><td>To load and play the game.</td></tr>
+        <tr><td>Network state</td><td>To show an offline screen instead of an error when there is no connection.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</Doc>
+
+<style>
+  .summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 28px 0 8px; }
+  .item { display: grid; gap: 6px; padding: 18px 20px; border-radius: 14px; border: 1px solid var(--line); background: rgba(14, 20, 44, 0.55); }
+  .item strong { font: 400 19px/1.2 var(--display); color: var(--ink); }
+  .item span { font-size: 15px; }
+  @media (max-width: 620px) { .summary { grid-template-columns: 1fr; } }
+</style>

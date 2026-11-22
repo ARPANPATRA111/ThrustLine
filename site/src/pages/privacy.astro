@@ -1,0 +1,94 @@
+---
+import Doc from '../layouts/Doc.astro';
+import { ISSUES_URL } from '../config';
+---
+
+<Doc
+  title="Privacy Policy · THRUSTLINE"
+  heading="Privacy policy"
+  description="What THRUSTLINE stores, why, who handles it and how to delete it. No accounts, no ads, no analytics, no tracking."
+  updated="22 November 2026"
+>
+  <p>
+    THRUSTLINE is a free, open-source multiplayer game. There are no accounts, no ads, no analytics and no
+    tracking. This page lists everything the game keeps, why it keeps it and how to remove it.
+  </p>
+
+  <h2>What the game stores</h2>
+  <ul>
+    <li><strong>A random player ID.</strong> Created the first time you play, so the server can tell players apart. It is not linked to your name, email address, phone number or Google account.</li>
+    <li><strong>Your callsign.</strong> The name you choose, or a random one. Other players see it in matches and on the season board.</li>
+    <li><strong>Your progress.</strong> XP and level, kills, deaths, wins, rounds played, best kills in a round, season points and when you last played. Other players can see this.</li>
+    <li><strong>Match data.</strong> Your position, health, score, team and connection ping while you are in a room. It is deleted when you leave the room.</li>
+    <li><strong>A transfer key.</strong> A random secret that lets your progress move with you if the game changes servers. Only the server and your device know it.</li>
+  </ul>
+  <p>The game does not ask for or collect your real name, email address, phone number, contacts, photos, location or payment details.</p>
+
+  <h2>What stays on your device</h2>
+  <p>
+    Your login token, transfer key, settings and volume levels are saved in the browser storage for the game's
+    site. In the Android app this is Chrome's storage for the same site, so the app and Chrome on one phone share
+    the same progress.
+  </p>
+
+  <h2>This website</h2>
+  <p>
+    This website sets no cookies and runs no analytics. Its fonts, images and videos are served from the site
+    itself, so visiting it sends no requests to other companies.
+  </p>
+
+  <h2>The Android app</h2>
+  <p>
+    The app opens the game's website in Chrome, or in Android's built-in WebView if Chrome is missing. It asks
+    only for internet access and for permission to check whether you are online, so it can show an offline
+    screen. It collects nothing of its own and has no advertising ID.
+  </p>
+
+  <h2>Who handles the data</h2>
+  <p>Three providers host THRUSTLINE and process data only to deliver it:</p>
+  <ul>
+    <li><strong>SpacetimeDB Maincloud</strong>, run by Clockwork Labs, hosts the game server and the data listed above.</li>
+    <li><strong>Vercel</strong> hosts the game's website.</li>
+    <li><strong>Cloudflare</strong> hosts this website.</li>
+  </ul>
+  <p>
+    Like any web service, they receive your IP address and basic request details in order to answer your device,
+    and may keep short technical logs. The game server also logs when a player connects. Nothing is sold, and
+    nothing is shared with anyone for advertising or any other purpose.
+  </p>
+
+  <h2>How long data is kept</h2>
+  <ul>
+    <li>Match data is deleted as soon as you leave a room.</li>
+    <li>The season board starts fresh every month.</li>
+    <li>Your profile stays until you ask for it to be deleted, so your level is there when you come back.</li>
+  </ul>
+
+  <h2>Deleting your data</h2>
+  <p>
+    Clearing the game site's data in your browser removes your ID from your device and starts you over. In the
+    Android app, long-press the THRUSTLINE icon, open <em>Site settings</em> and clear the stored data.
+  </p>
+  <p>
+    To have your profile removed from the server too, <a href={ISSUES_URL}>open an issue on GitHub</a> with your
+    callsign and level, and it will be deleted.
+  </p>
+
+  <h2>Security</h2>
+  <p>
+    All traffic between your device and THRUSTLINE is encrypted (HTTPS and secure WebSockets). The server checks
+    every move and hit, so other players cannot change your score or progress.
+  </p>
+
+  <h2>Children</h2>
+  <p>THRUSTLINE is not directed at children under 13 and does not knowingly collect information from them.</p>
+
+  <h2>Changes</h2>
+  <p>
+    If this policy changes, the new version will be posted on this page with a new date. The full history of
+    this page is public in the project's repository.
+  </p>
+
+  <h2>Contact</h2>
+  <p>Questions about privacy are welcome on <a href={ISSUES_URL}>GitHub</a>.</p>
+</Doc>

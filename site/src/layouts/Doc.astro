@@ -1,0 +1,45 @@
+---
+import Base from './Base.astro';
+
+interface Props {
+  title: string;
+  heading: string;
+  description: string;
+  updated: string;
+}
+
+const { title, heading, description, updated } = Astro.props;
+---
+
+<Base title={title} description={description}>
+  <article class="doc">
+    <header class="wrap head">
+      <p class="kicker">Legal</p>
+      <h1 class="h2">{heading}</h1>
+      <p class="meta">Last updated {updated}. Applies to the THRUSTLINE website, the game at thrustline-drab.vercel.app and the THRUSTLINE Android app.</p>
+    </header>
+    <div class="wrap prose">
+      <slot />
+    </div>
+  </article>
+</Base>
+
+<style>
+  .doc { padding: 140px 0 110px; background: radial-gradient(60% 40% at 50% 0%, rgba(34, 211, 238, 0.1), transparent 70%), var(--bg1); }
+  .head, .prose { max-width: 780px; }
+  .meta { margin-top: 18px; color: var(--muted); font-size: 15px; }
+  .prose { margin-top: 44px; color: var(--soft); }
+  .prose :global(h2) { margin: 44px 0 12px; font: 400 26px/1.2 var(--display); color: var(--ink); }
+  .prose :global(h3) { margin: 26px 0 8px; font: 700 18px/1.3 var(--ui); color: var(--ink); }
+  .prose :global(p) { margin: 12px 0; }
+  .prose :global(ul) { margin: 12px 0; padding-left: 22px; display: grid; gap: 8px; }
+  .prose :global(strong) { color: var(--ink); }
+  .prose :global(a) { color: var(--cyan); }
+  .prose :global(table) { width: 100%; margin: 18px 0; border-collapse: collapse; font-size: 15px; }
+  .prose :global(th), .prose :global(td) { padding: 12px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  .prose :global(th) { font: 700 12px/1.2 var(--ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .prose :global(td:first-child) { color: var(--ink); font-weight: 600; }
+  .prose :global(.table) { overflow-x: auto; border-radius: 14px; border: 1px solid var(--line); background: rgba(14, 20, 44, 0.55); }
+  .prose :global(.table table) { margin: 0; }
+  .prose :global(.table tr:last-child td) { border-bottom: 0; }
+</style>

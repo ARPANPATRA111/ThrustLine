@@ -1,0 +1,95 @@
+---
+import PlayStoreButton from './PlayStoreButton.astro';
+import { GAME_URL } from '../config';
+
+const facts = [
+  { n: '8', label: 'players a match' },
+  { n: '5', label: 'maps' },
+  { n: '3', label: 'objectives' },
+  { n: '0', label: 'sign-ups' },
+];
+---
+
+<section class="hero" aria-labelledby="hero-title">
+  <video class="bg" muted loop playsinline preload="metadata" poster="/media/gameplay.webp" aria-hidden="true">
+    <source src="/media/gameplay.mp4" type="video/mp4" />
+  </video>
+  <div class="shade" aria-hidden="true"></div>
+
+  <div class="wrap inner">
+    <p class="label">Free multiplayer jetpack shooter</p>
+    <h1 id="hero-title">
+      <span class="word">THRUST<span class="w2">LINE</span></span>
+      <span class="tag">Jetpack battles over an acid sea</span>
+    </h1>
+    <p class="lede">
+      Up to 8 players fly, fight and capture the flag across five rigs. Play right now in your browser,
+      or on Android. No sign-up, no ads.
+    </p>
+    <div class="ctas">
+      <a class="btn primary lg" href={GAME_URL}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor" /></svg>
+        Play free in browser
+      </a>
+      <PlayStoreButton />
+    </div>
+    <ul class="facts">
+      {facts.map((f) => <li><strong>{f.n}</strong><span>{f.label}</span></li>)}
+    </ul>
+  </div>
+  <p class="live" aria-hidden="true"><span></span>Live match footage · HELIOS-9</p>
+</section>
+
+<script>
+  const video = document.querySelector<HTMLVideoElement>('.hero video');
+  const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+  if (video && !matchMedia('(prefers-reduced-motion: reduce)').matches && !conn?.saveData) {
+    void video.play().catch(() => {});
+  }
+</script>
+
+<style>
+  .hero {
+    position: relative; isolation: isolate; overflow: hidden;
+    min-height: 100svh; display: flex; align-items: center; padding: 110px 0 90px;
+  }
+  .bg { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+  .shade {
+    position: absolute; inset: 0; z-index: -1;
+    background:
+      linear-gradient(90deg, rgba(7, 11, 24, 0.95) 0%, rgba(7, 11, 24, 0.82) 38%, rgba(7, 11, 24, 0.35) 70%, rgba(7, 11, 24, 0.2) 100%),
+      linear-gradient(0deg, var(--bg1) 0%, rgba(7, 11, 24, 0) 30%),
+      linear-gradient(180deg, rgba(7, 11, 24, 0.75) 0%, rgba(7, 11, 24, 0) 20%);
+  }
+  .label {
+    font: 700 13px/1 var(--ui); letter-spacing: 0.24em; text-transform: uppercase; color: var(--cyan);
+    animation: up 1s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  h1 { display: grid; gap: 14px; margin-top: 22px; }
+  .word { font: 400 clamp(46px, 11vw, 140px)/0.92 var(--display); letter-spacing: 0.01em; animation: up 1s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both; }
+  .w2 { background: var(--brand); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .tag { font: 700 clamp(13px, 1.6vw, 18px)/1.3 var(--ui); letter-spacing: 0.3em; text-transform: uppercase; color: var(--soft); animation: up 1s cubic-bezier(0.16, 1, 0.3, 1) 0.14s both; }
+  .lede { max-width: 540px; margin-top: 24px; font-size: clamp(16px, 1.6vw, 19px); color: var(--soft); animation: up 1s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; animation: up 1s cubic-bezier(0.16, 1, 0.3, 1) 0.26s both; }
+  .facts { list-style: none; display: flex; flex-wrap: wrap; gap: 14px 32px; margin-top: 44px; animation: up 1s cubic-bezier(0.16, 1, 0.3, 1) 0.32s both; }
+  .facts li { display: grid; gap: 4px; padding-left: 14px; border-left: 2px solid rgba(34, 211, 238, 0.5); }
+  .facts strong { font: 400 30px/1 var(--display); }
+  .facts span { font: 600 11px/1.2 var(--ui); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  .live {
+    position: absolute; right: var(--gutter); bottom: 28px; display: flex; align-items: center; gap: 8px;
+    font: 600 12px/1 var(--ui); letter-spacing: 0.14em; text-transform: uppercase; color: var(--soft); opacity: 0.8;
+  }
+  .live span { width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: pulse 2s infinite; }
+  @keyframes up { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 77, 109, 0.6); } 70%, 100% { box-shadow: 0 0 0 8px rgba(255, 77, 109, 0); } }
+
+  @media (max-width: 760px) {
+    .hero { align-items: flex-end; padding: 96px 0 56px; }
+    .bg { object-position: 60% 50%; }
+    .shade { background: linear-gradient(180deg, rgba(7, 11, 24, 0.5) 0%, rgba(7, 11, 24, 0.55) 28%, rgba(7, 11, 24, 0.92) 60%, var(--bg1) 100%); }
+    .tag { letter-spacing: 0.16em; }
+    .facts { gap: 12px 22px; margin-top: 30px; }
+    .facts strong { font-size: 24px; }
+    .live { left: var(--gutter); right: auto; top: 84px; bottom: auto; }
+  }
+</style>
