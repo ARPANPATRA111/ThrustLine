@@ -1,0 +1,121 @@
+---
+import { Image } from 'astro:assets';
+import ar from '../assets/game/w1.png';
+import knife from '../assets/game/w4.png';
+import frag from '../assets/game/w5.png';
+import sniper from '../assets/game/w3.png';
+
+const loadouts = [
+  { name: 'Arms', text: 'Pistol, a primary of your choice, knife and grenades. The full kit.', icon: ar, w: 198, h: 72 },
+  { name: 'Blades', text: 'Knives only, with 15% more run speed. Pure nerve.', icon: knife, w: 108, h: 36 },
+  { name: 'Boom', text: 'Unlimited grenades on a short cooldown, knife as backup.', icon: frag, w: 60, h: 78 },
+  { name: 'Snipers', text: 'Sniper rifle and knife. One clean hit, one kill.', icon: sniper, w: 276, h: 54 },
+];
+
+const rules = ['Round length', 'Health 50 to 200', 'CPU skill', 'Infinite fuel', 'Infinite ammo', 'Pickups', 'Airdrops', 'Acid hazard', 'Frenzy', 'Sudden death', 'Friendly fire', 'Floating grenades'];
+---
+
+<section id="modes" class="section modes" aria-labelledby="modes-title">
+  <div class="wrap">
+    <div class="section-head center" data-reveal>
+      <p class="kicker">Modes</p>
+      <h2 id="modes-title" class="h2">Three ways to win. <em>Your rules.</em></h2>
+      <p class="lead">Free-for-all or Red vs Blue from 1v1 to 4v4. Quick Play rotates through every objective.</p>
+    </div>
+
+    <div class="objectives">
+      <article class="card obj dm" data-reveal>
+        <svg class="art" viewBox="0 0 120 120" aria-hidden="true">
+          <circle cx="60" cy="60" r="34" fill="none" stroke="currentColor" stroke-width="5" />
+          <circle cx="60" cy="60" r="6" fill="currentColor" />
+          <path d="M60 14v22M60 84v22M14 60h22M84 60h22" stroke="currentColor" stroke-width="5" stroke-linecap="round" />
+        </svg>
+        <h3>Deathmatch</h3>
+        <p>Every kill is +100. Highest score when the clock runs out takes the round.</p>
+        <span class="score">+100 a kill</span>
+      </article>
+      <article class="card obj koth" data-reveal="2">
+        <svg class="art" viewBox="0 0 120 120" aria-hidden="true">
+          <rect x="18" y="40" width="84" height="56" rx="10" fill="currentColor" fill-opacity="0.16" stroke="currentColor" stroke-width="4" stroke-dasharray="10 8" />
+          <path d="M40 34l8-14 12 10 12-10 8 14z" fill="#ffd54a" />
+        </svg>
+        <h3>King of the Hill</h3>
+        <p>Hold the glowing zone alone to score. Two sides inside means nobody does. It moves every 40 seconds.</p>
+        <span class="score">+10 a second</span>
+      </article>
+      <article class="card obj ctf" data-reveal="3">
+        <svg class="art" viewBox="0 0 120 120" aria-hidden="true">
+          <path d="M30 18v86" stroke="#c3cbef" stroke-width="5" stroke-linecap="round" />
+          <path d="M33 20h38l-10 14 10 14H33z" fill="#ff4d6d" />
+          <path d="M80 30v74" stroke="#c3cbef" stroke-width="5" stroke-linecap="round" />
+          <path d="M83 32h28l-8 12 8 12H83z" fill="#3b82f6" />
+        </svg>
+        <h3>Capture the Flag</h3>
+        <p>Red against blue from fixed bases. Touch the enemy flag to carry it, bring it home, first to three wins.</p>
+        <span class="score">+300 a capture</span>
+      </article>
+    </div>
+
+    <div class="loadouts">
+      {loadouts.map((l, i) => (
+        <article class="card lo" data-reveal={String(i + 1)}>
+          <div class="lo-icon"><Image src={l.icon} alt="" width={l.w} height={l.h} /></div>
+          <h3>{l.name}</h3>
+          <p>{l.text}</p>
+        </article>
+      ))}
+    </div>
+
+    <div class="rules" data-reveal>
+      <p><strong>House rules.</strong> The host tunes the room and the server enforces it:</p>
+      <ul>{rules.map((r) => <li class="chip">{r}</li>)}</ul>
+    </div>
+  </div>
+</section>
+
+<style>
+  .modes {
+    background:
+      radial-gradient(50% 50% at 15% 20%, rgba(244, 114, 182, 0.1), transparent 70%),
+      radial-gradient(50% 50% at 85% 80%, rgba(34, 211, 238, 0.1), transparent 70%),
+      var(--bg0);
+  }
+  .objectives { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .obj { padding: 32px 28px 28px; display: flex; flex-direction: column; transition: opacity 0.7s ease, transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1), border-color 0.25s; }
+  .obj:hover { transform: translateY(-6px); }
+  .obj .art { width: 96px; height: 96px; }
+  .dm { color: var(--red); }
+  .dm:hover { border-color: rgba(255, 77, 109, 0.55); }
+  .koth { color: var(--gold); }
+  .koth:hover { border-color: rgba(255, 213, 74, 0.55); }
+  .ctf { color: var(--blue); }
+  .ctf:hover { border-color: rgba(59, 130, 246, 0.6); }
+  .obj::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: currentColor; opacity: 0.85; }
+  h3 { margin-top: 22px; font: 400 26px/1.1 var(--display); color: var(--ink); }
+  .card p { margin-top: 10px; color: var(--soft); }
+  .score {
+    align-self: flex-start; margin-top: auto; padding-top: 22px;
+    font: 700 14px/1 var(--ui); letter-spacing: 0.14em; text-transform: uppercase;
+  }
+
+  .loadouts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 18px; }
+  .lo { padding: 24px; transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1), border-color 0.25s; }
+  .lo:hover { border-color: rgba(34, 211, 238, 0.4); }
+  .lo-icon { height: 52px; display: flex; align-items: center; }
+  .lo-icon :global(img) { max-height: 40px; width: auto; filter: drop-shadow(0 4px 14px rgba(34, 211, 238, 0.3)); }
+  .lo h3 { margin-top: 12px; font-size: 22px; }
+  .lo p { font-size: 15px; }
+
+  .rules { margin-top: 36px; display: grid; gap: 14px; justify-items: center; text-align: center; }
+  .rules p { color: var(--soft); }
+  .rules strong { color: var(--ink); }
+  .rules ul { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; max-width: 860px; }
+
+  @media (max-width: 980px) {
+    .objectives { grid-template-columns: 1fr; }
+    .loadouts { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 520px) {
+    .loadouts { grid-template-columns: 1fr; }
+  }
+</style>

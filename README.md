@@ -4,7 +4,7 @@ A side-view jetpack shooter for 1–8 players, free-for-all or red vs blue, in t
 and laptops and as an Android app. Riggers, jetpack contractors, fight over abandoned sky
 refineries above an acid sea.
 
-**Play:** https://thrustline-drab.vercel.app · **Android:** [android/](android/README.md) · **Database:** SpacetimeDB Maincloud, `thrustline-zhtm`
+**Play:** https://thrustline-drab.vercel.app · **Website:** https://thrustline.pages.dev · **Android:** [android/](android/README.md) · **Database:** SpacetimeDB Maincloud, `thrustline-zhtm`
 
 ![Gameplay](docs/screenshots/gameplay.png)
 
@@ -137,6 +137,12 @@ screen in Chrome, so every web deploy updates the app as well. The release build
 [android/README.md](android/README.md) covers building, releasing and the road to Google Play, and
 [android/STORE_LISTING.md](android/STORE_LISTING.md) has the listing text.
 
+## Website
+
+[site/](site/README.md) is the game's home page at https://thrustline.pages.dev, with the privacy
+policy and data safety pages that Google Play links to. It is a static Astro site on Cloudflare
+Pages, deployed separately with `npm run deploy` inside `site/`.
+
 ## Architecture
 
 Each client simulates its own soldier with the shared physics at a fixed 60 Hz and sends a `sync`
@@ -163,6 +169,7 @@ client/src/render/         generated atlas, baked map, soldier animation, partic
 client/src/audio/          synthesised sounds and music, mixer
 client/src/ui/             HUD, touch controls, settings
 android/                   Google Play app (Trusted Web Activity)
+site/                      website, privacy policy and data safety page (Astro)
 tests/e2e/                 Playwright multi-client tests
 docs/                      GAME_GUIDE.md, ALGORITHMS.md, LAB_MAPPING.md, screenshots/
 ```

@@ -1,0 +1,78 @@
+---
+import { getImage } from 'astro:assets';
+import MapShowcase, { type MapEntry } from './MapShowcase';
+import rig7 from '../assets/shots/rig-7.webp';
+import helios9 from '../assets/shots/helios-9.webp';
+import kiln3 from '../assets/shots/kiln-3.webp';
+import skyreach from '../assets/shots/skyreach.webp';
+import cryo12 from '../assets/shots/cryo-12.webp';
+
+const source = [
+  { name: 'RIG-7', tagline: 'The refinery', text: 'Long catwalks, a low central pit and open air between the decks. The classic.', accent: '#60a5fa', img: rig7 },
+  { name: 'HELIOS-9', tagline: 'Two shores, one acid well', text: 'Towers on each shore, a centre pillar and islands over a wide acid well to fight over.', accent: '#fbbf24', img: helios9 },
+  { name: 'KILN-3', tagline: 'A foundry cut into rock', text: 'Tunnels, shafts and one big furnace hall. Close fights and no room to hide.', accent: '#fb7a4a', img: kiln3 },
+  { name: 'SKYREACH', tagline: 'No ground at all', text: 'Islands floating over an acid sea, so every jump is a commitment.', accent: '#d8b4fe', img: skyreach },
+  { name: 'CRYO-12', tagline: 'Towers and bridges', text: 'Two towers with hatches between their floors, joined by long bridges over a chasm.', accent: '#67e8f9', img: cryo12 },
+];
+
+const maps: MapEntry[] = await Promise.all(source.map(async (m) => {
+  const img = await getImage({ src: m.img, widths: [800, 1280, 1600], format: 'webp' });
+  return { name: m.name, tagline: m.tagline, text: m.text, accent: m.accent, src: img.src, srcSet: img.srcSet.attribute, alt: `Gameplay on ${m.name}: ${m.tagline.toLowerCase()}` };
+}));
+---
+
+<section id="maps" class="section maps-section" aria-labelledby="maps-title">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <p class="kicker">Maps</p>
+      <h2 id="maps-title" class="h2">Five rigs. <em>One acid sea.</em></h2>
+      <p class="lead">Each map plays differently, from wide-open catwalks to tunnels where every corner is a fight.</p>
+    </div>
+    <div data-reveal>
+      <MapShowcase client:visible maps={maps} />
+    </div>
+  </div>
+</section>
+
+<style>
+  .maps-section { background: linear-gradient(180deg, var(--bg1), var(--bg0)); }
+</style>
+
+<style is:global>
+  .maps { display: grid; grid-template-columns: 320px 1fr; gap: 22px; align-items: stretch; }
+  .map-tabs { display: grid; gap: 10px; align-content: start; }
+  .map-tab {
+    position: relative; display: grid; gap: 4px; padding: 18px 20px; text-align: left; cursor: pointer; overflow: hidden;
+    border-radius: 14px; border: 1px solid var(--line); background: rgba(14, 20, 44, 0.55); color: var(--ink); font: inherit;
+    transition: border-color 0.2s, background 0.2s, transform 0.2s;
+  }
+  .map-tab:hover { border-color: var(--line-strong); transform: translateX(3px); }
+  .map-tab.on { border-color: color-mix(in srgb, var(--accent) 65%, transparent); background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 16%, transparent), rgba(14, 20, 44, 0.7)); }
+  .map-tab.on::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 3px; background: var(--accent); }
+  .map-name { font: 400 21px/1 var(--display); letter-spacing: 0.04em; white-space: nowrap; }
+  .map-tagline { font-size: 14px; color: var(--muted); }
+  .map-tab.on .map-tagline { color: var(--soft); }
+  .map-timer { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--accent); transform-origin: left; opacity: 0.8; }
+
+  .map-view {
+    position: relative; overflow: hidden; border-radius: 20px; aspect-ratio: 16 / 9; align-self: start;
+    border: 1px solid var(--line-strong); background: var(--bg2);
+    box-shadow: 0 40px 80px -40px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(34, 211, 238, 0.05);
+  }
+  .map-view img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .map-caption {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 60px 26px 22px;
+    background: linear-gradient(180deg, transparent, rgba(5, 8, 15, 0.92));
+  }
+  .map-label { font: 700 13px/1 var(--ui); letter-spacing: 0.2em; text-transform: uppercase; }
+  .map-caption p { margin-top: 8px; max-width: 560px; color: var(--ink); font-size: 17px; }
+
+  @media (max-width: 900px) {
+    .maps { grid-template-columns: 1fr; }
+    .map-tabs { grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); overflow-x: auto; padding-bottom: 6px; order: 2; }
+    .map-tab:hover { transform: none; }
+    .map-tagline { display: none; }
+    .map-caption { padding: 40px 18px 16px; }
+    .map-caption p { font-size: 15px; }
+  }
+</style>

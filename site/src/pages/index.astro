@@ -1,0 +1,60 @@
+---
+import Base from '../layouts/Base.astro';
+import Hero from '../components/Hero.astro';
+import Highlights from '../components/Highlights.astro';
+import Features from '../components/Features.astro';
+import Modes from '../components/Modes.astro';
+import Maps from '../components/Maps.astro';
+import Arsenal from '../components/Arsenal.astro';
+import Progression from '../components/Progression.astro';
+import Platforms from '../components/Platforms.astro';
+import Faq from '../components/Faq.astro';
+import CtaBand from '../components/CtaBand.astro';
+import { FAQ } from '../data/faq';
+import { DESCRIPTION, GAME_URL, REPO_URL, SITE_URL } from '../config';
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'VideoGame',
+    name: 'THRUSTLINE',
+    url: `${SITE_URL}/`,
+    description: DESCRIPTION,
+    image: `${SITE_URL}/og.jpg`,
+    genre: ['Action', 'Shooter', 'Multiplayer'],
+    gamePlatform: ['Web browser', 'Android'],
+    applicationCategory: 'Game',
+    operatingSystem: 'Web browser, Android 7.0 or newer',
+    playMode: ['MultiPlayer', 'SinglePlayer'],
+    numberOfPlayers: { '@type': 'QuantitativeValue', minValue: 1, maxValue: 8 },
+    inLanguage: 'en',
+    isAccessibleForFree: true,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD', availability: 'https://schema.org/InStock', url: GAME_URL },
+    sameAs: [REPO_URL],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'THRUSTLINE',
+    url: `${SITE_URL}/`,
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: FAQ.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+  },
+];
+---
+
+<Base title="THRUSTLINE: Free Multiplayer Jetpack Shooter" jsonLd={jsonLd}>
+  <Hero />
+  <Highlights />
+  <Features />
+  <Modes />
+  <Maps />
+  <Arsenal />
+  <Progression />
+  <Platforms />
+  <Faq />
+  <CtaBand />
+</Base>

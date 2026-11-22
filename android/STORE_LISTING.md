@@ -66,7 +66,7 @@ THRUSTLINE needs an internet connection.
 
 **Contact details**
 
-- Website: `https://thrustline-drab.vercel.app`
+- Website: `https://thrustline.pages.dev`
 - Email: required by Google and shown publicly. Use an address you are happy to publish.
 
 **Graphics**
@@ -79,7 +79,9 @@ THRUSTLINE needs an internet connection.
 
 ## App content
 
-**Privacy policy:** `https://thrustline-drab.vercel.app/privacy.html`
+**Privacy policy:** `https://thrustline.pages.dev/privacy/`
+
+The same answers are public at `https://thrustline.pages.dev/data-safety/`; keep both pages in step with this file.
 
 **Ads:** No, the app contains no ads.
 

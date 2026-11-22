@@ -1,0 +1,56 @@
+---
+import Logo from './Logo.astro';
+import { GAME_URL, PLAY_LIVE, PLAY_URL, REPO_URL } from '../config';
+
+const year = new Date().getFullYear();
+---
+
+<footer class="foot">
+  <div class="wrap grid">
+    <div class="about">
+      <a class="brand" href="/" aria-label="THRUSTLINE home"><Logo size={34} /><span>THRUSTLINE</span></a>
+      <p>A free, open-source jetpack shooter for up to 8 players, in the browser and on Android.</p>
+    </div>
+    <nav aria-label="Game">
+      <h2>Game</h2>
+      <a href={GAME_URL}>Play in browser</a>
+      {PLAY_LIVE ? <a href={PLAY_URL}>Google Play</a> : <span>Google Play (coming soon)</span>}
+      <a href="/#maps">Maps</a>
+      <a href="/#faq">FAQ</a>
+    </nav>
+    <nav aria-label="Legal">
+      <h2>Legal</h2>
+      <a href="/privacy/">Privacy policy</a>
+      <a href="/data-safety/">Data safety</a>
+    </nav>
+    <nav aria-label="Project">
+      <h2>Project</h2>
+      <a href={REPO_URL}>Source on GitHub</a>
+      <a href={`${REPO_URL}/issues`}>Report a problem</a>
+    </nav>
+  </div>
+  <div class="wrap base">
+    <span>© {year} THRUSTLINE</span>
+    <span>No ads. No tracking. No sign-up.</span>
+  </div>
+</footer>
+
+<style>
+  .foot { position: relative; border-top: 1px solid var(--line); background: var(--bg0); padding: 56px 0 calc(28px + env(safe-area-inset-bottom, 0px)); }
+  .grid { display: grid; grid-template-columns: 1.6fr repeat(3, 1fr); gap: 32px; }
+  .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; font: 400 20px/1 var(--display); letter-spacing: 0.04em; }
+  .about p { margin-top: 14px; max-width: 340px; color: var(--muted); font-size: 15px; }
+  nav { display: grid; align-content: start; gap: 10px; }
+  h2 { font: 700 12px/1 var(--ui); letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  nav a, nav span { font-size: 15px; color: var(--soft); text-decoration: none; }
+  nav span { color: var(--muted); }
+  nav a:hover { color: var(--cyan); }
+  .base {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-top: 44px; padding-top: 22px;
+    border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); letter-spacing: 0.04em;
+  }
+  @media (max-width: 760px) {
+    .grid { grid-template-columns: 1fr 1fr; }
+    .about { grid-column: 1 / -1; }
+  }
+</style>

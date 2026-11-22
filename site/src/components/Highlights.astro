@@ -1,0 +1,80 @@
+---
+const clips = [
+  { file: 'railgun', tag: 'Airdrop', title: 'One railgun shot, five pilots', text: 'The airdrop railgun pierces every body on the line.', color: 'var(--cyan)' },
+  { file: 'flag-run', tag: 'Capture the Flag', title: 'Flag run under fire', text: 'Carry the enemy flag home through tracers and grenades.', color: 'var(--blue)' },
+  { file: 'emp', tag: 'EMP grenade', title: 'No jetpack, no escape', text: 'An EMP knocks the carrier out of the sky and into the acid.', color: 'var(--acid)' },
+  { file: 'shotgun', tag: 'Bounty', title: 'Three kills, one crown', text: 'Streak three kills and you glow gold, worth +50 to whoever stops you.', color: 'var(--gold)' },
+];
+---
+
+<section id="highlights" class="section highlights" aria-labelledby="highlights-title">
+  <div class="wrap">
+    <div class="section-head" data-reveal>
+      <p class="kicker">Highlights</p>
+      <h2 id="highlights-title" class="h2">Real matches. <em>Real chaos.</em></h2>
+      <p class="lead">Every clip is unedited gameplay, refereed by the same server you play on.</p>
+    </div>
+    <div class="reel">
+      {clips.map((c, i) => (
+        <figure class="clip" style={`--accent:${c.color}`} data-reveal={String((i % 4) + 1)}>
+          <video muted loop playsinline preload="none" poster={`/media/${c.file}.webp`} width="432" height="768" aria-label={c.title}>
+            <source src={`/media/${c.file}.mp4`} type="video/mp4" />
+          </video>
+          <figcaption>
+            <span class="tag">{c.tag}</span>
+            <strong>{c.title}</strong>
+            <span class="text">{c.text}</span>
+          </figcaption>
+        </figure>
+      ))}
+    </div>
+  </div>
+</section>
+
+<script>
+  const videos = document.querySelectorAll<HTMLVideoElement>('.clip video');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduce && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const v = entry.target as HTMLVideoElement;
+        if (entry.isIntersecting) void v.play().catch(() => {});
+        else v.pause();
+      }
+    }, { threshold: 0.35 });
+    videos.forEach((v) => io.observe(v));
+  }
+</script>
+
+<style>
+  .highlights { background: radial-gradient(80% 60% at 50% 0%, rgba(59, 130, 246, 0.12), transparent 70%), var(--bg1); }
+  .reel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .clip {
+    position: relative; margin: 0; aspect-ratio: 9 / 16; border-radius: 22px; overflow: hidden;
+    border: 1px solid var(--line-strong); background: var(--bg2);
+    box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.8);
+    transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1), border-color 0.3s;
+  }
+  .clip:hover { transform: translateY(-6px); border-color: color-mix(in srgb, var(--accent) 70%, transparent); }
+  .clip::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, transparent 50%, rgba(5, 8, 15, 0.92) 100%);
+  }
+  video { width: 100%; height: 100%; object-fit: cover; }
+  figcaption { position: absolute; z-index: 1; left: 16px; right: 16px; bottom: 16px; display: grid; gap: 6px; }
+  .tag {
+    justify-self: start; padding: 5px 9px; border-radius: 7px; font: 700 11px/1 var(--ui);
+    letter-spacing: 0.16em; text-transform: uppercase; color: #041022; background: var(--accent);
+  }
+  strong { font: 400 20px/1.15 var(--display); }
+  .text { font-size: 14px; line-height: 1.45; color: var(--soft); }
+
+  @media (max-width: 980px) {
+    .reel {
+      grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: min(62vw, 280px);
+      overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 12px;
+      margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); scrollbar-width: thin;
+    }
+    .clip { scroll-snap-align: start; }
+  }
+</style>

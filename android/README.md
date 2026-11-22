@@ -132,7 +132,7 @@ Personal developer accounts created after 13 November 2023 must run a closed tes
 
 ### 2. Play Console
 
-- [ ] Deploy the website so the privacy policy is live at `/privacy.html`.
+- [ ] Check the privacy policy and data safety pages are live on https://thrustline.pages.dev.
 - [ ] Create the app: name THRUSTLINE, game, free.
 - [ ] Fill in App content (privacy policy, ads, content rating, target audience, data safety)
       from [STORE_LISTING.md](STORE_LISTING.md).
